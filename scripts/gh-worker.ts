@@ -73,6 +73,22 @@ function filterByWorker(rows: SheetRow[], workerName: string): SheetRow[] {
   return rows.filter(r => r.name?.toLowerCase() === workerName.toLowerCase());
 }
 
+/**
+ * Returns true if this row's "platforms" cell allows the given platform.
+ * Empty/missing platforms cell = post everywhere (no restriction).
+ * Cell value examples: "x,fb,li" | "li" | "x" | "x,li"
+ * Platform keys: 'x' | 'fb' | 'li'
+ */
+function rowAllowsPlatform(row: SheetRow, platform: 'x' | 'fb' | 'li'): boolean {
+  const p = (row.platforms ?? '').toLowerCase().replace(/\s/g, '');
+  if (!p) return true; // no restriction
+  const parts = p.split(',');
+  if (platform === 'x')  return parts.includes('x');
+  if (platform === 'fb') return parts.includes('fb') || parts.includes('facebook');
+  if (platform === 'li') return parts.includes('li') || parts.includes('linkedin');
+  return true;
+}
+
 async function postToFb(accountName: string, postText: string) {
   try {
     const login = await executeBrowserTool('login_facebook', { nickname: accountName });
@@ -109,6 +125,10 @@ async function runXForWorker(workerName: string, batchLabel: string): Promise<vo
   console.log(`[X] ${rows.length} rows for ${workerName}`);
 
   for (const row of rows) {
+    if (!rowAllowsPlatform(row, 'x')) {
+      console.log(`  ⏭ Row ${row.rowIndex} — platforms="${row.platforms}" skips X`);
+      continue;
+    }
     try {
       let tweet = row.xPost?.trim() || '';
       if (!tweet) {
@@ -148,6 +168,10 @@ async function runFbForWorker(workerName: string, batchLabel: string): Promise<v
   console.log(`[FB] ${rows.length} rows for ${workerName}`);
 
   for (const row of rows) {
+    if (!rowAllowsPlatform(row, 'fb')) {
+      console.log(`  ⏭ Row ${row.rowIndex} — platforms="${row.platforms}" skips FB`);
+      continue;
+    }
     try {
       let fbPost = row.fbPost?.trim() || '';
       if (!fbPost) {
@@ -188,6 +212,10 @@ async function runLiForWorker(workerName: string, batchLabel: string): Promise<v
   console.log(`[LI] ${rows.length} rows for ${workerName}`);
 
   for (const row of rows) {
+    if (!rowAllowsPlatform(row, 'li')) {
+      console.log(`  ⏭ Row ${row.rowIndex} — platforms="${row.platforms}" skips LI`);
+      continue;
+    }
     try {
       let liPost = row.linkedinPost?.trim() || '';
       if (!liPost) {
