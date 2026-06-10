@@ -23,6 +23,8 @@ jobs:
     name: Post — ${{ matrix.person }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     strategy:
       fail-fast: false
@@ -55,8 +57,6 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
       - name: Install dependencies
         run: npm ci
