@@ -1,0 +1,646 @@
+{
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\apps-script-code.js": {
+    "mtime": 1777288149.7371223,
+    "hash": "24797f352927e0037d830bf68c1cff57"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\inject.js": {
+    "mtime": 1777918974.52829,
+    "hash": "e03569ecfc0274145f5400c1ddd5360e"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\add_target_urls.py": {
+    "mtime": 1778081861.0629115,
+    "hash": "69888f20d3b09c489212bcbe36369e96"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\base.ts": {
+    "mtime": 1777896940.3938107,
+    "hash": "af8a4787666f13fc5bb2c77fe478e8f1"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\batch_write_urls.py": {
+    "mtime": 1778046872.8170414,
+    "hash": "512c452aa360b2ca54fca2724babdaef"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\check-session.ts": {
+    "mtime": 1777356737.3086698,
+    "hash": "6d5704a6cab7ff019fc90b4f45ac7055"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\cloudinary_upload.py": {
+    "mtime": 1777636205.7741442,
+    "hash": "bd8e3c96cbf8bd6bf5a8ad487db4c14c"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog1.py": {
+    "mtime": 1777958144.715157,
+    "hash": "31ec10d4b924ec149b67d71d37c41c25"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog10.py": {
+    "mtime": 1778059542.4574466,
+    "hash": "807acf60270b6f1ae89f4b19917375d6"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog11.py": {
+    "mtime": 1778059813.23224,
+    "hash": "28d4e520616047ace5bcc0256358c69f"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog12.py": {
+    "mtime": 1778060101.2763226,
+    "hash": "115a26e53a5189a52b5a3cd734c4ab94"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog13.py": {
+    "mtime": 1778061208.1800375,
+    "hash": "cc032e009366517e39eca86dec242b63"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog14.py": {
+    "mtime": 1778061515.4696624,
+    "hash": "72ec016c710e826bb8c616da92866517"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog15.py": {
+    "mtime": 1778061972.9542892,
+    "hash": "a5b5f9c8e0e9a257a460767b40b0e0f5"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog16.py": {
+    "mtime": 1778062570.2412236,
+    "hash": "023a77a0770a28e66bb665a761bf683d"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog17.py": {
+    "mtime": 1778064477.2489693,
+    "hash": "3d2d38f0fbdcbd183d5f95938fa06e8c"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog18.py": {
+    "mtime": 1778065398.3470633,
+    "hash": "fefaea64609edc644592662ce1fff099"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog19.py": {
+    "mtime": 1778066165.732257,
+    "hash": "2ea115eb1c01f5d865cad3c77bad7bc3"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog2.py": {
+    "mtime": 1777958595.4702232,
+    "hash": "7263c08365dc517c9ba4d43d25311e81"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog20.py": {
+    "mtime": 1778066761.6187432,
+    "hash": "f20d68fbba3ec12d85e070b5e2753c09"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog21.py": {
+    "mtime": 1778067310.6457086,
+    "hash": "877dcfbd1e4e48ba603b2c43296f3513"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog22.py": {
+    "mtime": 1778068060.3652365,
+    "hash": "c4f4af2e731515ec8c404835f2e34d23"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog23.py": {
+    "mtime": 1778068292.0348845,
+    "hash": "b3dd5481b23fc5d2c15e8339f4de26d6"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog24.py": {
+    "mtime": 1778069231.9816327,
+    "hash": "3fcbd4f16fcf3ea634f3843d17fbe923"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog25.py": {
+    "mtime": 1778069628.8792465,
+    "hash": "7186b7541696cf88b7b8d5dbc043041b"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog26.py": {
+    "mtime": 1778070169.0115447,
+    "hash": "8d6b5a47d78731f6c858cd26befffaf8"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog27.py": {
+    "mtime": 1778070395.6021197,
+    "hash": "65c9e48d668dc6ce33d9bd5589b30790"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog28.py": {
+    "mtime": 1778070758.5759735,
+    "hash": "56cd897c9500790278c410c1b213035f"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog29.py": {
+    "mtime": 1778071589.544626,
+    "hash": "262d14706ca766796a055476f2aa64ba"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog3.py": {
+    "mtime": 1777958759.5289788,
+    "hash": "2c54aa446d1c5673bb5d9ffeceeb0c70"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog30.py": {
+    "mtime": 1778071822.0659924,
+    "hash": "2586fb4b8404e58127ab7f66ff144372"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog31.py": {
+    "mtime": 1778084139.006891,
+    "hash": "b03c3ce988f0b8557d5c547d29120fde"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog32.py": {
+    "mtime": 1778084753.9445748,
+    "hash": "7ad127ee0b1238914f5846ebaf8c5f45"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog33.py": {
+    "mtime": 1778084941.130484,
+    "hash": "5b7337f684d40a9eab815e12a2009b2b"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog34.py": {
+    "mtime": 1778085578.1115198,
+    "hash": "00dbb06bf7818805e2d5ce7a49f44100"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog35.py": {
+    "mtime": 1778086259.3763888,
+    "hash": "daab308147a743002d0bf8170ff7fd03"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog36.py": {
+    "mtime": 1778086831.227992,
+    "hash": "d33160aa5290510378258695bc0c07a7"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog4.py": {
+    "mtime": 1778049779.8286293,
+    "hash": "74e344e274eea33c0845e153423e5d57"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog5.py": {
+    "mtime": 1778050045.6578343,
+    "hash": "9ff80ec0545eb5fe9675555f74433e4c"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog6.py": {
+    "mtime": 1778052723.7207005,
+    "hash": "e95d623894480ace6389ae43d6aea55f"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog7.py": {
+    "mtime": 1778054447.4753656,
+    "hash": "56a22c3ab3ad408622909f7779678476"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog8.py": {
+    "mtime": 1778058492.5739796,
+    "hash": "e7e9771ebb9c4ae5b76fcfc40b02adbf"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\compose_blog9.py": {
+    "mtime": 1778059084.9907901,
+    "hash": "e47c90113b657babc1474995d6e2c692"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\decode_upload.py": {
+    "mtime": 1777958391.3119628,
+    "hash": "1ee438fa68f7b3c0dc67a19094108041"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\fix_blog_desc.py": {
+    "mtime": 1778087069.8748975,
+    "hash": "781daab3836dd5aa4ce5ef0e47c724d1"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\generate-chatgpt-image.ts": {
+    "mtime": 1777832344.5158806,
+    "hash": "1981fa9d9f525630b93c8b31b356ab6c"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\generate-image-custom.js": {
+    "mtime": 1778152377.0110743,
+    "hash": "cd98fd126afb9f854212245698622102"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\generate-image.js": {
+    "mtime": 1777836154.6466253,
+    "hash": "9e02731c07aa8d34e428c50c8e8b011f"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog1.py": {
+    "mtime": 1778404627.82355,
+    "hash": "8abdae343ff54ef07e775a89a2695e92"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog10.py": {
+    "mtime": 1778404627.9372182,
+    "hash": "9221bb201f982f7dd9dfabba81821846"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog11.py": {
+    "mtime": 1778404627.9482539,
+    "hash": "00e94f02eface3450a6b0f1bdbee209b"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog12.py": {
+    "mtime": 1778404627.9588544,
+    "hash": "ef6c1e10efd37afb109fdbcaa731143c"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog13.py": {
+    "mtime": 1778404627.969826,
+    "hash": "3b6ba82b7b5a8c836e253dfc6c0d0152"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog14.py": {
+    "mtime": 1778404627.9852848,
+    "hash": "3045faf3b38326cc6532a266727362e0"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog15.py": {
+    "mtime": 1778404628.0012946,
+    "hash": "c785a0c3223d452394a1347cb1ad827b"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog16.py": {
+    "mtime": 1778404628.01525,
+    "hash": "84dd35119bc3fc603bc5b311a6f12e4e"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog17.py": {
+    "mtime": 1778404628.0285244,
+    "hash": "b0e4970ba6ef25ddaf458f0156010fbc"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog18.py": {
+    "mtime": 1778404628.0437846,
+    "hash": "26c6f64d778914ec0d3c520c25c632c8"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog19.py": {
+    "mtime": 1778404628.0645597,
+    "hash": "3f4c75f81831c15d0a854d17a4dae578"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog2.py": {
+    "mtime": 1778404628.0776694,
+    "hash": "5fdb2dc40edbdb7aaf190cb3966fb74b"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog20.py": {
+    "mtime": 1778404628.0905037,
+    "hash": "25c5576aad8af95c63bdb9a9bf975045"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog21.py": {
+    "mtime": 1778404628.1053224,
+    "hash": "6188c26ce9e2f8638671682ab53d3ea4"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog22.py": {
+    "mtime": 1778404628.1282046,
+    "hash": "c799dde532edcfa0e915181e394cfc0a"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog23.py": {
+    "mtime": 1778404628.1485243,
+    "hash": "9a78a07b4002f86c4c0ab5897c1de780"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog24.py": {
+    "mtime": 1778404628.1625717,
+    "hash": "5d1fc7a6c75456adc933b375ba1c4e74"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog25.py": {
+    "mtime": 1778404628.1810405,
+    "hash": "36219cc347fff9d5e639c8cc0e134385"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog26.py": {
+    "mtime": 1778404628.1984923,
+    "hash": "8fdf93ee321a2fc9cc37dc7389e6fef2"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog27.py": {
+    "mtime": 1778404628.2159522,
+    "hash": "68a037fe1ccef814b009eda34b71a264"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog28.py": {
+    "mtime": 1778404628.2443721,
+    "hash": "994deade3f66d68d29cddfa8797002e7"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog29.py": {
+    "mtime": 1778404628.2586846,
+    "hash": "5439a7d75359b8c8c024d99b49985bef"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog3.py": {
+    "mtime": 1778404628.2703123,
+    "hash": "e4586b22ff2e3ae2231e476dfef79bc6"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog30.py": {
+    "mtime": 1778404628.2806818,
+    "hash": "16af3b3412a49b499c5f195668edf1f8"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog4.py": {
+    "mtime": 1778404628.2898095,
+    "hash": "046537ed34f75e5786396434998d84de"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog5.py": {
+    "mtime": 1778404628.3079956,
+    "hash": "eeb5eb8d833343a2813b2ef3f5a048ab"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog6.py": {
+    "mtime": 1778404628.3243146,
+    "hash": "6ac0eaf6b09b204186507cd276340414"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog7.py": {
+    "mtime": 1778404628.3338542,
+    "hash": "fd6c83d4589322c6749e04f04ae343b3"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog8.py": {
+    "mtime": 1778404628.343608,
+    "hash": "be9e2bec5a3bc03b7a964adb722b8aa1"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\gen_blog9.py": {
+    "mtime": 1778404628.3611124,
+    "hash": "7be87c6fcc0cf2121f6860db2cff1fd6"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\login-facebook-all.ts": {
+    "mtime": 1777318445.9462545,
+    "hash": "a9b5954212dec196b08e3178da2116a6"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\login-facebook-one.ts": {
+    "mtime": 1777317761.5237079,
+    "hash": "2367711903aa31396332836aea1bbd4b"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\login-linkedin-all.ts": {
+    "mtime": 1777315187.8413093,
+    "hash": "c4dba4b1a53f300899f1713555cecc84"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\login-linkedin-one.ts": {
+    "mtime": 1777315526.2343392,
+    "hash": "4cbe55297953a31b3573b978480dad74"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\login-x-one.ts": {
+    "mtime": 1777369155.6608102,
+    "hash": "da7622f53afcd9878e40424b6ee6deb2"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\paste_blogs_to_agentic.py": {
+    "mtime": 1778073929.9548428,
+    "hash": "2c7d27bc79285f75bccefc4e66d5d997"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\paste_blogs_to_blogs_tab.py": {
+    "mtime": 1778074257.9122164,
+    "hash": "df320238f501d830212d9c897db03887"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\post-facebook.ts": {
+    "mtime": 1777310877.3389394,
+    "hash": "073bfb07566774d6ecf0fb10c1633443"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\post-linkedin-pulse.ts": {
+    "mtime": 1777312388.748077,
+    "hash": "e5853708b3c7ac43d502dd2bbe24c2fb"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\post-linkedin.ts": {
+    "mtime": 1777312333.9080968,
+    "hash": "d2b84ef5f30d11c55b62c0a1d967666b"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\post-notion.ts": {
+    "mtime": 1777309898.0033045,
+    "hash": "1b0fcd00dcae152fac10aad7929afe44"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\post-reddit.ts": {
+    "mtime": 1778062058.1515903,
+    "hash": "6c8b92aa1e4a4de1b7803d9ed5d52f5c"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\post-x.ts": {
+    "mtime": 1777366265.7335842,
+    "hash": "e450fe686f4c323d867487522f392206"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\read_agentic_blogs_tab.py": {
+    "mtime": 1778073831.2618184,
+    "hash": "f06c04199b0d2f50eeecedeee3448149"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\read_blogs_tab.py": {
+    "mtime": 1778073734.068004,
+    "hash": "4e066c47efce57f02f90d82f5c3e44f4"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\run-pulse-row1.ts": {
+    "mtime": 1777278198.1111016,
+    "hash": "ea60fae56f26c288ab7b4bc1717aaa37"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\sheet_write.py": {
+    "mtime": 1777957510.3814678,
+    "hash": "3eee5e0b7b9e0378af850b9367269e8b"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\stealth_init.js": {
+    "mtime": 1778187865.5983763,
+    "hash": "96680887ea8121bc381b7d9ead1e9795"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\strip_b64.py": {
+    "mtime": 1778054274.851907,
+    "hash": "7a27ff71cdca6fc92ee85e4da794fdd2"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\upload_cloudinary.py": {
+    "mtime": 1778401493.8836172,
+    "hash": "0f3a99d60e64ca5b9442cf43361260a7"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\CLAUDE.md": {
+    "mtime": 1777896940.3611245,
+    "hash": "4f81d1ef35bfa787f73a94b8d83834bb"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\agents\\facebook-agent.md": {
+    "mtime": 1777896940.2005093,
+    "hash": "9b78618b9e3a906a7e4fde1d2aaa9155"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\agents\\linkedin-pulse-agent.md": {
+    "mtime": 1777896940.267946,
+    "hash": "fdac9c7d5bf149317e8328253a6eb079"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\agents\\x-agent.md": {
+    "mtime": 1777896940.323315,
+    "hash": "68ca1ee6e1bfe1b22f36f91473091e73"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\pulse-caption-row1.txt": {
+    "mtime": 1777275853.7662404,
+    "hash": "c5b5a92c63c5d61126ed3b203eb453b8"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\blog_row6.html": {
+    "mtime": 1777622341.2764392,
+    "hash": "bfb618914a2f8356b089b2fa2d1198e2"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\dom-snapshot.html": {
+    "mtime": 1777367011.3273382,
+    "hash": "8d36775c558d54c316a49142dc1aba92"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\india-article-image_b64.txt": {
+    "mtime": 1777636527.9758377,
+    "hash": "c5cf666d7a2b110c408c3a2425c8777f"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\india-hero-background_b64.txt": {
+    "mtime": 1777636416.0487516,
+    "hash": "4060c5e11788aa894ec6708a101b6d3b"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\india-leader-ananya-sharma_b64.txt": {
+    "mtime": 1777637046.921234,
+    "hash": "694eb1687e4e7565edcda0093f542532"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\india-leader-arjun-mehta_b64.txt": {
+    "mtime": 1777636646.1357553,
+    "hash": "4d0cce60962ba4a4ab568b791e346567"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\india-leader-dr-priya-iyer_b64.txt": {
+    "mtime": 1777636759.822845,
+    "hash": "105d1c2b2097228dd1858ce061e5cccc"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\india-leader-rohan-bhat_b64.txt": {
+    "mtime": 1777638589.337452,
+    "hash": "7d3a2f7a3d6043d9f8da0d1e3f5363bd"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\india-leader-vikram-reddy_b64.txt": {
+    "mtime": 1777636928.7754967,
+    "hash": "3ce89bf3df656dd357888bc5ef230409"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\indonesia-article-image_b64.txt": {
+    "mtime": 1777638872.2837207,
+    "hash": "58b29f578ee79dcb91f820ab8c3d9eae"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\indonesia-hero-background_b64.txt": {
+    "mtime": 1777638707.5204034,
+    "hash": "ba8f3aa891b9be98f7e75c6b0b32ba22"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\indonesia-leader-budi-santoso_b64.txt": {
+    "mtime": 1777638986.860459,
+    "hash": "396516709924ad232eeee52dd837a67a"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\login-x-sanya-failed.html": {
+    "mtime": 1777369116.828279,
+    "hash": "21ff156827923a08c359b1150a6bf15e"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\notion-content.txt": {
+    "mtime": 1777293340.5668428,
+    "hash": "f1d18606f18ae5851dd44b6b97406d23"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\post-tmp.txt": {
+    "mtime": 1777226408.6629484,
+    "hash": "8fe73d9d94504e20f38762452b98fef7"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\sa_education_b64.txt": {
+    "mtime": 1777622292.7121193,
+    "hash": "54cb8124873fcaf1ef067c0942645142"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\south-korea-e-commerce-logistics-market_b64.txt": {
+    "mtime": 1777831255.0194213,
+    "hash": "f212cf308b25b8e0d6e12ca2496539b2"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\x_post_row10.txt": {
+    "mtime": 1777362455.8114874,
+    "hash": "7eec68d12a7478121791a81c13ad8151"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\x_post_row11.txt": {
+    "mtime": 1777362455.8646977,
+    "hash": "409fe405d27996e99601fadc82c77c01"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\x_post_row12.txt": {
+    "mtime": 1777362455.918941,
+    "hash": "ea8d5c7e04ca0fb7399c28b826485e44"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\x_post_row13.txt": {
+    "mtime": 1777362455.9805818,
+    "hash": "25567753cde08e8b80e79b1df7929fed"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\x_post_row14.txt": {
+    "mtime": 1777362456.0351624,
+    "hash": "dae4c78e7bb94f378b52f7dcd202e8cd"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\x_post_row15.txt": {
+    "mtime": 1777362456.1189015,
+    "hash": "90f5e98d3cba163bb10d8c6b5d5f7020"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\x_post_row16.txt": {
+    "mtime": 1777362456.201782,
+    "hash": "3b89e17d83f6850a007f26f0a68ad16b"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\x_post_row6.txt": {
+    "mtime": 1777361976.6422968,
+    "hash": "a90d7685cc3b43a374f30ec183d5f24e"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\x_post_row8.txt": {
+    "mtime": 1777362455.683034,
+    "hash": "8f8f9754697e0d9713153309f6943374"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\x_post_row9.txt": {
+    "mtime": 1777362455.751718,
+    "hash": "4af1fbf8e48bd48f4267d8403726bc50"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\skills\\generate-blog.md": {
+    "mtime": 1778186157.6104455,
+    "hash": "7e58e3c9f4e1c25db7216153f1e8ac68"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\skills\\generate-image.md": {
+    "mtime": 1778186164.5231395,
+    "hash": "7d404e5243383596ba9deb93c69a41d4"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\skills\\post-facebook.md": {
+    "mtime": 1777957677.0457966,
+    "hash": "a68103a4b36fdbee6d4f69e07e063415"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\skills\\post-linkedin-pulse.md": {
+    "mtime": 1777896940.54919,
+    "hash": "797cbd25c82dfec539a39e7eee5e18ff"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\skills\\post-linkedin.md": {
+    "mtime": 1777957683.6747243,
+    "hash": "6eb69038beda8730255a851477da1905"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\skills\\post-notion.md": {
+    "mtime": 1777896940.6217191,
+    "hash": "74931902915d0583d34bde9b0befbd0e"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\skills\\post-x.md": {
+    "mtime": 1777957669.7015817,
+    "hash": "63e81506609c8abc33829f7a63af54b7"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\skills\\read-sheet.md": {
+    "mtime": 1777896940.7097008,
+    "hash": "10515054a835c524b36306c1aedbc00f"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\skills\\run-batch.md": {
+    "mtime": 1777896940.742724,
+    "hash": "ae3631e463147b77fe443e13f4771a6a"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\skills\\run-blog-batch.md": {
+    "mtime": 1777957384.6473975,
+    "hash": "440368cc2adb34bcb4762a2608312473"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\skills\\run-blog-generate.md": {
+    "mtime": 1777980659.3257694,
+    "hash": "2610f1795a56e967d5b6703e87db90f0"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\skills\\run-serp-schedule.md": {
+    "mtime": 1778083830.701207,
+    "hash": "d699917ff814d608ed48425502d5da58"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\skills\\sanity-blog.md": {
+    "mtime": 1778482620.495846,
+    "hash": "ba32ac8bd22802de60f733227198fd01"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\skills\\update-sheet.md": {
+    "mtime": 1777957708.696799,
+    "hash": "8ec6008bf24b037fdba0f4d9e9534b4d"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\blog247_chatgpt.png": {
+    "mtime": 1778348234.20138,
+    "hash": "9e73b8c283be3660b308deeb0a2ddda0"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\blog247_chatgpt2.png": {
+    "mtime": 1778348278.5832276,
+    "hash": "52866c665d33af2aac3e88c6377ca11b"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\blog248_check.png": {
+    "mtime": 1778349154.2175949,
+    "hash": "2f413f9fc01335898193a2f48ef71d5f"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\india-article-image.png": {
+    "mtime": 1777636533.0,
+    "hash": "43d78149ebf03510f708945de63da7f3"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\india-hero-background.png": {
+    "mtime": 1777636425.0,
+    "hash": "376fe100c56f0de8702198eeceaf21d3"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\india-leader-ananya-sharma.png": {
+    "mtime": 1777637060.0,
+    "hash": "2dcdbaca80271847a5624bbfee3320c3"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\india-leader-arjun-mehta.png": {
+    "mtime": 1777636652.0,
+    "hash": "51c706f70c729cbeef2cdb4bace68f62"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\india-leader-dr-priya-iyer.png": {
+    "mtime": 1777636767.0,
+    "hash": "74d2c43ad5355ee0482eec2e4192ba6e"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\india-leader-rohan-bhat.png": {
+    "mtime": 1777638596.0,
+    "hash": "33e0a57156296677e1fa503703636be8"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\india-leader-vikram-reddy.png": {
+    "mtime": 1777636937.0,
+    "hash": "d256843181702452fa7246075c247715"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\indonesia-article-image.png": {
+    "mtime": 1777638879.0,
+    "hash": "0e7079c057e547c7a07ece35a3a096a1"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\indonesia-hero-background.png": {
+    "mtime": 1777638714.0,
+    "hash": "06e3a7c26e93c8ee78daf87832061e57"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\indonesia-leader-budi-santoso.png": {
+    "mtime": 1777638993.0,
+    "hash": "d574e6edc8aa1804d08e93304412d90f"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\login-x-sanya-failed.png": {
+    "mtime": 1777369116.7994032,
+    "hash": "f34ce081a2d8615f452f49f09b1bd5b8"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\screenshot.png": {
+    "mtime": 1777367011.2934306,
+    "hash": "7bd9d295b1a6ab7857a18e14326d4351"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\south-africa-education-market.png": {
+    "mtime": 1777622315.0,
+    "hash": "626259e6465a1fc6418c9150f8cbdb7c"
+  },
+  "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\artifacts\\south-korea-e-commerce-logistics-market.png": {
+    "mtime": 1777831265.5275,
+    "hash": "bd1388d91adce6bb2908b70bac00460c"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "name": "x-posting-agent",
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --import=tsx src/index.ts",
+    "once": "node --import=tsx src/index.ts once",
+    "schedule": "node --import=tsx src/index.ts schedule",
+    "blog": "node --import=tsx src/blogRunner.ts",
+    "accounts": "node --import=tsx src/config/accounts.ts",
+    "accounts:add": "node --import=tsx src/config/accounts.ts add",
+    "accounts:list": "node --import=tsx src/config/accounts.ts list",
+    "login": "node --import=tsx src/login-account.ts",
+    "login:x": "node --import=tsx src/tools/loginX.ts",
+    "login:x:all": "node --import=tsx src/tools/loginXAll.ts",
+    "fb-post": "node --import=tsx src/index.ts fb-post",
+    "linkedin-post": "node --import=tsx src/index.ts linkedin-post",
+    "tracker": "node --import=tsx src/index.ts tracker",
+    "extract-cookies": "node --import=tsx scripts/extract-cookies.ts",
+    "sessions:upload": "npx tsx scripts/sync-sessions.ts upload",
+    "sessions:download": "npx tsx scripts/sync-sessions.ts download",
+    "gh-worker": "node --import=tsx scripts/gh-worker.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@browserbasehq/stagehand": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@types/tar": "^6.1.13",
+    "@types/turndown": "^5.0.6",
+    "cheerio": "^1.2.0",
+    "dotenv": "^16.0.0",
+    "googleapis": "^144.0.0",
+    "node-cron": "^4.2.1",
+    "playwright": "^1.44.0",
+    "tar": "^7.5.16",
+    "turndown": "^7.2.4",
+    "twitter-api-v2": "^1.29.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "playwright": {
+    "command": "playwright-mcp",
+    "args": [
+      "--browser", "chrome",
+      "--user-data-dir", "C:\\Users\\Pranav Gupta\\AppData\\Local\\ms-playwright\\mcp-chrome-28690c8",
+      "--init-script", "C:\\Users\\Pranav Gupta\\OneDrive - Ken Research Private Limited\\Desktop\\agents\\scripts\\stealth_init.js"
+    ]
+  }
+}

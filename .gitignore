@@ -1,0 +1,44 @@
+# Credentials — never commit these
+.env
+.accounts/
+scripts/service_account.json
+CLAUDE.md
+
+# Chrome sessions — machine-specific
+.sessions/
+scripts/sessions/
+.sessions-cookies/
+.secrets-export/
+
+# Dependencies
+node_modules/
+dashboard/node_modules/
+
+# Build output
+dist/
+dashboard/.next/
+dashboard/out/
+
+# Claude settings (local machine specific)
+.claude/settings.local.json
+
+# Runtime artifacts
+logs/
+scripts/artifacts/
+scripts/.cache/
+generated_images/
+outputs/
+
+# Python cache
+__pycache__/
+scripts/__pycache__/
+*.pyc
+
+# Playwright artifacts
+.playwright-mcp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+.vercel
