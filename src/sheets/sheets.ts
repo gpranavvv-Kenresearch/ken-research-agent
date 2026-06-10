@@ -355,7 +355,7 @@ function mapRow(row: string[], colMap: ColMap, rowIndex: number, sheetType: Shee
     seoRanking:      g(colMap, 'seoRanking', 'seoranking', 'priority'),
     lastSerpCheckDate: g(colMap, 'lastSerpCheckDate', 'last serp check date'),
     priorityAssignedDate: g(colMap, 'priorityAssignedDate', 'priority assigned date'),
-    platforms:       g(colMap, 'platforms'),
+    platforms:       g(colMap, 'Submitted at', 'submitted at', 'Platforms', 'platforms'),
     // Unified content column — "Blog Content" (col 4) takes priority over generic "Content" (col 14)
     blogContent:     g(colMap, 'Blog Content', 'blog content', 'Blog Content for all', 'blog content for all', 'blogcontent', 'Content', 'content'),
     // X columns
