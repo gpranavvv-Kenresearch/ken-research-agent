@@ -101,7 +101,11 @@ function getSessionProfileDir(account?: Account): string {
 
 async function launchSavedSessionChrome(account: Account | undefined, handle: string): Promise<Page | null> {
   // ── Cookies-only path (GitHub Actions) ────────────────────────────────────
-  const cookiesFile = path.resolve(`.sessions-cookies/x-${handle.toLowerCase()}.json`);
+  // extract-cookies names files by nickname; fall back to handle if nickname file missing
+  const nickname = account?.nickname?.toLowerCase();
+  const nicknameFile = nickname ? path.resolve(`.sessions-cookies/x-${nickname}.json`) : null;
+  const handleFile = path.resolve(`.sessions-cookies/x-${handle.toLowerCase()}.json`);
+  const cookiesFile = (nicknameFile && fs.existsSync(nicknameFile)) ? nicknameFile : handleFile;
   if (fs.existsSync(cookiesFile)) {
     console.log(`   Loading X cookies: ${cookiesFile}`);
     const chromePath = process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : undefined);

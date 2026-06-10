@@ -48,7 +48,8 @@ export async function loginToFacebook(options?: {
   const account = options?.nickname
     ? getFacebookAccountByNickname(options.nickname)
     : getActiveFacebookAccount();
-  if (!account && options?.nickname) throw new Error(`Facebook account "${options.nickname}" not found in facebook-accounts.json`);
+
+  // Derive nickname directly from options so cookies work even if accounts file is missing
   const nickname  = (options?.nickname || account?.nickname || 'unknown').toLowerCase();
   const sessionDir = path.resolve(options?.sessionDir || account?.sessionDir || '.sessions/chrome-fb-profile');
   const email    = options?.email    || account?.email    || process.env.FB_EMAIL!;
@@ -56,7 +57,7 @@ export async function loginToFacebook(options?: {
 
   const chromePath = process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : undefined);
 
-  // ── Cookies-only path (GitHub Actions) ──────────────────────────────────────
+  // ── Cookies-only path (GitHub Actions) — checked BEFORE accounts file validation ──
   const cookiesFile = path.resolve(`.sessions-cookies/fb-${nickname}.json`);
   if (fs.existsSync(cookiesFile)) {
     console.log(`   Loading FB cookies: ${cookiesFile}`);
@@ -82,6 +83,9 @@ export async function loginToFacebook(options?: {
     await closeFacebookBrowser();
     throw new Error(`FB_COOKIES_EXPIRED:${nickname} — re-run npm run extract-cookies`);
   }
+
+  // No cookies — need full credential login; accounts file must have this account
+  if (!account && options?.nickname) throw new Error(`Facebook account "${options.nickname}" not found in facebook-accounts.json`);
 
   if (!fs.existsSync(chromePath)) {
     throw new Error(`Chrome not found at ${chromePath}. Set CHROME_PATH env var.`);

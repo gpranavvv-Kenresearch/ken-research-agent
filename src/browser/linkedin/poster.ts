@@ -1,5 +1,4 @@
 import { Page } from 'playwright';
-import { execSync } from 'child_process';
 import { preparePlainSocialPost } from '../../utils/socialText.js';
 
 const CRITICAL_TIMEOUT_MS = 30_000;
@@ -159,18 +158,32 @@ export async function postToLinkedIn(
     throw new Error(`Copy link button not found: ${copyWait.message}`);
   }
 
+  // ── Intercept clipboard write before clicking (cross-platform) ──────────────
+  await page.evaluate(() => {
+    (window as any).__clipboardWritten = '';
+    const orig = navigator.clipboard.writeText.bind(navigator.clipboard);
+    navigator.clipboard.writeText = async (text: string) => {
+      (window as any).__clipboardWritten = text;
+      return orig(text).catch(() => {});
+    };
+  });
+
   console.log('   Clicking "Copy link to post"...');
   await copyWait.locator.click({ delay: 150 });
+  await page.waitForTimeout(1500);
 
-  // ── Read clipboard (Windows) ──────────────────────────────────────────────
+  // ── Read intercepted clipboard value ─────────────────────────────────────
   let postUrl = '';
   try {
-    postUrl = execSync('powershell -command Get-Clipboard').toString().trim();
-    console.log(`   ✅ Post URL: ${postUrl}`);
-  } catch (err: any) {
-    console.warn(`   ⚠️  Clipboard read failed: ${err.message}`);
+    postUrl = (await page.evaluate(() => (window as any).__clipboardWritten || '')) as string;
+    if (!postUrl || !postUrl.startsWith('http')) postUrl = '';
+  } catch {}
+
+  if (!postUrl) {
+    console.warn('   ⚠️  JS clipboard intercept empty — trying feed URL fallback');
     postUrl = 'https://www.linkedin.com/feed/';
   }
+  console.log(`   ✅ Post URL: ${postUrl}`);
 
   return {
     success: true,
