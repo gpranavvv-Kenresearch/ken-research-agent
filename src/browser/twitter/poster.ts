@@ -170,6 +170,16 @@ export async function postTweet(page: Page, tweetText: string, handle?: string) 
   let tweetUrl = '';
 
   const getShareUrl = async (): Promise<string> => {
+    // Intercept clipboard.writeText before clicking — works headless on Linux
+    await page.evaluate(() => {
+      (window as any).__clipboardWritten = '';
+      const orig = navigator.clipboard.writeText.bind(navigator.clipboard);
+      navigator.clipboard.writeText = async (text: string) => {
+        (window as any).__clipboardWritten = text;
+        return orig(text).catch(() => {});
+      };
+    });
+
     const shareBtn = page.locator('button[aria-label="Share post"]').first();
     await shareBtn.waitFor({ timeout: 5000 });
     await shareBtn.click({ force: true });
@@ -180,6 +190,8 @@ export async function postTweet(page: Page, tweetText: string, handle?: string) 
     await copyLink.click({ force: true });
     await humanDelay(800, 1000);
 
+    const intercepted = await page.evaluate(() => (window as any).__clipboardWritten || '').catch(() => '');
+    if (intercepted) return intercepted;
     return await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
   };
 
@@ -315,6 +327,14 @@ export async function postThread(page: Page, tweets: string[], handle?: string) 
   // Get URL of the first tweet (thread root)
   let tweetUrl = '';
   const getShareUrl = async (): Promise<string> => {
+    await page.evaluate(() => {
+      (window as any).__clipboardWritten = '';
+      const orig = navigator.clipboard.writeText.bind(navigator.clipboard);
+      navigator.clipboard.writeText = async (text: string) => {
+        (window as any).__clipboardWritten = text;
+        return orig(text).catch(() => {});
+      };
+    });
     const shareBtn = page.locator('button[aria-label="Share post"]').first();
     await shareBtn.waitFor({ timeout: 5000 });
     await shareBtn.click({ force: true });
@@ -323,6 +343,8 @@ export async function postThread(page: Page, tweets: string[], handle?: string) 
     await copyLink.waitFor({ timeout: 3000 });
     await copyLink.click({ force: true });
     await humanDelay(800, 1000);
+    const intercepted = await page.evaluate(() => (window as any).__clipboardWritten || '').catch(() => '');
+    if (intercepted) return intercepted;
     return await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
   };
 

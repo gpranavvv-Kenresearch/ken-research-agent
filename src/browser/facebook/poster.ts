@@ -99,6 +99,16 @@ export async function postToFacebook(
   // Strategy 2: Share button → Copy link (clipboard)
   if (!postUrl) {
     const getShareUrl = async (): Promise<string> => {
+      // Intercept clipboard.writeText before clicking — works headless on Linux
+      await page.evaluate(() => {
+        (window as any).__clipboardWritten = '';
+        const orig = navigator.clipboard.writeText.bind(navigator.clipboard);
+        navigator.clipboard.writeText = async (text: string) => {
+          (window as any).__clipboardWritten = text;
+          return orig(text).catch(() => {});
+        };
+      });
+
       const shareSelectors = [
         'div[aria-label="Send this to friends or post it on your profile."][role="button"]',
         'div[aria-label*="Share"][role="button"]',
@@ -113,6 +123,9 @@ export async function postToFacebook(
       await humanDelay(1000, 1500);
       await page.locator('span:has-text("Copy link")').first().click({ timeout: 5000 });
       await humanDelay(800, 1000);
+
+      const intercepted = await page.evaluate(() => (window as any).__clipboardWritten || '').catch(() => '');
+      if (intercepted) return intercepted;
       return await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
     };
 
