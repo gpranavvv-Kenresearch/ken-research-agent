@@ -29,11 +29,15 @@ function latestDate(value: string): string {
 }
 
 // Sheet configuration for different platform types
-const SOCIAL_SHEET_ID = '1p_N3zzJbUx-7t8sjuAtbQsHaUfVmYxytQU_gDd2MGwQ'; // X, FB, LI
-const SOCIAL_SHEET_NAME = 'Social Media';
+const SOCIAL_SHEET_ID = '1ZTgKCRs6Hcmi4pymYa6pZOerxX5cqT23FS1Z8c-RwJU'; // X, FB, LI — per-person tabs: "{Name} Social"
+const SOCIAL_SHEET_NAME = process.env.WORKER_NAME
+  ? `${process.env.WORKER_NAME.charAt(0).toUpperCase()}${process.env.WORKER_NAME.slice(1).toLowerCase()} Social`
+  : 'Social Media';
 
-const BLOG_SHEET_ID = '1p_N3zzJbUx-7t8sjuAtbQsHaUfVmYxytQU_gDd2MGwQ'; // Medium, Dev.to, Google Sites, Linkmate, LinkedIn Pulse
-const BLOG_SHEET_NAME = 'Blogs';
+const BLOG_SHEET_ID = '1ZTgKCRs6Hcmi4pymYa6pZOerxX5cqT23FS1Z8c-RwJU';
+const BLOG_SHEET_NAME = process.env.WORKER_NAME
+  ? `${process.env.WORKER_NAME.charAt(0).toUpperCase()}${process.env.WORKER_NAME.slice(1).toLowerCase()} Blog`
+  : 'Blogs';
 
 // Helper to get sheet config based on platform
 function getSheetConfig(platform?: 'social' | 'blog'): { id: string; name: string } {
