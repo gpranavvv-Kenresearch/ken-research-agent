@@ -19,7 +19,9 @@
     "extract-cookies": "node --import=tsx scripts/extract-cookies.ts",
     "sessions:upload": "npx tsx scripts/sync-sessions.ts upload",
     "sessions:download": "npx tsx scripts/sync-sessions.ts download",
-    "gh-worker": "node --import=tsx scripts/gh-worker.ts"
+    "gh-worker": "node --import=tsx scripts/gh-worker.ts",
+    "local-login": "node --import=tsx scripts/local-login.ts",
+    "post": "node --import=tsx scripts/gh-worker.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
