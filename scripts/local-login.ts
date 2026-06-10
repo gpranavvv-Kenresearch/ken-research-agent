@@ -4,10 +4,19 @@
  * Run this ONCE per account per platform. After login the cookies are saved
  * to .sessions-cookies/ and reused by the posting scripts automatically.
  *
- * Usage:
+ * Social platforms:
  *   npx tsx scripts/local-login.ts --name aniket --platform x
  *   npx tsx scripts/local-login.ts --name aniket --platform fb
  *   npx tsx scripts/local-login.ts --name aniket --platform li
+ *
+ * Blog platforms (LinkedIn Pulse reuses --platform li):
+ *   npx tsx scripts/local-login.ts --name aniket --platform medium
+ *   npx tsx scripts/local-login.ts --name aniket --platform notion
+ *   npx tsx scripts/local-login.ts --name aniket --platform devto
+ *   npx tsx scripts/local-login.ts --name aniket --platform substack
+ *   npx tsx scripts/local-login.ts --name aniket --platform hackmd
+ *   npx tsx scripts/local-login.ts --name aniket --platform wordpress
+ *   npx tsx scripts/local-login.ts --name aniket --platform blogger
  */
 
 import { chromium } from 'playwright';
@@ -29,21 +38,30 @@ if (!name || !platform) {
   process.exit(1);
 }
 
-if (!['x', 'fb', 'li'].includes(platform)) {
-  console.error('--platform must be one of: x, fb, li');
+const PLATFORMS: Record<string, { url: string; label: string; filePrefix: string }> = {
+  // Social
+  x:         { url: 'https://x.com/i/flow/login',               label: 'X (Twitter)',     filePrefix: 'x'         },
+  fb:        { url: 'https://www.facebook.com/login',            label: 'Facebook',        filePrefix: 'fb'        },
+  li:        { url: 'https://www.linkedin.com/login',            label: 'LinkedIn',        filePrefix: 'li'        },
+  // Blog — LinkedIn Pulse reuses the li session (no separate login needed)
+  medium:    { url: 'https://medium.com/m/signin',               label: 'Medium',          filePrefix: 'medium'    },
+  notion:    { url: 'https://www.notion.so/login',               label: 'Notion',          filePrefix: 'notion'    },
+  devto:     { url: 'https://dev.to/enter',                      label: 'Dev.to',          filePrefix: 'devto'     },
+  substack:  { url: 'https://substack.com/sign-in',              label: 'Substack',        filePrefix: 'substack'  },
+  hackmd:    { url: 'https://hackmd.io/login',                   label: 'HackMD',          filePrefix: 'hackmd'    },
+  wordpress: { url: 'https://wordpress.com/log-in',              label: 'WordPress',       filePrefix: 'wordpress' },
+  blogger:   { url: 'https://www.blogger.com/',                  label: 'Blogger',         filePrefix: 'blogger'   },
+};
+
+if (!PLATFORMS[platform]) {
+  console.error(`--platform must be one of: ${Object.keys(PLATFORMS).join(', ')}`);
   process.exit(1);
 }
 
 const OUT_DIR = '.sessions-cookies';
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
-const URLS: Record<string, string> = {
-  x:   'https://x.com/i/flow/login',
-  fb:  'https://www.facebook.com/login',
-  li:  'https://www.linkedin.com/login',
-};
-
-const NAMES: Record<string, string> = { x: 'X (Twitter)', fb: 'Facebook', li: 'LinkedIn' };
+const { url: loginUrl, label: platformLabel, filePrefix } = PLATFORMS[platform];
 
 async function waitForEnter(prompt: string) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -51,9 +69,9 @@ async function waitForEnter(prompt: string) {
 }
 
 async function main() {
-  const outFile = path.join(OUT_DIR, `${platform}-${name}.json`);
+  const outFile = path.join(OUT_DIR, `${filePrefix}-${name}.json`);
 
-  console.log(`\n🔐  Logging into ${NAMES[platform]} as "${name}"`);
+  console.log(`\n  Logging into ${platformLabel} as "${name}"`);
   console.log(`    Output: ${outFile}\n`);
 
   const browser = await chromium.launch({
@@ -67,9 +85,9 @@ async function main() {
   });
 
   const page = await context.newPage();
-  await page.goto(URLS[platform], { waitUntil: 'domcontentloaded' });
+  await page.goto(loginUrl, { waitUntil: 'domcontentloaded' });
 
-  console.log(`    Browser opened. Log in to ${NAMES[platform]} now.`);
+  console.log(`    Browser opened. Log in to ${platformLabel} now.`);
   console.log(`    When you are fully logged in (home page visible), come back here and press Enter.\n`);
 
   await waitForEnter('    Press Enter once you are logged in → ');
