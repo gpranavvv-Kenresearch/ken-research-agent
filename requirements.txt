@@ -1,0 +1,6 @@
+# Python dependencies for scripts/
+# Install with: pip install -r requirements.txt
+
+google-auth>=2.0.0
+google-api-python-client>=2.0.0
+requests>=2.28.0
