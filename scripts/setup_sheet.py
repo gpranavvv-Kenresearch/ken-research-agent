@@ -22,7 +22,7 @@ TEAM = [
 ]
 
 SOCIAL_HEADERS = [
-    "targetUrl", "Title", "Name", "Format", "Submitted At", "Priority",
+    "targetUrl", "Title", "Name", "Format", "Submitted At", "Priority", "Platforms",
     "X Post", "X Post URL", "X Status", "X Batch", "X Error", "lastPostedX",
     "FB Post", "FB Post URL", "FB Status", "FB Batch", "FB Error", "lastPostedFb",
     "LinkedIn Post", "LinkedIn Post URL", "LinkedIn Status", "LI Batch", "LinkedIn Error", "lastPostedLi",
