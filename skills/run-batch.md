@@ -35,6 +35,21 @@ If 0 rows → log "No unposted rows. Batch done." and stop.
 
 ---
 
+## Phase 2.5: Resolve Per-Row Platform Selection
+
+For each row, read the `Platforms` column (e.g. `X,Facebook` or `LinkedIn` or empty).
+
+**Rules:**
+- If `Platforms` is **empty** → treat as `X,Facebook,LinkedIn` (post to all, existing behaviour)
+- If `Platforms` is set → parse as comma-separated list; normalise each token:
+  - `x` / `X` / `twitter` / `Twitter` → **X**
+  - `fb` / `FB` / `facebook` / `Facebook` → **Facebook**
+  - `li` / `LI` / `linkedin` / `LinkedIn` → **LinkedIn**
+- Store the resolved set for the row (e.g. `{X, Facebook}`).
+- This is checked **before** the batch-schedule gate in Phase 4: if a platform is not in the row's set, skip it for that row regardless of batch schedule.
+
+---
+
 ## Phase 3: Assign Accounts via Name Column
 
 For each row, read `Name` column (e.g. "aniket"). Look up that nickname in each platform's credential list below.
@@ -218,7 +233,9 @@ If current batch not in platform's schedule → skip that platform for ALL rows 
 
 ### For each row:
 
-**4a. Post to X** (only if row's `X Status` is empty)
+**Before posting any platform for a row:** check the row's resolved platform set from Phase 2.5. If the platform is not in the set, skip it silently — do not write an error, just move on.
+
+**4a. Post to X** (only if row's `X Status` is empty AND `X` is in row's platform set)
 - Use the tweet generated in Phase 3.5 Step C
 - Look up row's `Name` in X Accounts list → get username + password + handle
 - If not found → POST x-error to Apps Script → skip
@@ -233,7 +250,7 @@ If current batch not in platform's schedule → skip that platform for ALL rows 
   3. Follow x-agent.md exactly — complete post via MCP, fix script, update sheet
   4. Continue to next platform
 
-**4b. Post to Facebook** (only if row's `FB Status` is empty AND current batch is B1, B3, B5, B7, or B8 — i.e. 10:30, 12:00, 14:00, 16:00, 17:15)
+**4b. Post to Facebook** (only if row's `FB Status` is empty AND `Facebook` is in row's platform set AND current batch is B1, B3, B5, B7, or B8 — i.e. 10:30, 12:00, 14:00, 16:00, 17:15)
 - Use the Facebook post generated in Phase 3.5 Step D
 - Look up row's `Name` in Facebook Accounts list → get email + password
 - If not found → POST fb-error to Apps Script → skip
@@ -248,7 +265,7 @@ If current batch not in platform's schedule → skip that platform for ALL rows 
   3. Follow facebook-agent.md exactly — complete post via MCP, fix script, update sheet
   4. Continue to next platform
 
-**4c. Post to LinkedIn** (only if row's `LI Status` is empty AND current batch is B1, B4, or B7 — i.e. 10:30, 13:00, 16:00)
+**4c. Post to LinkedIn** (only if row's `LI Status` is empty AND `LinkedIn` is in row's platform set AND current batch is B1, B4, or B7 — i.e. 10:30, 13:00, 16:00)
 - Use the LinkedIn post generated in Phase 3.5 Step E
 - Look up row's `Name` in LinkedIn Accounts list → get email + password
 - If not found → POST li-error to Apps Script → skip

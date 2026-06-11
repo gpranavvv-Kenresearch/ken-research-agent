@@ -38,14 +38,21 @@ except ImportError:
     print(json.dumps({"ok": False, "error": "Missing dependencies. Run: pip install google-auth requests"}))
     sys.exit(1)
 
-SPREADSHEET_ID = "1p_N3zzJbUx-7t8sjuAtbQsHaUfVmYxytQU_gDd2MGwQ"
+SPREADSHEET_ID = "1ZTgKCRs6Hcmi4pymYa6pZOerxX5cqT23FS1Z8c-RwJU"
 SERVICE_ACCOUNT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "service_account.json")
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 SHEET_MAP = {
-    "main": "Agentic Sheet",
-    "blog": "Blogs",
+    "social": "Social",
+    "main":   "Social",
+    "blog":   "Blog",
 }
+
+def resolve_tab(sheet_alias: str, name: str) -> str:
+    suffix = SHEET_MAP.get(sheet_alias)
+    if not suffix:
+        raise ValueError(f"Unknown --sheet alias: {sheet_alias}")
+    return f"{name.strip().title()} {suffix}"
 
 BASE_URL = "https://sheets.googleapis.com/v4/spreadsheets"
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache")
@@ -185,12 +192,14 @@ def action_unposted_main(sheet_name, limit=15):
 def main():
     parser = argparse.ArgumentParser(description="Read rows from Google Sheet via REST API.")
     parser.add_argument("--sheet", choices=list(SHEET_MAP.keys()), default="blog")
+    parser.add_argument("--name", type=str, required=True,
+                        help="Person name (e.g. 'aniket') — tab becomes '{Name} Social' or '{Name} Blog'")
     parser.add_argument("--action", choices=["all", "row", "blog-unprocessed", "unposted"], default="blog-unprocessed")
     parser.add_argument("--row", type=int, default=None, help="Data row number (for --action row)")
     parser.add_argument("--limit", type=int, default=15, help="Max rows to return")
     args = parser.parse_args()
 
-    sheet_name = SHEET_MAP[args.sheet]
+    sheet_name = resolve_tab(args.sheet, args.name)
 
     try:
         if args.action == "all":

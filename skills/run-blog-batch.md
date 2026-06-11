@@ -31,6 +31,25 @@ Example: `BLOG-2026-04-27-B1`
 
 ---
 
+## Phase 1.5: Platform Selection Logic
+
+The blog sheet has a `Platforms` column. For each row:
+
+- If `Platforms` is **empty** → default to `LinkedIn Pulse` only (existing behaviour)
+- If `Platforms` is set → parse as comma-separated list of blog platforms. Supported values:
+  - `LinkedIn Pulse` / `linkedin-pulse` / `pulse`
+  - `Notion` / `notion`
+  - `Medium` / `medium`
+  - `WordPress` / `wordpress`
+  - `Blogger` / `blogger`
+  - `Dev.to` / `devto`
+  - `Substack` / `substack`
+  - `HackMD` / `hackmd`
+- Store the resolved set for the row. In Phase 4, only post to platforms in this set.
+- If a platform is in the set but has no credentials configured → write `{Platform} Status` = `error`, `{Platform} Error` = `No credentials configured for this platform`, skip.
+
+---
+
 ## Phase 2: Read Blog Sheet
 
 GET the Apps Script Web App (reads only):
@@ -73,7 +92,11 @@ If generation fails → write error:
 python scripts/sheet_write.py --sheet blog --row <row> --updates '{"Linkedin Pulse Status":"error","Linkedin Pulse Error":"Blog generation failed: <reason>"}'
 ```
 
-### Step B: Post to LinkedIn Pulse (if Linkedin Pulse Status is empty)
+### Step B: Post to Platforms (only those in the row's platform set from Phase 1.5)
+
+For each platform in the row's resolved set, run the corresponding posting step below in order. Skip any platform whose status column is already filled.
+
+#### LinkedIn Pulse (if `LinkedIn Pulse` is in platform set AND `Linkedin Pulse Status` is empty)
 1. Run script:
    ```
    npx ts-node scripts/post-linkedin-pulse.ts --email {e} --password {p} --nickname {name} --title "{title}" --html-file {html_file} --caption "{caption}" --seo-title "{seo_title}" --seo-desc "{seo_desc}" --row {n} --batch {b}

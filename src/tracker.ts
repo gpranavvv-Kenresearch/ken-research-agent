@@ -12,11 +12,13 @@ import 'dotenv/config';
 
 // ──── Sheet config ────────────────────────────────────────────────────────
 
-const SHEET_ID = '1p_N3zzJbUx-7t8sjuAtbQsHaUfVmYxytQU_gDd2MGwQ';
+const SHEET_ID = '1ZTgKCRs6Hcmi4pymYa6pZOerxX5cqT23FS1Z8c-RwJU';
+
+const TEAM = ['Krishi','Pranav','Sameeksha','Aniket','Vansh','Abhinav','Hritika','Meenakshi','Sanya','Shivani','Vijay','Shrey'];
 
 const SHEETS = [
-  { name: 'Social Media', type: 'social' as const },
-  { name: 'Blogs',        type: 'blog'   as const },
+  ...TEAM.map(n => ({ name: `${n} Social`, type: 'social' as const })),
+  ...TEAM.map(n => ({ name: `${n} Blog`,   type: 'blog'   as const })),
 ];
 
 // Platform definitions: column name for status, error, and lastPosted

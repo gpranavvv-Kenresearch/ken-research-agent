@@ -44,17 +44,26 @@ except ImportError:
     }))
     sys.exit(1)
 
-SPREADSHEET_ID = "1p_N3zzJbUx-7t8sjuAtbQsHaUfVmYxytQU_gDd2MGwQ"
+SPREADSHEET_ID = "1ZTgKCRs6Hcmi4pymYa6pZOerxX5cqT23FS1Z8c-RwJU"
 SERVICE_ACCOUNT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "service_account.json")
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
+# Tab names are "{Name} Social" or "{Name} Blog" — built dynamically from --name argument.
+# SHEET_MAP maps the --sheet alias to the tab suffix.
 SHEET_MAP = {
-    "main": "Agentic Sheet",
-    "social": "Social Media",
-    "blog": "Blogs",
-    "linkedin": "Blogs",
-    "seoli": "Blogs",
+    "social": "Social",
+    "main":   "Social",
+    "blog":   "Blog",
+    "linkedin": "Blog",
+    "seoli":    "Blog",
 }
+
+def resolve_tab(sheet_alias: str, name: str) -> str:
+    """Return the actual sheet tab name, e.g. 'Aniket Social'."""
+    suffix = SHEET_MAP.get(sheet_alias)
+    if not suffix:
+        raise ValueError(f"Unknown --sheet alias: {sheet_alias}")
+    return f"{name.strip().title()} {suffix}"
 
 BASE_URL = "https://sheets.googleapis.com/v4/spreadsheets"
 
@@ -243,8 +252,12 @@ def main():
         description="Write to Google Sheet via direct REST API (cached token + headers)."
     )
     parser.add_argument(
-        "--sheet", choices=list(SHEET_MAP.keys()), default="main",
-        help="'main' = Agentic Sheet, 'social' = Social Media, 'blog' = Blogs, 'linkedin' = Blogs"
+        "--sheet", choices=list(SHEET_MAP.keys()), default="social",
+        help="Tab type: 'social'/'main' → '{Name} Social', 'blog'/'linkedin' → '{Name} Blog'"
+    )
+    parser.add_argument(
+        "--name", type=str, required=True,
+        help="Person name (e.g. 'aniket') — determines which tab to write to: '{Name} Social' or '{Name} Blog'"
     )
     parser.add_argument(
         "--row", type=int, required=True,
@@ -269,7 +282,7 @@ def main():
     args = parser.parse_args()
 
     if args.flag_red:
-        sheet_name = SHEET_MAP[args.sheet]
+        sheet_name = resolve_tab(args.sheet, args.name)
         result = paint_row_red(sheet_name, args.row)
         print(json.dumps(result))
         sys.exit(0 if result.get("ok") else 1)

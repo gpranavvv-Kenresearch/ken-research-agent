@@ -8,16 +8,16 @@ Uses `sheet_write.py` — direct Sheets API, fast, no Apps Script overhead.
 ## Command Format
 
 ```
-python scripts/sheet_write.py --sheet <alias> --row <data_row> --updates-file <path>
+python scripts/sheet_write.py --sheet <alias> --name <nickname> --row <data_row> --updates-file <path>
 ```
 
 | Alias | Tab |
 |-------|-----|
-| `social` | Social Media |
-| `blog` | Blogs |
-| `main` | Agentic Sheet |
+| `social` | `{Name} Social` (e.g. `Aniket Social`) |
+| `blog` | `{Name} Blog` (e.g. `Aniket Blog`) |
+| `main` | same as `social` |
 
-Always write updates to a temp JSON file first, then call the script.
+`--name` is the person's nickname (e.g. `aniket`, `krishi`). Always write updates to a temp JSON file first, then call the script.
 
 ---
 
@@ -34,7 +34,7 @@ Always write updates to a temp JSON file first, then call the script.
 }
 ```
 ```
-python scripts/sheet_write.py --sheet social --row <data_row> --updates-file C:/tmp/x_updates_<row>.json
+python scripts/sheet_write.py --sheet social --name <nickname> --row <data_row> --updates-file C:/tmp/x_updates_<row>.json
 ```
 
 ### On error:
@@ -45,7 +45,7 @@ python scripts/sheet_write.py --sheet social --row <data_row> --updates-file C:/
 }
 ```
 ```
-python scripts/sheet_write.py --sheet social --row <data_row> --updates-file C:/tmp/x_updates_<row>.json
+python scripts/sheet_write.py --sheet social --name <nickname> --row <data_row> --updates-file C:/tmp/x_updates_<row>.json
 ```
 
 ---
@@ -107,7 +107,7 @@ python scripts/sheet_write.py --sheet social --row <data_row> --updates-file C:/
 { "column_name": "value", ... }
 ```
 ```
-python scripts/sheet_write.py --sheet <alias> --row <data_row> --updates-file C:/tmp/updates_<row>.json
+python scripts/sheet_write.py --sheet <alias> --name <nickname> --row <data_row> --updates-file C:/tmp/updates_<row>.json
 ```
 
 ---

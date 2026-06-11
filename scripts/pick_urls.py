@@ -47,7 +47,7 @@ VERTICALS = {
 }
 
 # Google Sheet config (to cross-check Blogs sheet)
-SPREADSHEET_ID = "1p_N3zzJbUx-7t8sjuAtbQsHaUfVmYxytQU_gDd2MGwQ"
+SPREADSHEET_ID = "1ZTgKCRs6Hcmi4pymYa6pZOerxX5cqT23FS1Z8c-RwJU"
 SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR, "scripts", "service_account.json")
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
