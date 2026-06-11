@@ -1,16 +1,17 @@
 name: Ken Research Posting Bot
 
 on:
-  schedule:
-    # IST = UTC+5:30  |  All times below are UTC
-    - cron: '0 5 * * 1-6'    # B1  10:30 IST
-    - cron: '45 5 * * 1-6'   # B2  11:15 IST
-    - cron: '30 6 * * 1-6'   # B3  12:00 IST
-    - cron: '30 7 * * 1-6'   # B4  13:00 IST
-    - cron: '30 8 * * 1-6'   # B5  14:00 IST
-    - cron: '30 9 * * 1-6'   # B6  15:00 IST
-    - cron: '30 10 * * 1-6'  # B7  16:00 IST
-    - cron: '45 11 * * 1-6'  # B8  17:15 IST
+  # schedule: PAUSED — uncomment to re-enable
+  # schedule:
+  #   # IST = UTC+5:30  |  All times below are UTC
+  #   - cron: '0 5 * * 1-6'    # B1  10:30 IST
+  #   - cron: '45 5 * * 1-6'   # B2  11:15 IST
+  #   - cron: '30 6 * * 1-6'   # B3  12:00 IST
+  #   - cron: '30 7 * * 1-6'   # B4  13:00 IST
+  #   - cron: '30 8 * * 1-6'   # B5  14:00 IST
+  #   - cron: '30 9 * * 1-6'   # B6  15:00 IST
+  #   - cron: '30 10 * * 1-6'  # B7  16:00 IST
+  #   - cron: '45 11 * * 1-6'  # B8  17:15 IST
   workflow_dispatch:          # manual trigger from GitHub UI
 
 # Only one batch runs at a time
