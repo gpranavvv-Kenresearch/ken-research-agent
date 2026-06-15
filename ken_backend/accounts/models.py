@@ -24,6 +24,8 @@ class User(AbstractUser):
     nickname = models.CharField(
         max_length=64,
         unique=True,
+        null=True,
+        blank=True,
         choices=NICKNAME_CHOICES,
         help_text="Matches '{Name} Social' and '{Name} Blog' tab prefix in Google Sheet",
     )
