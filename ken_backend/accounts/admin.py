@@ -6,7 +6,7 @@ from .models import User
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     list_display  = ['nickname', 'email', 'is_worker_online', 'worker_last_seen', 'is_staff', 'is_active']
-    list_filter   = ['is_worker_online', 'is_staff', 'is_active', 'nickname']
+    list_filter   = ['is_worker_online', 'is_staff', 'is_active']
     search_fields = ['nickname', 'email', 'username']
     ordering      = ['nickname']
     fieldsets     = BaseUserAdmin.fieldsets + (

@@ -39,7 +39,7 @@ class User(AbstractUser):
         db_table = 'accounts_user'
 
     def __str__(self):
-        return f"{self.nickname} ({self.email})"
+        return f"{self.nickname or self.username} ({self.email})"
 
     @property
     def sheet_tab_social(self):
