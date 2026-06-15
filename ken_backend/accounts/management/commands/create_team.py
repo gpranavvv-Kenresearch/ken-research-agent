@@ -27,10 +27,16 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         for username, email, is_super in TEAM:
-            if User.objects.filter(username=username).exists():
-                User.objects.filter(username=username).update(nickname=username)
+            try:
+                u = User.objects.get(username=username)
+                u.email = email
+                u.nickname = username
+                u.is_staff = is_super
+                u.is_superuser = is_super
+                u.set_password(DEFAULT_PASSWORD)
+                u.save()
                 self.stdout.write(f'Updated {username}')
-            else:
+            except User.DoesNotExist:
                 if is_super:
                     u = User.objects.create_superuser(username, email, DEFAULT_PASSWORD)
                 else:
