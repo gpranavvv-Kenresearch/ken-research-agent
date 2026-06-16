@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { appendBlogRow } from '@/lib/sheetClient';
+import { appendBlogRow, appendSocialRow } from '@/lib/sheetClient';
 import type { SubmitPayload } from '@/lib/sheetClient';
 import { getUser } from '@/lib/userConfig';
 
@@ -14,43 +14,79 @@ export async function POST(req: NextRequest) {
     const user = getUser(body.userId);
     if (!user) return NextResponse.json({ error: `Unknown user: "${body.userId}"` }, { status: 400 });
 
-    const payload: SubmitPayload = {
-      title:       body.title,
-      targetUrl:   body.targetUrl,
-      name:        user.displayName,
-      format:      body.format || 'Format 1',
-      platforms:   body.platforms ?? [],
-      description: body.description,
-      blogTab:     user.blogTab,
+    const basePayload: SubmitPayload = {
+      title:          body.title,
+      targetUrl:      body.targetUrl,
+      name:           user.displayName,
+      format:         body.format || 'seo-li',
+      platforms:      body.platforms ?? [],
+      socialPlatforms: body.socialPlatforms ?? [],
+      description:    body.description,
+      blogTab:        user.blogTab,
+      socialTab:      user.socialTab,
     };
 
-    const sheetRow = await appendBlogRow(payload);
-
-    // Notify Django to generate content + queue posting immediately
-    const djangoUrl    = process.env.DJANGO_API_URL;
+    const djangoUrl     = process.env.DJANGO_API_URL;
     const webhookSecret = process.env.DJANGO_WEBHOOK_SECRET;
-    if (djangoUrl && webhookSecret) {
-      try {
-        await fetch(`${djangoUrl}/api/v1/sheet/webhook/`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Webhook-Secret': webhookSecret,
-          },
-          body: JSON.stringify({
-            name:      user.id,
-            sheetRow,
-            title:     payload.title,
-            targetUrl: payload.targetUrl,
-            platforms: payload.platforms,
-          }),
-        });
-      } catch (err) {
-        console.error('[submit] Django webhook failed (non-fatal):', err);
+
+    let blogSheetRow   = -1;
+    let socialSheetRow = -1;
+
+    // Write blog row → {Name} Blog tab
+    if (basePayload.platforms.length > 0) {
+      blogSheetRow = await appendBlogRow(basePayload);
+
+      if (djangoUrl && webhookSecret && blogSheetRow > 0) {
+        try {
+          await fetch(`${djangoUrl}/api/v1/sheet/webhook/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Webhook-Secret': webhookSecret },
+            body: JSON.stringify({
+              type:      'blog',
+              name:      user.id,
+              sheetRow:  blogSheetRow,
+              title:     basePayload.title,
+              targetUrl: basePayload.targetUrl,
+              platforms: basePayload.platforms,
+            }),
+          });
+        } catch (err) {
+          console.error('[submit] Django blog webhook failed (non-fatal):', err);
+        }
       }
     }
 
-    return NextResponse.json({ success: true, sheetRow, tab: user.blogTab });
+    // Write social row → {Name} Social tab
+    if (basePayload.socialPlatforms.length > 0) {
+      socialSheetRow = await appendSocialRow(basePayload);
+
+      if (djangoUrl && webhookSecret && socialSheetRow > 0) {
+        try {
+          await fetch(`${djangoUrl}/api/v1/sheet/webhook/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Webhook-Secret': webhookSecret },
+            body: JSON.stringify({
+              type:            'social',
+              name:            user.id,
+              sheetRow:        socialSheetRow,
+              title:           basePayload.title,
+              targetUrl:       basePayload.targetUrl,
+              socialPlatforms: basePayload.socialPlatforms,
+            }),
+          });
+        } catch (err) {
+          console.error('[submit] Django social webhook failed (non-fatal):', err);
+        }
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      blogSheetRow,
+      socialSheetRow,
+      blogTab:   blogSheetRow   > 0 ? user.blogTab   : null,
+      socialTab: socialSheetRow > 0 ? user.socialTab : null,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: msg }, { status: 500 });

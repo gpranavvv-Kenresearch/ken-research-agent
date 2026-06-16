@@ -68,9 +68,11 @@ export interface SubmitPayload {
   targetUrl: string;
   name: string;
   format: string;
-  platforms: string[];
+  platforms: string[];       // blog platforms
+  socialPlatforms: string[]; // social platforms (x, facebook, linkedin)
   description?: string;
   blogTab: string;
+  socialTab: string;
 }
 
 export async function appendBlogRow(payload: SubmitPayload): Promise<number> {
@@ -104,6 +106,43 @@ export async function appendBlogRow(payload: SubmitPayload): Promise<number> {
   const appendRes = await sheets.spreadsheets.values.append({
     spreadsheetId: SHARED_SHEET_ID,
     range: `'${payload.blogTab}'!A:A`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [row] },
+  });
+
+  const match = (appendRes.data.updates?.updatedRange ?? '').match(/(\d+)$/);
+  return match ? parseInt(match[1]) : -1;
+}
+
+export async function appendSocialRow(payload: SubmitPayload): Promise<number> {
+  if (!payload.socialPlatforms.length) return -1;
+  const sheets = await getSheetsClient();
+
+  const headerRes = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHARED_SHEET_ID,
+    range: `'${payload.socialTab}'!1:1`,
+  });
+  const headers: string[] = (headerRes.data.values?.[0] ?? []) as string[];
+
+  const now = new Date();
+  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+  const timestamp = ist.toISOString().replace('T', ' ').slice(0, 16);
+
+  const data: Record<string, string> = {
+    'targetUrl':    payload.targetUrl,
+    'title':        payload.title,
+    'Name':         payload.name,
+    'Platforms':    payload.socialPlatforms.join(', '),
+    'Submitted At': timestamp,
+  };
+
+  const row = headers.length
+    ? headers.map((h) => data[h] ?? '')
+    : [payload.targetUrl, payload.title, payload.name, payload.socialPlatforms.join(', '), timestamp];
+
+  const appendRes = await sheets.spreadsheets.values.append({
+    spreadsheetId: SHARED_SHEET_ID,
+    range: `'${payload.socialTab}'!A:A`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [row] },
   });

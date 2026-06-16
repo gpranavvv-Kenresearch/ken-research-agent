@@ -28,12 +28,12 @@ def sheet_webhook(request):
     if expected and secret != expected:
         return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    data     = request.data
-    name     = (data.get('name') or '').lower().strip()
+    data      = request.data
+    job_type  = (data.get('type') or '').lower().strip()   # 'social' | 'blog' | '' (legacy)
+    name      = (data.get('name') or '').lower().strip()
     sheet_row = data.get('sheetRow')
-    title    = data.get('title', '')
-    url      = data.get('targetUrl', '')
-    platforms_raw = data.get('platforms', [])   # list from frontend
+    title     = data.get('title', '')
+    url       = data.get('targetUrl', '')
 
     if not name or not url:
         return Response({'error': 'name and targetUrl are required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -43,51 +43,58 @@ def sheet_webhook(request):
     except User.DoesNotExist:
         return Response({'error': f'User "{name}" not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    # Normalise keys
-    platforms = [PLATFORM_KEY_MAP.get(p, p) for p in platforms_raw]
-
-    social_platforms = [p for p in platforms if p in SOCIAL_PLATFORM_KEYS]
-    blog_platforms   = [p for p in platforms if p not in SOCIAL_PLATFORM_KEYS]
-
     queued = []
 
     # ── Social posting job ───────────────────────────────────────────────────
-    if social_platforms:
-        from jobs.models import PostingJob
-        from workers.tasks import generate_and_post
+    if job_type in ('social', ''):
+        raw_social = data.get('socialPlatforms') or data.get('platforms', [])
+        social_platforms = [PLATFORM_KEY_MAP.get(p, p) for p in raw_social if p in SOCIAL_PLATFORM_KEYS or p in ('x', 'facebook', 'linkedin')]
 
-        job, created = PostingJob.objects.get_or_create(
-            user=user,
-            target_url=url,
-            sheet_row=sheet_row,
-            defaults={
-                'title':     title,
-                'platforms': ','.join(social_platforms),
-                'status':    'pending',
-            },
-        )
-        if created:
-            generate_and_post.delay(job.id)
-            queued.append({'type': 'social', 'job_id': job.id, 'platforms': social_platforms})
+        # legacy: if no explicit type, filter social from combined platforms list
+        if job_type == '' and not social_platforms:
+            raw = data.get('platforms', [])
+            social_platforms = [PLATFORM_KEY_MAP.get(p, p) for p in raw if p in SOCIAL_PLATFORM_KEYS]
+
+        if social_platforms:
+            from jobs.models import PostingJob
+            from workers.tasks import generate_and_post
+
+            job, created = PostingJob.objects.get_or_create(
+                user=user,
+                target_url=url,
+                sheet_row=sheet_row,
+                defaults={
+                    'title':     title,
+                    'platforms': ','.join(social_platforms),
+                    'status':    'pending',
+                },
+            )
+            if created:
+                generate_and_post.delay(job.id)
+                queued.append({'type': 'social', 'job_id': job.id, 'platforms': social_platforms})
 
     # ── Blog job ─────────────────────────────────────────────────────────────
-    if blog_platforms:
-        from jobs.models import BlogJob
-        from workers.tasks import execute_blog_generation
+    if job_type in ('blog', ''):
+        raw_blog = data.get('platforms', [])
+        blog_platforms = [PLATFORM_KEY_MAP.get(p, p) for p in raw_blog if p not in SOCIAL_PLATFORM_KEYS]
 
-        blog_job, created = BlogJob.objects.get_or_create(
-            user=user,
-            target_url=url,
-            sheet_row=sheet_row,
-            defaults={
-                'title':     title,
-                'platforms': ','.join(blog_platforms),
-                'status':    'pending',
-            },
-        )
-        if created:
-            execute_blog_generation.delay(blog_job.id)
-            queued.append({'type': 'blog', 'job_id': blog_job.id, 'platforms': blog_platforms})
+        if blog_platforms:
+            from jobs.models import BlogJob
+            from workers.tasks import execute_blog_generation
+
+            blog_job, created = BlogJob.objects.get_or_create(
+                user=user,
+                target_url=url,
+                sheet_row=sheet_row,
+                defaults={
+                    'title':     title,
+                    'platforms': ','.join(blog_platforms),
+                    'status':    'pending',
+                },
+            )
+            if created:
+                execute_blog_generation.delay(blog_job.id)
+                queued.append({'type': 'blog', 'job_id': blog_job.id, 'platforms': blog_platforms})
 
     return Response({'queued': queued}, status=status.HTTP_201_CREATED)
 

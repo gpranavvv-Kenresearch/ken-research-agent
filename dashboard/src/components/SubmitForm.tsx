@@ -48,11 +48,11 @@ export default function SubmitForm() {
         const res = await fetch('/api/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, targetUrl: url, name: user.displayName, format: form.format, description: '', platforms: [...form.platforms, ...form.social], userId: user.id }),
+          body: JSON.stringify({ title, targetUrl: url, name: user.displayName, format: form.format, description: '', platforms: form.platforms, socialPlatforms: form.social, userId: user.id }),
         });
-        const data = await res.json() as { success?: boolean; sheetRow?: number; error?: string };
+        const data = await res.json() as { success?: boolean; blogSheetRow?: number; socialSheetRow?: number; error?: string };
         if (!res.ok) results.push({ title, url, error: data.error ?? 'Failed' });
-        else results.push({ title, url, row: data.sheetRow });
+        else results.push({ title, url, row: data.blogSheetRow ?? data.socialSheetRow });
       } catch (err) {
         results.push({ title, url, error: err instanceof Error ? err.message : 'Unknown error' });
       }
@@ -71,18 +71,22 @@ export default function SubmitForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: form.title,
-          targetUrl: form.targetUrl,
-          name: user.displayName,
-          format: form.format,
-          description: form.description,
-          platforms: [...form.platforms, ...form.social],
-          userId: user.id,
+          title:           form.title,
+          targetUrl:       form.targetUrl,
+          name:            user.displayName,
+          format:          form.format,
+          description:     form.description,
+          platforms:       form.platforms,
+          socialPlatforms: form.social,
+          userId:          user.id,
         }),
       });
-      const data = await res.json() as { success?: boolean; sheetRow?: number; error?: string };
+      const data = await res.json() as { success?: boolean; blogSheetRow?: number; socialSheetRow?: number; blogTab?: string; socialTab?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? 'Submit failed');
-      setSuccess(`✅ Added to ${user.displayName}'s sheet (row ${data.sheetRow}). Generation will start shortly.`);
+      const added: string[] = [];
+      if ((data.blogSheetRow ?? -1) > 0)   added.push(`Blog row ${data.blogSheetRow} → ${data.blogTab}`);
+      if ((data.socialSheetRow ?? -1) > 0) added.push(`Social row ${data.socialSheetRow} → ${data.socialTab}`);
+      setSuccess(`Added: ${added.join(' · ')}. Generation will start shortly.`);
       setTimeout(() => router.push('/track'), 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

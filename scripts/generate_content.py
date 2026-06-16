@@ -132,7 +132,7 @@ def call_nvidia(prompt: str, model: str = 'meta/llama-3.1-70b-instruct') -> str:
 def call_ai(prompt: str) -> str:
     """Try OpenRouter first, fall back to NVIDIA NIM."""
     try:
-        return call_ai(prompt)
+        return call_openrouter(prompt)
     except Exception as e:
         print(f'[generate_content] OpenRouter failed ({e}), trying NVIDIA...', file=sys.stderr)
         return call_nvidia(prompt)
