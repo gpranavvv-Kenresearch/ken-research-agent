@@ -35,8 +35,9 @@ def _env():
 
 
 def _run_ts(args: list[str], timeout: int = 180) -> subprocess.CompletedProcess:
+    # Project uses tsx (not ts-node). Run with: npx tsx <script.ts> ...args
     return subprocess.run(
-        ['npx', 'ts-node'] + args,
+        ['npx', 'tsx'] + args,
         capture_output=True, text=True, cwd=REPO_ROOT, env=_env(), timeout=timeout
     )
 
@@ -168,9 +169,11 @@ def execute_blog_generation(self, blog_job_id: int):
         gen_script = os.path.join(REPO_ROOT, 'scripts', 'generate_blog.py')
         result = subprocess.run(
             ['python', gen_script,
-             '--url', job.target_url,
-             '--name', job.user.nickname,
-             '--row', str(job.sheet_row or 0),
+             '--url',       job.target_url,
+             '--title',     job.title or '',
+             '--name',      job.user.nickname,
+             '--row',       str(job.sheet_row or 0),
+             '--platforms', job.platforms or 'linkedin-pulse',
              '--output-json'],
             capture_output=True, text=True, cwd=REPO_ROOT, timeout=600
         )
