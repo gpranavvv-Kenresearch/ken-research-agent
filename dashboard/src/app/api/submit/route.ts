@@ -25,6 +25,31 @@ export async function POST(req: NextRequest) {
     };
 
     const sheetRow = await appendBlogRow(payload);
+
+    // Notify Django to generate content + queue posting immediately
+    const djangoUrl    = process.env.DJANGO_API_URL;
+    const webhookSecret = process.env.DJANGO_WEBHOOK_SECRET;
+    if (djangoUrl && webhookSecret) {
+      try {
+        await fetch(`${djangoUrl}/api/v1/sheet/webhook/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Webhook-Secret': webhookSecret,
+          },
+          body: JSON.stringify({
+            name:      user.id,
+            sheetRow,
+            title:     payload.title,
+            targetUrl: payload.targetUrl,
+            platforms: payload.platforms,
+          }),
+        });
+      } catch (err) {
+        console.error('[submit] Django webhook failed (non-fatal):', err);
+      }
+    }
+
     return NextResponse.json({ success: true, sheetRow, tab: user.blogTab });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

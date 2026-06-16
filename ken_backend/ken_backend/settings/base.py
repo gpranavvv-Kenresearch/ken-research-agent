@@ -137,10 +137,9 @@ CELERY_TASK_ROUTES = {
     'workers.tasks.mark_stale_workers':      {'queue': 'beat'},
 }
 
-# Upstash Redis requires SSL
 if CELERY_BROKER_URL.startswith('rediss://'):
-    CELERY_BROKER_USE_SSL = {'ssl_cert_reqs': 'CERT_NONE'}
-    CELERY_REDIS_BACKEND_USE_SSL = {'ssl_cert_reqs': 'CERT_NONE'}
+    CELERY_BROKER_USE_SSL = {'ssl_cert_reqs': ssl.CERT_NONE}
+    CELERY_REDIS_BACKEND_USE_SSL = {'ssl_cert_reqs': ssl.CERT_NONE}
 
 # ── Encryption key for SocialCredential.login_password ────────────────────────
 FIELD_ENCRYPTION_KEY = env('FIELD_ENCRYPTION_KEY', default='')
@@ -151,3 +150,4 @@ from workers.beat_schedule import CELERY_BEAT_SCHEDULE  # noqa: E402
 # ── Google Sheets ──────────────────────────────────────────────────────────────
 SPREADSHEET_ID = '1ZTgKCRs6Hcmi4pymYa6pZOerxX5cqT23FS1Z8c-RwJU'
 REPO_ROOT = env('REPO_ROOT', default=str(BASE_DIR.parent))
+WEBHOOK_SECRET = env('WEBHOOK_SECRET', default='')

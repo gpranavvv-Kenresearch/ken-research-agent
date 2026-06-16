@@ -288,6 +288,72 @@ def execute_blog_publish(self, blog_job_id: int, platform: str):
         os.unlink(html_path)
 
 
+# ── Generate & Post (event-driven, triggered by form submission) ───────────────
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=60, queue='social')
+def generate_and_post(self, job_id: int):
+    """
+    Full pipeline for one PostingJob:
+      1. Run generate_content.py → scrape URL + AI writes tweet/FB/LI text
+      2. Save generated text to PostingJob fields
+      3. Queue execute_social_post for each platform
+    """
+    from jobs.models import PostingJob
+
+    try:
+        job = PostingJob.objects.select_related('user').get(pk=job_id)
+    except PostingJob.DoesNotExist:
+        return
+
+    job.status = 'running'
+    job.save(update_fields=['status'])
+
+    try:
+        gen_script = os.path.join(REPO_ROOT, 'scripts', 'generate_content.py')
+        result = subprocess.run(
+            [
+                'python', gen_script,
+                '--url',         job.target_url,
+                '--title',       job.title or '',
+                '--name',        job.user.nickname,
+                '--row',         str(job.sheet_row or 0),
+                '--platforms',   job.platforms,
+                '--description', '',
+            ],
+            capture_output=True, text=True,
+            cwd=REPO_ROOT, env=_env(), timeout=300,
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr[-800:] or 'generate_content.py failed')
+
+        # Parse JSON from stdout
+        data = json.loads(result.stdout.strip().splitlines()[-1])
+
+        if data.get('x'):
+            job.x_post = data['x']
+        if data.get('facebook'):
+            job.fb_post = data['facebook']
+        if data.get('linkedin'):
+            job.li_post = data['linkedin']
+        job.status = 'queued'
+        job.save()
+
+        # Queue posting for each selected social platform
+        for platform in [p.strip() for p in job.platforms.split(',')]:
+            if platform in ('x', 'facebook', 'linkedin'):
+                execute_social_post.delay(job.id, platform)
+
+    except Exception as exc:
+        job.status = 'failed'
+        job.error_message = str(exc)[:500]
+        job.save(update_fields=['status', 'error_message'])
+        try:
+            raise self.retry(exc=exc)
+        except self.MaxRetriesExceededError:
+            pass
+
+
 # ── Batch orchestration ────────────────────────────────────────────────────────
 
 @shared_task(queue='beat')
