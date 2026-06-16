@@ -2,7 +2,7 @@ services:
   - type: web
     name: ken-backend
     runtime: python
-    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate --noinput
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate --noinput && python manage.py create_team && python manage.py load_credentials
     startCommand: gunicorn ken_backend.wsgi:application --bind 0.0.0.0:$PORT --workers 2
     envVars:
       - key: DJANGO_SETTINGS_MODULE
@@ -16,7 +16,7 @@ services:
       - key: REDIS_URL
         sync: false   # paste from Upstash dashboard
       - key: ALLOWED_HOSTS
-        value: ken-backend.onrender.com
+        value: ken-research-agent.onrender.com
       - key: REPO_ROOT
         value: /opt/render/project/src/..   # parent of ken_backend/
 
