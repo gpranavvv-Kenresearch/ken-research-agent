@@ -29,9 +29,11 @@ import requests
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _pick_key(prefix: str, count: int) -> str | None:
-    keys = [os.environ.get(f'{prefix}_{i}') for i in range(1, count + 1)]
-    keys = [k for k in keys if k and k.strip()]
+def _pick_key(prefix: str, count: int = 15) -> str | None:
+    # Support both single key (TAVILY_API_KEY) and numbered keys (TAVILY_API_KEY_1 ... _N)
+    candidates = [os.environ.get(prefix)]
+    candidates += [os.environ.get(f'{prefix}_{i}') for i in range(1, count + 1)]
+    keys = [k for k in candidates if k and k.strip()]
     return random.choice(keys) if keys else None
 
 
@@ -104,6 +106,38 @@ def call_openrouter(prompt: str, model: str = 'anthropic/claude-3.5-sonnet') -> 
     return resp.json()['choices'][0]['message']['content'].strip()
 
 
+def call_nvidia(prompt: str, model: str = 'meta/llama-3.1-70b-instruct') -> str:
+    key = _pick_key('NVIDIA_API_KEY', 4)
+    if not key:
+        raise RuntimeError('No NVIDIA_API_KEY available in environment')
+    resp = requests.post(
+        'https://integrate.api.nvidia.com/v1/chat/completions',
+        headers={
+            'Authorization': f'Bearer {key}',
+            'Content-Type': 'application/json',
+        },
+        json={
+            'model': model,
+            'messages': [{'role': 'user', 'content': prompt}],
+            'max_tokens': 1200,
+            'temperature': 0.7,
+            'stream': False,
+        },
+        timeout=60,
+    )
+    resp.raise_for_status()
+    return resp.json()['choices'][0]['message']['content'].strip()
+
+
+def call_ai(prompt: str) -> str:
+    """Try OpenRouter first, fall back to NVIDIA NIM."""
+    try:
+        return call_ai(prompt)
+    except Exception as e:
+        print(f'[generate_content] OpenRouter failed ({e}), trying NVIDIA...', file=sys.stderr)
+        return call_nvidia(prompt)
+
+
 # ── Content generators ────────────────────────────────────────────────────────
 
 def build_context(title: str, url: str, description: str, page_text: str, web_snippets: str) -> str:
@@ -132,7 +166,7 @@ Rules:
 - No em dashes
 
 Return ONLY the tweet text, nothing else."""
-    return call_openrouter(prompt)
+    return call_ai(prompt)
 
 
 def generate_facebook(context: str) -> str:
@@ -149,7 +183,7 @@ Rules:
 - Do NOT include the URL
 
 Return ONLY the post text, nothing else."""
-    return call_openrouter(prompt)
+    return call_ai(prompt)
 
 
 def generate_linkedin(context: str) -> str:
@@ -168,7 +202,7 @@ Rules:
 - Do NOT include the URL in the body
 
 Return ONLY the post text, nothing else."""
-    return call_openrouter(prompt)
+    return call_ai(prompt)
 
 
 # ── Sheet write helper ────────────────────────────────────────────────────────
