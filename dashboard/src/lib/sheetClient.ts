@@ -111,6 +111,7 @@ export async function appendBlogRow(payload: SubmitPayload): Promise<number> {
   });
 
   const match = (appendRes.data.updates?.updatedRange ?? '').match(/(\d+)$/);
+  // Return the raw sheet row — Django webhook subtracts 1 to get the data row
   return match ? parseInt(match[1]) : -1;
 }
 
@@ -130,6 +131,7 @@ export async function appendSocialRow(payload: SubmitPayload): Promise<number> {
 
   const data: Record<string, string> = {
     'targetUrl':    payload.targetUrl,
+    'Title':        payload.title,
     'title':        payload.title,
     'Name':         payload.name,
     'Platforms':    payload.socialPlatforms.join(', '),
@@ -148,5 +150,6 @@ export async function appendSocialRow(payload: SubmitPayload): Promise<number> {
   });
 
   const match = (appendRes.data.updates?.updatedRange ?? '').match(/(\d+)$/);
+  // Return the raw sheet row — Django webhook subtracts 1 to get the data row
   return match ? parseInt(match[1]) : -1;
 }

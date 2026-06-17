@@ -87,7 +87,12 @@ export default function TrackingTable({ rows, tab }: Props) {
               const name = getField(row, 'Name', 'name');
               const format = getField(row, 'Format', 'format');
               const blogContent = getField(row, 'Blog Content', 'blogContent');
-              const hasContent = !!blogContent;
+              const xPost      = getField(row, 'X Post', 'xPost');
+              const fbPost     = getField(row, 'FB Post', 'fbPost');
+              const liPost     = getField(row, 'LinkedIn Post', 'linkedinPost');
+              const hasContent = tab === 'social'
+                ? !!(xPost || fbPost || liPost)
+                : !!blogContent;
 
               return (
                 <tr

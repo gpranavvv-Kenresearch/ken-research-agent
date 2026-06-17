@@ -1,5 +1,5 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { RawRow, PlatformDef } from '@/types';
 import { getField, SOCIAL_PLATFORMS, BLOG_PLATFORMS } from '@/types';
 import PlatformBadge from './PlatformBadge';
@@ -26,16 +26,64 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PlatformSection({ title, platforms, row }: { title: string; platforms: PlatformDef[]; row: RawRow }) {
+function PlatformSection({ title, platforms, row, name, tab }: {
+  title: string; platforms: PlatformDef[]; row: RawRow; name: string; tab: 'social' | 'blog';
+}) {
+  const [posting, setPosting] = useState<string | null>(null);
+  const [msgs, setMsgs]       = useState<Record<string, string>>({});
+
+  const xPost  = getField(row, 'X Post', 'xPost');
+  const fbPost = getField(row, 'FB Post', 'fbPost');
+  const liPost = getField(row, 'LinkedIn Post', 'linkedinPost');
+  const targetUrl = getField(row, 'targetUrl', 'Target URL');
+  const rowTitle  = getField(row, 'Title', 'title', 'Blog Title');
+
+  const contentMap: Record<string, string> = { x: xPost, facebook: fbPost, linkedin: liPost };
+
+  async function handlePostNow(platformKey: string) {
+    setPosting(platformKey);
+    setMsgs((m) => ({ ...m, [platformKey]: '' }));
+    try {
+      const res = await fetch('/api/post-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name:      name.toLowerCase(),
+          sheetRow:  row._sheetRow,
+          platform:  platformKey,
+          targetUrl,
+          title:     rowTitle,
+          xPost,
+          fbPost,
+          liPost,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMsgs((m) => ({ ...m, [platformKey]: 'Queued! Worker will post shortly.' }));
+      } else {
+        setMsgs((m) => ({ ...m, [platformKey]: data.error ?? 'Failed' }));
+      }
+    } catch (e) {
+      setMsgs((m) => ({ ...m, [platformKey]: 'Network error' }));
+    } finally {
+      setPosting(null);
+    }
+  }
+
   return (
     <div>
       <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">{title}</h3>
       <div className="grid grid-cols-1 gap-2">
         {platforms.map((p) => {
-          const status = getField(row, ...p.statusCols);
-          const url = getField(row, ...p.urlCols);
-          const batch = getField(row, ...p.batchCols);
-          const error = getField(row, ...p.errorCols);
+          const status  = getField(row, ...p.statusCols).toLowerCase();
+          const url     = getField(row, ...p.urlCols);
+          const batch   = getField(row, ...p.batchCols);
+          const error   = getField(row, ...p.errorCols);
+          const isPosted = status === 'posted' || status === 'success' || status === 'done';
+          const hasContent = tab === 'social' ? !!contentMap[p.key] : false;
+          const canPost = tab === 'social' && hasContent && !isPosted;
+
           return (
             <div key={p.key} className="flex items-center justify-between bg-slate-800/60 rounded-lg px-3 py-2 gap-3">
               <div className="flex items-center gap-2 min-w-[110px]">
@@ -46,8 +94,18 @@ function PlatformSection({ title, platforms, row }: { title: string; platforms: 
               <div className="text-xs text-slate-500 flex-1 text-right truncate">
                 {batch && <span className="mr-2">{batch}</span>}
                 {error && <span className="text-red-400 truncate" title={error}>⚠ {error.slice(0, 50)}</span>}
-                {url && !error && <span className="text-green-500 truncate">↗ posted</span>}
+                {url && !error && <a href={url} target="_blank" rel="noopener noreferrer" className="text-green-500 hover:underline">↗ view post</a>}
+                {msgs[p.key] && <span className={msgs[p.key].includes('Queued') ? 'text-green-400' : 'text-red-400'}>{msgs[p.key]}</span>}
               </div>
+              {canPost && (
+                <button
+                  onClick={() => handlePostNow(p.key)}
+                  disabled={posting === p.key}
+                  className="shrink-0 text-xs px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-wait text-white font-medium transition-colors"
+                >
+                  {posting === p.key ? 'Queuing…' : 'Post Now'}
+                </button>
+              )}
             </div>
           );
         })}
@@ -138,8 +196,8 @@ export default function RowDetailModal({ row, tab, onClose }: Props) {
 
           {/* Platform statuses */}
           {tab === 'social'
-            ? <PlatformSection title="Social Platforms" platforms={SOCIAL_PLATFORMS} row={row} />
-            : <PlatformSection title="Blog Platforms" platforms={BLOG_PLATFORMS} row={row} />
+            ? <PlatformSection title="Social Platforms" platforms={SOCIAL_PLATFORMS} row={row} name={name} tab={tab} />
+            : <PlatformSection title="Blog Platforms"   platforms={BLOG_PLATFORMS}   row={row} name={name} tab={tab} />
           }
         </div>
       </div>
