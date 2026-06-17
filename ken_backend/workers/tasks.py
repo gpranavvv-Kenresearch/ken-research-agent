@@ -177,7 +177,7 @@ def execute_blog_generation(self, blog_job_id: int):
              '--row',       str(job.sheet_row or 0),
              '--platforms', job.platforms or 'linkedin-pulse',
              '--output-json'],
-            capture_output=True, text=True, cwd=REPO_ROOT, timeout=600
+            capture_output=True, text=True, cwd=REPO_ROOT, timeout=900
         )
         if result.returncode != 0:
             raise RuntimeError(result.stderr[-1000:])

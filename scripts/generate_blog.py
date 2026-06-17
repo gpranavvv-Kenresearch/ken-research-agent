@@ -529,7 +529,14 @@ def generate_blog_content(
     try:
         data = json.loads(json_match.group(0))
     except json.JSONDecodeError as e:
-        raise ValueError(f'JSON parse error: {e}. Raw: {raw[:500]}')
+        # AI sometimes emits invalid JSON escapes (e.g. \' or \_ in HTML strings).
+        # Replace lone backslashes that aren't followed by valid JSON escape chars.
+        import re as _re
+        fixed = _re.sub(r'\\([^"\\/bfnrtu])', r'\1', json_match.group(0))
+        try:
+            data = json.loads(fixed)
+        except json.JSONDecodeError:
+            raise ValueError(f'JSON parse error: {e}. Raw: {raw[:500]}')
 
     return data
 
