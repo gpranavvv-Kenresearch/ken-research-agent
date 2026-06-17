@@ -1,6 +1,10 @@
 import { Page } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwo76GWlzINViUVE-EAsLiHCFH-wXjrsk_ieMA0oRM374mTPIsj_I-_kbaIEmH6Bq6OEw/exec';
 export const ARTIFACTS_DIR = path.join(__dirname, 'artifacts');

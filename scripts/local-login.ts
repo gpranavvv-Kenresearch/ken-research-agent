@@ -17,6 +17,10 @@
  *   npx tsx scripts/local-login.ts --name aniket --platform hackmd
  *   npx tsx scripts/local-login.ts --name aniket --platform wordpress
  *   npx tsx scripts/local-login.ts --name aniket --platform blogger
+ *
+ * Cover image generation (ChatGPT DALL-E 3) — one shared session for the whole machine:
+ *   npx tsx scripts/local-login.ts --name shared --platform chatgpt
+ *   (uses a persistent Chrome profile at .sessions-cookies/chatgpt-profile/ — no expiry)
  */
 
 import { chromium } from 'playwright';
@@ -51,6 +55,8 @@ const PLATFORMS: Record<string, { url: string; label: string; filePrefix: string
   hackmd:    { url: 'https://hackmd.io/login',                   label: 'HackMD',          filePrefix: 'hackmd'    },
   wordpress: { url: 'https://wordpress.com/log-in',              label: 'WordPress',       filePrefix: 'wordpress' },
   blogger:   { url: 'https://www.blogger.com/',                  label: 'Blogger',         filePrefix: 'blogger'   },
+  // Cover image generation — uses persistent Chrome profile (better than cookies for ChatGPT)
+  chatgpt:   { url: 'https://chatgpt.com',                       label: 'ChatGPT',         filePrefix: 'chatgpt'   },
 };
 
 if (!PLATFORMS[platform]) {
@@ -68,7 +74,52 @@ async function waitForEnter(prompt: string) {
   await new Promise<void>(resolve => rl.question(prompt, () => { rl.close(); resolve(); }));
 }
 
+// ChatGPT uses a persistent Chrome profile (stores IndexedDB + auth tokens, not just cookies).
+// generate_image.ts reads from the same profile directory automatically.
+async function mainChatGPT() {
+  const profileDir = path.join(OUT_DIR, 'chatgpt-profile');
+  fs.mkdirSync(profileDir, { recursive: true });
+
+  console.log('\n  Setting up ChatGPT session for DALL-E image generation');
+  console.log(`    Profile: ${profileDir}`);
+  console.log('    This is a ONE-TIME setup. The profile persists indefinitely.\n');
+
+  const context = await chromium.launchPersistentContext(profileDir, {
+    headless: false,
+    channel: 'chrome',
+    args: ['--start-maximized', '--disable-blink-features=AutomationControlled', '--disable-infobars'],
+    viewport: null,
+    ignoreDefaultArgs: ['--enable-automation'],
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  });
+
+  const page = context.pages()[0] || await context.newPage();
+  await page.goto('https://chatgpt.com', { waitUntil: 'domcontentloaded' });
+
+  console.log('    Browser opened → chatgpt.com');
+  console.log('    Log in with your ChatGPT account (Google login is fine).');
+  console.log('    When you see the main chat interface, press Enter here.\n');
+
+  await waitForEnter('    Press Enter once you are logged in → ');
+
+  // Navigate to new chat to reset any stale state
+  await page.goto('https://chatgpt.com/new', { waitUntil: 'domcontentloaded' }).catch(() => {});
+
+  // Don't close context — persistent profile is already saved to disk
+  await context.close();
+
+  console.log('\n    ✅ ChatGPT session saved to persistent profile');
+  console.log('    generate_image.ts will now use this session automatically.\n');
+  process.exit(0);
+}
+
 async function main() {
+  // Route ChatGPT to persistent-profile flow
+  if (platform === 'chatgpt') {
+    await mainChatGPT();
+    return;
+  }
+
   const outFile = path.join(OUT_DIR, `${filePrefix}-${name}.json`);
 
   console.log(`\n  Logging into ${platformLabel} as "${name}"`);

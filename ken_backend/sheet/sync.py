@@ -1,54 +1,54 @@
 """
-Converts Google Sheet rows into Django DB records (PostingJob / BlogJob).
-Uses get_or_create to be idempotent — safe to run repeatedly.
+Converts Google Sheet rows into Django DB records.
+Dispatch happens in sync_and_generate_all (tasks.py), not here.
 """
 from jobs.models import PostingJob, BlogJob
 from .reader import read_unposted_social, read_unposted_blog
 
 
-def sync_social_for_user(user) -> dict:
+def sync_social_for_user(user) -> list:
+    """Read unposted social rows, create DB records. Return list of newly created jobs."""
     rows = read_unposted_social(user.nickname)
-    created = skipped = 0
+    new_jobs = []
     for row in rows:
-        target_url = row.get('targetUrl', '').strip()
-        sheet_row  = row.get('_sheetRow') or row.get('row')
-        if not target_url or not sheet_row:
+        url       = row.get('targetUrl', '').strip()
+        sheet_row = row.get('_dataRow') or row.get('_sheetRow') or row.get('row')
+        if not url or not sheet_row:
             continue
-        obj, is_new = PostingJob.objects.get_or_create(
+        job, is_new = PostingJob.objects.get_or_create(
             user=user,
-            target_url=target_url,
+            target_url=url,
             sheet_row=int(sheet_row),
             defaults={
-                'title':     row.get('title', ''),
+                'title':     row.get('title', row.get('Title', '')),
                 'platforms': row.get('Platforms', 'x,facebook,linkedin').strip() or 'x,facebook,linkedin',
+                'status':    'queued',
             },
         )
         if is_new:
-            created += 1
-        else:
-            skipped += 1
-    return {'created': created, 'skipped': skipped, 'total': len(rows)}
+            new_jobs.append(job)
+    return new_jobs
 
 
-def sync_blog_for_user(user) -> dict:
+def sync_blog_for_user(user) -> list:
+    """Read unposted blog rows, create DB records. Return list of newly created jobs."""
     rows = read_unposted_blog(user.nickname)
-    created = skipped = 0
+    new_jobs = []
     for row in rows:
-        target_url = row.get('targetUrl', '').strip()
-        sheet_row  = row.get('_sheetRow') or row.get('row')
-        if not target_url or not sheet_row:
+        url       = row.get('targetUrl', '').strip()
+        sheet_row = row.get('_dataRow') or row.get('_sheetRow') or row.get('row')
+        if not url or not sheet_row:
             continue
-        obj, is_new = BlogJob.objects.get_or_create(
+        job, is_new = BlogJob.objects.get_or_create(
             user=user,
-            target_url=target_url,
+            target_url=url,
             sheet_row=int(sheet_row),
             defaults={
-                'title':     row.get('title', ''),
-                'platforms': row.get('Platforms', 'linkedin_pulse,notion,medium').strip() or 'linkedin_pulse,notion,medium',
+                'title':     row.get('title', row.get('Title', '')),
+                'platforms': row.get('Platforms', 'linkedin_pulse').strip() or 'linkedin_pulse',
+                'status':    'queued',
             },
         )
         if is_new:
-            created += 1
-        else:
-            skipped += 1
-    return {'created': created, 'skipped': skipped, 'total': len(rows)}
+            new_jobs.append(job)
+    return new_jobs

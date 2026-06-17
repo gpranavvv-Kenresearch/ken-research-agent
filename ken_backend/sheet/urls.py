@@ -6,4 +6,5 @@ urlpatterns = [
     path('sync/blog/',   views.sync_blog,      name='sheet-sync-blog'),
     path('status/',      views.sheet_status,   name='sheet-status'),
     path('webhook/',     views.sheet_webhook,  name='sheet-webhook'),
+    path('post-now/',    views.post_now,       name='sheet-post-now'),
 ]

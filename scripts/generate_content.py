@@ -83,7 +83,7 @@ def tavily_search(query: str) -> str:
         return ''
 
 
-def call_openrouter(prompt: str, model: str = 'anthropic/claude-3.5-sonnet') -> str:
+def call_openrouter(prompt: str, model: str = 'openai/gpt-oss-120b:free') -> str:
     key = _pick_key('OPENROUTER_API_KEY', 15)
     if not key:
         raise RuntimeError('No OPENROUTER_API_KEY available in environment')
@@ -123,7 +123,7 @@ def call_nvidia(prompt: str, model: str = 'meta/llama-3.1-70b-instruct') -> str:
             'temperature': 0.7,
             'stream': False,
         },
-        timeout=60,
+        timeout=120,
     )
     resp.raise_for_status()
     return resp.json()['choices'][0]['message']['content'].strip()
@@ -266,27 +266,28 @@ def main():
     sheet_updates = {}
 
     if 'x' in platforms:
-        print('[generate_content] Generating X tweet', file=sys.stderr)
+        print('[generate_content] Generating X tweet...', file=sys.stderr)
         results['x'] = generate_x(context)
-        sheet_updates['X Post'] = results['x']
+        if args.row > 0:
+            write_to_sheet(args.name, args.row, {'X Post': results['x']})
+            print('[generate_content] X Post written to sheet', file=sys.stderr)
         time.sleep(1)
 
     if 'facebook' in platforms:
-        print('[generate_content] Generating Facebook post', file=sys.stderr)
+        print('[generate_content] Generating Facebook post...', file=sys.stderr)
         results['facebook'] = generate_facebook(context)
-        sheet_updates['FB Post'] = results['facebook']
+        if args.row > 0:
+            write_to_sheet(args.name, args.row, {'FB Post': results['facebook']})
+            print('[generate_content] FB Post written to sheet', file=sys.stderr)
         time.sleep(1)
 
     if 'linkedin' in platforms:
-        print('[generate_content] Generating LinkedIn post', file=sys.stderr)
+        print('[generate_content] Generating LinkedIn post...', file=sys.stderr)
         results['linkedin'] = generate_linkedin(context)
-        sheet_updates['LinkedIn Post'] = results['linkedin']
+        if args.row > 0:
+            write_to_sheet(args.name, args.row, {'LinkedIn Post': results['linkedin']})
+            print('[generate_content] LinkedIn Post written to sheet', file=sys.stderr)
         time.sleep(1)
-
-    # Write generated content back to the Social sheet
-    if args.row > 0 and sheet_updates:
-        print(f'[generate_content] Writing to sheet row {args.row}', file=sys.stderr)
-        write_to_sheet(args.name, args.row, sheet_updates)
 
     # Output results as JSON to stdout (read by Celery task)
     print(json.dumps(results))

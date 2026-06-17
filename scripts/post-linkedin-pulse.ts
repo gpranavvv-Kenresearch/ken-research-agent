@@ -19,7 +19,11 @@
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { writeResumeFile, saveArtifacts, findElement } from './base.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ── Arg parsing ───────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
@@ -44,7 +48,6 @@ if (!email || !password || !nickname || !title || !htmlFile) {
   process.exit(1);
 }
 
-// __dirname is scripts/ — sessions live in project root .sessions-cookies/
 const SESSIONS_DIR = path.join(__dirname, '..', '.sessions-cookies');
 const SESSION_FILE = path.join(SESSIONS_DIR, `li-${nickname}.json`);
 
@@ -61,7 +64,9 @@ async function main() {
   const hasSession = fs.existsSync(SESSION_FILE);
   const browser = await chromium.launch({
     headless: false,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
+    channel: 'chrome',
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled', '--disable-infobars'],
+    ignoreDefaultArgs: ['--enable-automation'],
   });
 
   const ctxOptions = {

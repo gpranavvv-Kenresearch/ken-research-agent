@@ -28,14 +28,13 @@ directly to the {Name} Blog tab via sheet_write.py.
 """
 
 import argparse
-import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
 import time
-from urllib.parse import quote, urlparse
+from urllib.parse import urlparse
 
 import requests
 
@@ -258,68 +257,63 @@ def extract_country(url: str, title: str) -> str:
 # ── Cover image generation ────────────────────────────────────────────────────
 
 def generate_cover_image(market_name: str, market_size: str = '', cagr: str = '', forecast: str = '') -> str:
-    """Generate cover image via Pollinations free API and upload to Cloudinary."""
-    print(f'[generate_blog] Generating cover image for: {market_name}', file=sys.stderr)
+    """Generate cover image via ChatGPT DALL-E 3 (Playwright) and upload to Cloudinary.
 
-    data_line = ' '.join(filter(None, [market_size, cagr, forecast]))[:100]
-    prompt = (
-        f"Premium editorial data visualization cover image for market intelligence report. "
-        f"Title: {market_name}. "
-        f"{'Data: ' + data_line + '. ' if data_line else ''}"
-        f"Style: dark gradient background deep navy blue, professional consulting grade, "
-        f"McKinsey Bloomberg intelligence visual. Left zone: large white title text, data hook line, "
-        f"sector badge. Right zone: analytical data chart with colored data points and trajectory. "
-        f"Thin blue accent strip at top. Technical blueprint wireframe overlay. "
-        f"16:9 landscape 1920x1080. No company logos, no brand names, no watermarks."
-    )
+    Calls scripts/generate_image.ts which:
+      1. Opens an existing logged-in ChatGPT browser session
+      2. Sends a detailed DALL-E 3 prompt (no Ken Research branding)
+      3. Downloads the generated image
+      4. Uploads to Cloudinary
+      5. Returns {"status":"success","cloudinaryUrl":"..."}
+    """
+    print(f'[generate_blog] Generating DALL-E 3 cover image for: {market_name}', file=sys.stderr)
+
+    repo_root = os.path.join(os.path.dirname(__file__), '..')
+    script = os.path.join(repo_root, 'scripts', 'generate_image.ts')
+
+    # On Windows, npm/npx binaries are .cmd files — use npx.cmd so subprocess finds them
+    npx = 'npx.cmd' if sys.platform == 'win32' else 'npx'
+    cmd = [
+        npx, 'tsx', script,
+        '--market-name', market_name,
+    ]
+    if market_size:
+        cmd += ['--market-size', market_size]
+    if cagr:
+        cmd += ['--cagr', cagr]
+    if forecast:
+        cmd += ['--forecast', forecast]
 
     try:
-        encoded_prompt = quote(prompt)
-        img_url = (
-            f'https://image.pollinations.ai/prompt/{encoded_prompt}'
-            f'?width=1920&height=1080&model=flux&nologo=true&seed=42'
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            timeout=360,  # 6 minutes: DALL-E generation can take up to 5 min
         )
-        img_resp = requests.get(img_url, timeout=120)
-        img_resp.raise_for_status()
-        image_data = img_resp.content
-        print(f'[generate_blog] Image fetched ({len(image_data)} bytes)', file=sys.stderr)
-    except Exception as e:
-        print(f'[generate_blog] Image generation failed: {e}', file=sys.stderr)
+        # Last stdout line is the JSON result
+        stdout_lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+        if not stdout_lines:
+            print(f'[generate_blog] generate_image.ts produced no output. stderr: {result.stderr[-500:]}', file=sys.stderr)
+            return ''
+
+        data = json.loads(stdout_lines[-1])
+        if data.get('status') == 'success':
+            url = data.get('cloudinaryUrl', '')
+            print(f'[generate_blog] Cover image ready: {url}', file=sys.stderr)
+            return url
+        else:
+            print(f'[generate_blog] Image script error: {data.get("message")}', file=sys.stderr)
+            return ''
+    except subprocess.TimeoutExpired:
+        print('[generate_blog] Image generation timed out after 6 minutes', file=sys.stderr)
         return ''
-
-    public_id = (
-        re.sub(r'[^a-z0-9-]', '-', market_name.lower())
-        .strip('-')[:55] + f'-{int(time.time())}'
-    )
-
-    try:
-        cloud_name = 'dutg2rtvr'
-        api_key = '226785248494346'
-        api_secret = '6pX9f6a_QAFQmPriZDTCTgwtj0w'
-        folder = 'microblogs'
-        timestamp = str(int(time.time()))
-
-        sign_string = f'folder={folder}&public_id={public_id}&timestamp={timestamp}{api_secret}'
-        signature = hashlib.sha1(sign_string.encode()).hexdigest()
-
-        cloud_resp = requests.post(
-            f'https://api.cloudinary.com/v1_1/{cloud_name}/image/upload',
-            data={
-                'api_key': api_key,
-                'timestamp': timestamp,
-                'signature': signature,
-                'folder': folder,
-                'public_id': public_id,
-            },
-            files={'file': ('cover.png', image_data, 'image/png')},
-            timeout=60,
-        )
-        cloud_resp.raise_for_status()
-        secure_url = cloud_resp.json().get('secure_url', '')
-        print(f'[generate_blog] Uploaded to Cloudinary: {secure_url}', file=sys.stderr)
-        return secure_url
+    except json.JSONDecodeError as e:
+        print(f'[generate_blog] Image script returned invalid JSON: {e}', file=sys.stderr)
+        return ''
     except Exception as e:
-        print(f'[generate_blog] Cloudinary upload failed: {e}', file=sys.stderr)
+        print(f'[generate_blog] generate_image.ts failed: {e}', file=sys.stderr)
         return ''
 
 
@@ -387,7 +381,11 @@ Cover Image URL: {cover_image_url or ''}
 2. ALL numbers, percentages, currency figures wrapped in <strong> tags. No bare numbers.
 3. 5 FAQs exactly (H3 tags Q1-Q5), 2-3 with interlinks.
 4. 10-12 total links across entire article.
-5. Word count: 1200-1400 words in body text.
+5. Word count: MINIMUM 1,300 words, target 1,350 words. COUNT CAREFULLY before outputting.
+   - Each main H2 section body (paragraphs + bullet list text): at least 180 words.
+   - Each FAQ answer paragraph: at least 70 words.
+   - Intro block (first 2 paragraphs): at least 100 words combined.
+   - Conclusion paragraph: at least 60 words.
 6. Character count: UNDER 14,000 characters total HTML.
 7. Every anchor: <a href='URL' {link_style}><strong>Anchor Text</strong></a>
 8. Use SINGLE QUOTES for href values.
@@ -400,6 +398,7 @@ Cover Image URL: {cover_image_url or ''}
 15. Use 2026 as current year for present conditions. Historical data OK as context.
 16. No Research Basis section. No source list at bottom.
 17. Government programme names NOT in double quotes.
+18. Use "as per Ken Research" or "as tracked by Ken Research" at least 3 times in body paragraphs.
 
 == TITLE RULES ==
 H1 Title (100-130 chars):
@@ -424,14 +423,18 @@ Blog Title (85-115 chars total):
 <p><em>This analysis is based on Ken Research market modelling, operator fleet disclosures, {{sector}} indicators, and third-party {{sector}}-sector estimates.</em></p>
 
 <h2>{{Section 1 heading WITH data figure}}</h2>
-<p>{{paragraph — exactly 1 related report interlink, 3-4 stats bolded}}</p>
+<p>{{paragraph 1 — exactly 1 related report interlink, 3-4 stats bolded, 80+ words}}</p>
+<p>{{paragraph 2 — expand on implications, 60+ words, no extra links}}</p>
 <ul>
   <li><strong style="color:#000000;">{{Label}}:</strong> {{content with stat}}</li>
+  <li>...</li>
+  <li>...</li>
   <li>...</li>
 </ul>
 
 <h2>{{Section 2 heading WITH data figure}}</h2>
-<p>{{paragraph — 1 related report interlink}}</p>
+<p>{{paragraph 1 — 1 related report interlink, 3+ stats bolded, 80+ words}}</p>
+<p>{{paragraph 2 — expand with market context, 60+ words, no extra links}}</p>
 <ul>...</ul>
 
 <div class="cta-block">
@@ -454,15 +457,15 @@ Blog Title (85-115 chars total):
 
 <h2>Frequently Asked Questions</h2>
 <h3>Q1: {{question}}</h3>
-<p>{{Answer — no interlink, min 2 stats bolded}}</p>
+<p>{{Answer — no interlink, min 2 stats bolded, 70+ words}}</p>
 <h3>Q2: {{question}}</h3>
-<p>{{Answer WITH 1 interlink}}</p>
+<p>{{Answer WITH 1 interlink, 70+ words}}</p>
 <h3>Q3: {{question}}</h3>
-<p>{{Answer WITH 1 interlink}}</p>
+<p>{{Answer WITH 1 interlink, 70+ words}}</p>
 <h3>Q4: {{question}}</h3>
-<p>{{Answer — no interlink}}</p>
+<p>{{Answer — no interlink, 70+ words}}</p>
 <h3>Q5: {{question}}</h3>
-<p>{{Answer WITH 1 interlink}}</p>
+<p>{{Answer WITH 1 interlink, 70+ words}}</p>
 
 <p>For the full competitive benchmarking, segment-level forecasts, and regional breakdown, access the <a href='{target_utm}' {link_style}><strong>{market_name} Report</strong></a> from Ken Research, a leading market intelligence firm covering {{sector}} across {{region}}.</p>
 
@@ -639,19 +642,19 @@ def rate_blog(checks: dict, html: str, blog_title: str) -> int:
     if impl_count >= 3:
         points += 1
 
-    # Check 11: Source attribution (5+ citation signals)
+    # Check 11: Source attribution (2+ citation signals)
     source_phrases = ['as per ken research', 'as per government', 'as tracked by',
                       'as recorded', 'as per operator', 'as per official',
                       'as per independent', 'according to ken']
     src_count = sum(1 for p in source_phrases if p in html.lower())
-    if src_count >= 4:
+    if src_count >= 2:
         points += 1
 
-    # Check 12: Decision-framer H2s (2+ with why/how/what or outcome verbs)
+    # Check 12: Decision-framer H2s (1+ with why/how/what/which or outcome verbs)
     h2_texts = re.findall(r'<h2>(.*?)</h2>', html, re.IGNORECASE | re.DOTALL)
     decision_h2 = sum(1 for h in h2_texts
-                      if re.search(r'\b(why|how|what|reshaping|unlocking|racing|signals|drives|marks)\b', h, re.IGNORECASE))
-    if decision_h2 >= 2:
+                      if re.search(r'\b(why|how|what|which|reshaping|unlocking|racing|signals|drives|marks|powering|emerging|leading)\b', h, re.IGNORECASE))
+    if decision_h2 >= 1:
         points += 1
 
     normalized = round(points / 13 * 10)
@@ -663,50 +666,81 @@ def rate_blog(checks: dict, html: str, blog_title: str) -> int:
 def repair_blog(html: str, blog_title: str, blog_desc: str, checks: dict, research: dict) -> str:
     """Ask AI to fix specific failed checks. Returns repaired HTML."""
     failed = []
+    word_expansion_needed = 0
+
     if not checks['no_em_dashes']:
-        failed.append('- Remove all em dashes (—) and en dashes (–). Replace with colon or comma.')
+        failed.append('- Remove ALL em dashes (—) and en dashes (–). Replace each with a comma or colon.')
     if not checks['word_count_ok']:
         wc = checks['word_count']
         if wc < 1200:
-            failed.append(f'- Word count is {wc}, below 1200. Expand body sections and FAQ answers.')
+            shortage = 1300 - wc
+            word_expansion_needed = shortage
+            # Identify which H2 sections are short
+            sections = re.findall(r'<h2>(.*?)</h2>(.*?)(?=<h2>|<div class="cta|<h2>Frequently|$)',
+                                  html, re.DOTALL | re.IGNORECASE)
+            short_sections = []
+            for heading, body in sections:
+                body_words = len(re.sub(r'<[^>]+>', ' ', body).split())
+                if body_words < 150:
+                    short_sections.append(f'  • "{heading.strip()}" section ({body_words} words, needs 180+)')
+            expansion_detail = '\n'.join(short_sections) if short_sections else '  • Expand all FAQ answers to 80+ words'
+            failed.append(
+                f'- Word count is {wc}, need at least 1,300. Must add ~{shortage} more words.\n'
+                f'  Expand these specific short sections:\n{expansion_detail}\n'
+                f'  For each short section: add one more substantive paragraph (60-80 words) after the existing paragraph.\n'
+                f'  For each FAQ answer: pad to 75+ words by adding 1-2 more sentences with context.\n'
+                f'  Use ONLY facts already in the article or from the research below — no invented data.'
+            )
         else:
-            failed.append(f'- Word count is {wc}, above 1400. Trim bullet points and FAQ answers.')
+            failed.append(f'- Word count is {wc}, above 1400. Remove some bullet points and trim FAQ answers.')
     if not checks['link_count_ok']:
         lc = checks['link_count']
         if lc < 10:
-            failed.append(f'- Only {lc} links found, need 10-12. Add related report interlinks to FAQ answers.')
+            failed.append(f'- Only {lc} links. Need 10-12. Add interlinks to short FAQ answers that have none.')
         else:
-            failed.append(f'- {lc} links found, max is 12. Remove weakest interlinks.')
+            failed.append(f'- {lc} links found, max is 12. Remove 1-2 weakest interlinks from FAQ answers.')
     if not checks['faq_count_ok']:
-        failed.append(f'- FAQ count is {checks["faq_count"]}, must be exactly 5. Adjust.')
+        failed.append(f'- FAQ count is {checks["faq_count"]}, must be exactly 5 H3 tags.')
     if not checks['no_unbolded_stats']:
-        failed.append('- Wrap all bare numbers, percentages, and currency figures in <strong> tags.')
+        failed.append('- Wrap ALL bare numbers, percentages, and currency figures in <strong> tags.')
     if not checks['char_count_ok']:
-        failed.append(f'- HTML is {checks["char_count"]} chars, must be under 14000. Trim FAQ answers and bullet points first.')
+        failed.append(f'- HTML is {checks["char_count"]} chars, must be under 14,000. Trim bullet lists first.')
 
     if not failed:
         return html
 
-    repair_prompt = f"""Repair this blog HTML by fixing ONLY these specific issues:
+    research_context = ''
+    if word_expansion_needed > 0:
+        research_context = f"""
+Additional facts you can use for expansion (do NOT invent new numbers):
+{research.get('market_data', '')[:600]}
+{research.get('key_players', '')[:300]}
+"""
+
+    repair_prompt = f"""You are repairing a blog article HTML. Fix ONLY these issues:
 
 {chr(10).join(failed)}
-
-Current HTML:
+{research_context}
+Current HTML (do NOT change sections that are already correct):
 {html}
 
-Rules:
-1. Fix ONLY the listed issues. Do not rewrite sections that are correct.
-2. Do NOT invent new statistics or data points. Use only what is in the HTML.
-3. Return ONLY the fixed HTML, starting with <img and ending with </p>. No JSON, no explanation.
+Output rules:
+- Return ONLY the repaired HTML, starting with <img and ending with the last </p>.
+- No JSON wrapper, no markdown code blocks, no explanation.
+- Keep ALL existing links, bold tags, and CTA blocks exactly as-is.
+- Only touch the sections listed above.
 """
     print('[generate_blog] Running repair pass...', file=sys.stderr)
-    repaired = call_ai(repair_prompt, max_tokens=10000)
-    # Extract just the HTML
+    repaired = call_ai(repair_prompt, max_tokens=12000)
+    # Extract HTML block
     if '<img' in repaired:
         start = repaired.find('<img')
         repaired = repaired[start:]
+    repaired = repaired.strip()
     if repaired.endswith('```'):
         repaired = repaired[:-3].strip()
+    # Apply dash sanitization to repaired output too
+    repaired = repaired.replace('—', ',').replace('–', ',')
     return repaired
 
 
@@ -818,6 +852,19 @@ def main():
     html_content = data.get('html_content', '')
     seo_description = data.get('seo_description', '')
     linkedin_caption = data.get('linkedin_caption', '')
+
+    # Post-process: strip em/en dashes from titles and descriptions before quality checks
+    # Replacing programmatically is more reliable than relying on the repair loop.
+    def _strip_dashes(text: str) -> str:
+        text = text.replace('—', ',').replace('–', ',')
+        text = re.sub(r'\s*,\s*', ', ', text)
+        return text
+
+    blog_title = _strip_dashes(blog_title)
+    h1_title = _strip_dashes(h1_title)
+    seo_description = _strip_dashes(seo_description)
+    # Replace dashes in HTML content too (within text nodes, not attributes)
+    html_content = html_content.replace('—', ',').replace('–', ',')
 
     # Combine blog description
     blog_description = f'{seo_description}, caption- {linkedin_caption}'

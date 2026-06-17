@@ -41,9 +41,13 @@ export default function SubmitForm() {
     for (const line of lines) {
       const sep = line.includes('|') ? '|' : '\t';
       const parts = line.split(sep).map((p) => p.trim());
-      const title = parts[0] ?? '';
-      const url   = parts[1] ?? '';
-      if (!title || !url) { results.push({ title: line, url: '', error: 'Bad format — use Title | URL' }); continue; }
+      if (parts.length < 2) { results.push({ title: line, url: '', error: 'Bad format — use URL | Title or Title | URL' }); continue; }
+      // Auto-detect order: whichever part starts with http is the URL
+      const urlPart   = parts.find((p) => p.startsWith('http')) ?? '';
+      const titlePart = parts.find((p) => !p.startsWith('http')) ?? '';
+      const url   = urlPart;
+      const title = titlePart;
+      if (!title || !url) { results.push({ title: line, url: '', error: 'Bad format — use URL | Title or Title | URL' }); continue; }
       try {
         const res = await fetch('/api/submit', {
           method: 'POST',
@@ -139,10 +143,10 @@ export default function SubmitForm() {
               rows={10}
               value={bulkText}
               onChange={(e) => setBulkText(e.target.value)}
-              placeholder={`India Cold Chain Logistics Market | https://www.kenresearch.com/...\nChina EV Battery Market | https://www.kenresearch.com/...\n...`}
+              placeholder={`https://www.kenresearch.com/...\tIndia Cold Chain Logistics Market\nhttps://www.kenresearch.com/...\tChina EV Battery Market\n\nOR\n\nIndia Cold Chain Logistics Market | https://www.kenresearch.com/...`}
               className="w-full bg-card border border-border rounded-lg px-4 py-3 text-white placeholder-slate-600 text-sm font-mono focus:outline-none focus:border-blue-500 resize-y"
             />
-            <p className="text-xs text-slate-500">Separate title and URL with <code className="text-slate-400">|</code> — paste up to 50 rows at once</p>
+            <p className="text-xs text-slate-500">Paste with tab or <code className="text-slate-400">|</code> separator. URL and title can be in any order — auto-detected.</p>
           </section>
 
           {/* Format */}

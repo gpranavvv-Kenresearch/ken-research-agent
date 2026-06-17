@@ -127,6 +127,7 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 CELERY_TASK_ROUTES = {
+    'workers.tasks.generate_and_post':       {'queue': 'social'},
     'workers.tasks.execute_social_post':     {'queue': 'social'},
     'workers.tasks.execute_blog_generation': {'queue': 'blog'},
     'workers.tasks.execute_blog_publish':    {'queue': 'blog'},
@@ -135,6 +136,7 @@ CELERY_TASK_ROUTES = {
     'workers.tasks.sync_sheet_social':       {'queue': 'sync'},
     'workers.tasks.sync_sheet_blog':         {'queue': 'sync'},
     'workers.tasks.mark_stale_workers':      {'queue': 'beat'},
+    'workers.tasks.sync_and_generate_all':  {'queue': 'beat'},
 }
 
 if CELERY_BROKER_URL.startswith('rediss://'):

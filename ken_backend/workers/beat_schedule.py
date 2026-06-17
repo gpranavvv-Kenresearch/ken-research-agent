@@ -57,9 +57,14 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(hour=11, minute=45),
         'args': ('B8',),
     },
+    # ── Sheet sync + content generation (every 5 min) ────────────────────────
+    'sync-and-generate': {
+        'task': 'workers.tasks.sync_and_generate_all',
+        'schedule': 300.0,
+    },
     # ── Maintenance ──────────────────────────────────────────────────────────
     'mark-stale-workers': {
         'task': 'workers.tasks.mark_stale_workers',
-        'schedule': 300.0,  # every 5 minutes
+        'schedule': 300.0,
     },
 }

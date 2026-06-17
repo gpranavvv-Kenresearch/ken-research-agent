@@ -5,6 +5,7 @@ Each task drives existing TypeScript / Python scripts via subprocess.
 import json
 import os
 import subprocess
+import sys
 from datetime import datetime, timezone as tz
 
 from celery import shared_task
@@ -35,9 +36,10 @@ def _env():
 
 
 def _run_ts(args: list[str], timeout: int = 180) -> subprocess.CompletedProcess:
-    # Project uses tsx (not ts-node). Run with: npx tsx <script.ts> ...args
+    # On Windows npx is npx.cmd
+    npx = 'npx.cmd' if os.name == 'nt' else 'npx'
     return subprocess.run(
-        ['npx', 'tsx'] + args,
+        [npx, 'tsx'] + args,
         capture_output=True, text=True, cwd=REPO_ROOT, env=_env(), timeout=timeout
     )
 
@@ -355,6 +357,109 @@ def generate_and_post(self, job_id: int):
             raise self.retry(exc=exc)
         except self.MaxRetriesExceededError:
             pass
+
+
+# ── Auto sync + generate all (runs every 5 min via Beat) ──────────────────────
+
+ACTIVE_MEMBERS = [
+    'aniket', 'krishi', 'hritika', 'meenakshi', 'sameeksha',
+    'vijay', 'shivani', 'vishal', 'sanya', 'kamakshi', 'avdhesh', 'pranav',
+]
+
+@shared_task(queue='beat', soft_time_limit=3600, time_limit=3600)
+def sync_and_generate_all():
+    """
+    Runs every 5 minutes. Processes everything sequentially:
+      Tab by tab → row by row → platform by platform → write after each.
+
+    Flow per tab:
+      Social rows: row1 → X (write) → FB (write) → LI (write) → row2 → ...
+      Blog rows:   row1 → generate blog (write) → row2 → ...
+    """
+    from accounts.models import User
+    from sheet.reader import read_unposted_social, read_unposted_blog
+    from jobs.models import PostingJob, BlogJob
+
+    print('[sync] === Starting sequential sync ===', flush=True)
+
+    for nickname in ACTIVE_MEMBERS:
+        try:
+            user = User.objects.get(nickname=nickname)
+        except Exception:
+            continue
+
+        # ── Social rows ───────────────────────────────────────────────────────
+        try:
+            social_rows = read_unposted_social(nickname)
+        except Exception as e:
+            print(f'[sync] [{nickname}] Social read error: {e}', flush=True)
+            social_rows = []
+
+        for row in social_rows:
+            url       = row.get('targetUrl', '').strip()
+            sheet_row = row.get('_dataRow') or row.get('_sheetRow') or row.get('row')
+            title     = row.get('title') or row.get('Title', '')
+            platforms = row.get('Platforms', 'x,facebook,linkedin').strip() or 'x,facebook,linkedin'
+
+            if not url or not sheet_row:
+                continue
+
+            # Skip if already seen
+            job, is_new = PostingJob.objects.get_or_create(
+                user=user, target_url=url, sheet_row=int(sheet_row),
+                defaults={'title': title, 'platforms': platforms, 'status': 'running'},
+            )
+            if not is_new:
+                continue
+
+            print(f'[sync] [{nickname}] Social row {sheet_row}: {url[:60]}', flush=True)
+
+            # Generate & write platform by platform
+            plat_list = [p.strip().lower() for p in platforms.split(',') if p.strip()]
+            proc = subprocess.run(
+                [sys.executable,
+                 os.path.join(REPO_ROOT, 'scripts', 'generate_content.py'),
+                 '--url', url, '--title', title,
+                 '--name', nickname, '--row', str(sheet_row),
+                 '--platforms', ','.join(plat_list)],
+                capture_output=True, text=True, cwd=REPO_ROOT, timeout=300,
+            )
+            if proc.returncode == 0:
+                job.status = 'done'
+                print(f'[sync] [{nickname}] Social row {sheet_row}: content written to sheet ✓', flush=True)
+            else:
+                job.status = 'failed'
+                job.error_message = proc.stderr[-500:]
+                print(f'[sync] [{nickname}] Social row {sheet_row}: FAILED — {proc.stderr[-200:]}', flush=True)
+            job.save(update_fields=['status', 'error_message'])
+
+        # ── Blog rows ─────────────────────────────────────────────────────────
+        try:
+            blog_rows = read_unposted_blog(nickname)
+        except Exception as e:
+            print(f'[sync] [{nickname}] Blog read error: {e}', flush=True)
+            blog_rows = []
+
+        for row in blog_rows:
+            url       = row.get('targetUrl', '').strip()
+            sheet_row = row.get('_dataRow') or row.get('_sheetRow') or row.get('row')
+            title     = row.get('title') or row.get('Title', '')
+            platforms = row.get('Platforms', 'linkedin_pulse').strip() or 'linkedin_pulse'
+
+            if not url or not sheet_row:
+                continue
+
+            job, is_new = BlogJob.objects.get_or_create(
+                user=user, target_url=url, sheet_row=int(sheet_row),
+                defaults={'title': title, 'platforms': platforms, 'status': 'running'},
+            )
+            if not is_new:
+                continue
+
+            print(f'[sync] [{nickname}] Blog row {sheet_row}: {url[:60]}', flush=True)
+            execute_blog_generation.delay(job.id)
+
+    print('[sync] === Sync complete ===', flush=True)
 
 
 # ── Batch orchestration ────────────────────────────────────────────────────────

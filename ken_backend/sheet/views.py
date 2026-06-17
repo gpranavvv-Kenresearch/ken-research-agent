@@ -31,7 +31,10 @@ def sheet_webhook(request):
     data      = request.data
     job_type  = (data.get('type') or '').lower().strip()   # 'social' | 'blog' | '' (legacy)
     name      = (data.get('name') or '').lower().strip()
-    sheet_row = data.get('sheetRow')
+    # Vercel sends the actual sheet row (header=1, first data row=2).
+    # sheet_write.py expects data row (1-based, no header), so subtract 1.
+    raw_row   = data.get('sheetRow')
+    sheet_row = (int(raw_row) - 1) if raw_row is not None else None
     title     = data.get('title', '')
     url       = data.get('targetUrl', '')
 
@@ -117,6 +120,54 @@ def sync_blog(request):
         return Response(result)
     except Exception as exc:
         return Response({'error': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def post_now(request):
+    """
+    Triggered by Vercel "Post Now" button.
+    Queues execute_social_post for a specific platform on a specific row.
+    Expects: { name, sheetRow, platform, targetUrl, title, xPost, fbPost, liPost }
+    """
+    secret = request.headers.get('X-Webhook-Secret', '')
+    expected = getattr(settings, 'WEBHOOK_SECRET', '')
+    if expected and secret != expected:
+        return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    data      = request.data
+    name      = (data.get('name') or '').lower().strip()
+    raw_row   = data.get('sheetRow')
+    sheet_row = (int(raw_row) - 1) if raw_row is not None else None
+    platform  = (data.get('platform') or '').lower().strip()
+    url       = data.get('targetUrl', '')
+    title     = data.get('title', '')
+    x_post    = data.get('xPost', '')
+    fb_post   = data.get('fbPost', '')
+    li_post   = data.get('liPost', '')
+
+    if not name or not platform or not url or sheet_row is None:
+        return Response({'error': 'name, platform, targetUrl, sheetRow required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(nickname=name)
+    except User.DoesNotExist:
+        return Response({'error': f'User "{name}" not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    from jobs.models import PostingJob
+    from workers.tasks import execute_social_post
+
+    job, _ = PostingJob.objects.get_or_create(
+        user=user, target_url=url, sheet_row=sheet_row,
+        defaults={'title': title, 'platforms': platform, 'status': 'queued'},
+    )
+    if x_post:  job.x_post  = x_post
+    if fb_post: job.fb_post = fb_post
+    if li_post: job.li_post = li_post
+    job.save()
+
+    execute_social_post.delay(job.id, platform)
+    return Response({'queued': True, 'job_id': job.id, 'platform': platform})
 
 
 @api_view(['GET'])

@@ -1,0 +1,7 @@
+.sessions-cookies
+ken_backend
+scripts
+data
+node_modules
+*.pma
+*.log

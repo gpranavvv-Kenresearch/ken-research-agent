@@ -20,8 +20,18 @@ def _run_script(args: list[str]) -> list[dict]:
         capture_output=True, text=True, cwd=REPO_ROOT, timeout=60
     )
     if result.returncode != 0:
-        raise RuntimeError(f"sheet_read.py failed: {result.stderr.strip()}")
-    return json.loads(result.stdout)
+        err = result.stderr.strip()
+        # Tab doesn't exist yet — treat as empty, not an error
+        if 'Unable to parse range' in err or 'not found' in err.lower() or 'Worksheet' in err:
+            return []
+        raise RuntimeError(f"sheet_read.py failed: {err}")
+    data = json.loads(result.stdout)
+    # sheet_read.py returns {"ok": true, "rows": [...]} — extract the rows list
+    if isinstance(data, dict):
+        if not data.get('ok'):
+            raise RuntimeError(data.get('error', 'sheet_read.py returned ok=false'))
+        return data.get('rows', [])
+    return data  # already a list
 
 
 def read_unposted_social(name: str) -> list[dict]:

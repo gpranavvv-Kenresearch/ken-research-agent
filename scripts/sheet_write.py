@@ -45,7 +45,10 @@ except ImportError:
     sys.exit(1)
 
 SPREADSHEET_ID = "1ZTgKCRs6Hcmi4pymYa6pZOerxX5cqT23FS1Z8c-RwJU"
-SERVICE_ACCOUNT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "service_account.json")
+SERVICE_ACCOUNT_FILE = (
+    os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".accounts", "google-service-account.json")
+)
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # Tab names are "{Name} Social" or "{Name} Blog" — built dynamically from --name argument.
@@ -303,7 +306,7 @@ def main():
         print(json.dumps({"ok": False, "error": "Provide --updates or --updates-file"}))
         sys.exit(1)
 
-    sheet_name = SHEET_MAP[args.sheet]
+    sheet_name = resolve_tab(args.sheet, args.name)
 
     try:
         result = write_updates(sheet_name, args.row, updates)
