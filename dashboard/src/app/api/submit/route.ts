@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { appendBlogRow, appendSocialRow } from '@/lib/sheetClient';
+
+export const dynamic = 'force-dynamic';
 import type { SubmitPayload } from '@/lib/sheetClient';
 import { getUser } from '@/lib/userConfig';
 

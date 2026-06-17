@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fetchRows } from '@/lib/sheetClient';
 import { getUser } from '@/lib/userConfig';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   const tab  = (req.nextUrl.searchParams.get('tab') ?? 'blog') as 'social' | 'blog';
   const userId = req.nextUrl.searchParams.get('user') ?? '';
