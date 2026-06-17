@@ -404,13 +404,17 @@ def sync_and_generate_all():
             if not url or not sheet_row:
                 continue
 
-            # Skip if already seen
             job, is_new = PostingJob.objects.get_or_create(
                 user=user, target_url=url, sheet_row=int(sheet_row),
                 defaults={'title': title, 'platforms': platforms, 'status': 'running'},
             )
             if not is_new:
-                continue
+                # Re-queue only if previously failed or went stale
+                if job.status not in ('failed', 'running'):
+                    continue
+                job.status = 'running'
+                job.error_message = ''
+                job.save(update_fields=['status', 'error_message'])
 
             print(f'[sync] [{nickname}] Social row {sheet_row}: {url[:60]}', flush=True)
 
@@ -454,7 +458,12 @@ def sync_and_generate_all():
                 defaults={'title': title, 'platforms': platforms, 'status': 'running'},
             )
             if not is_new:
-                continue
+                # Re-queue if previously failed or went stale (running but no worker picked it up)
+                if job.status not in ('failed', 'running'):
+                    continue
+                job.status = 'running'
+                job.error_message = ''
+                job.save(update_fields=['status', 'error_message'])
 
             print(f'[sync] [{nickname}] Blog row {sheet_row}: {url[:60]}', flush=True)
             execute_blog_generation.delay(job.id)
