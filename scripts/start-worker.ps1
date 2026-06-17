@@ -1,7 +1,9 @@
 <#
 .SYNOPSIS
-  Start the local Celery worker for your machine.
-  Run this in the background - keep this window open while posting.
+  Start the local Celery workers for this team member.
+  Launches TWO workers:
+    - Social worker  → listens on social.{name}  (X, Facebook, LinkedIn posting)
+    - Blog worker    → listens on blog.{name}     (blog generation + publishing)
 
 .USAGE
   cd "full team agent"
@@ -11,17 +13,16 @@
   .\scripts\start-worker.ps1 -Name aniket
 
 .NOTES
-  - Worker polls Upstash Redis for jobs dispatched by the Django backend.
-  - One task at a time (-c 1) to avoid overlapping Playwright windows.
-  - Keep this window open. Close it to stop the worker.
-  - Run setup-sessions.ps1 first if you haven't already.
+  - Each worker runs with -c 1 so only one browser window opens at a time.
+  - Keep this window OPEN. Close it to stop both workers.
+  - Beat scheduler (on Render) dispatches tasks to the right per-person queue.
 #>
 
 param(
     [string]$Name = ""
 )
 
-# Load .env from ken_backend/
+# ── Load .env ──────────────────────────────────────────────────────────────────
 $envFile = "ken_backend\.env"
 if (Test-Path $envFile) {
     Get-Content $envFile | ForEach-Object {
@@ -35,79 +36,45 @@ if (Test-Path $envFile) {
     }
     Write-Host "  Loaded .env from $envFile" -ForegroundColor Gray
 } else {
-    Write-Host "  WARNING: ken_backend\.env not found - worker may fail without REDIS_URL / DATABASE_URL" -ForegroundColor Yellow
+    Write-Host "  WARNING: ken_backend\.env not found" -ForegroundColor Yellow
 }
 
-# Resolve nickname
-$EXCLUDED = @("shrey", "vansh", "abhinav")
-
-if (-not $Name) {
-    $Name = $env:WORKER_NAME
-}
+# ── Resolve nickname ───────────────────────────────────────────────────────────
+if (-not $Name) { $Name = $env:WORKER_NAME }
 if (-not $Name) {
     Write-Host ""
-    Write-Host "  ERROR: WORKER_NAME not set in ken_backend\.env" -ForegroundColor Red
-    Write-Host "  Add this line to ken_backend\.env: WORKER_NAME=yourname" -ForegroundColor Yellow
+    Write-Host "  ERROR: WORKER_NAME not set. Add WORKER_NAME=yourname to ken_backend\.env" -ForegroundColor Red
     exit 1
 }
-
 $Name = $Name.ToLower()
-
-if ($EXCLUDED -contains $Name) {
-    Write-Host ""
-    Write-Host "  $Name is in the excluded list. No local worker needed." -ForegroundColor Yellow
-    exit 0
-}
-
 $env:WORKER_NAME = $Name
 
-# Check sessions for all active team members (this machine handles everyone)
-$ACTIVE_MEMBERS = @("aniket","krishi","hritika","meenakshi","sameeksha","vijay","shivani","vishal","sanya","kamakshi","avdhesh","pranav")
-$missingSessions = @()
-foreach ($member in $ACTIVE_MEMBERS) {
-    foreach ($platform in @("x", "fb", "li")) {
-        $f = ".sessions-cookies\$platform-$member.json"
-        if (-not (Test-Path $f)) {
-            $missingSessions += $f
-        }
-    }
-}
-
-if ($missingSessions.Count -gt 0) {
-    Write-Host ""
-    Write-Host "  WARNING: $($missingSessions.Count) session files missing:" -ForegroundColor Yellow
-    $missingSessions | ForEach-Object { Write-Host "    - $_" -ForegroundColor Yellow }
-    Write-Host "  Run .\scripts\setup-sessions.ps1 to create them." -ForegroundColor Yellow
-    Write-Host "  (Worker will still start - missing sessions will cause per-job failures)" -ForegroundColor Gray
-    Write-Host ""
-}
-
-# Set environment
+# ── Environment ────────────────────────────────────────────────────────────────
 $env:DJANGO_SETTINGS_MODULE = "ken_backend.settings.local"
 $env:PYTHONPATH = (Join-Path (Get-Location).Path "ken_backend")
 
+$socialQueue = "social.$Name"
+$blogQueue   = "blog.$Name"
+
 Write-Host ""
 Write-Host "  ============================================================" -ForegroundColor Green
-Write-Host "   Starting Celery Worker: $($Name.ToUpper())" -ForegroundColor Green
+Write-Host "   Workers for: $($Name.ToUpper())" -ForegroundColor Green
 Write-Host "  ============================================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Queues: social, blog, celery" -ForegroundColor Cyan
-Write-Host "  Concurrency: 1 (one Playwright window at a time)" -ForegroundColor Cyan
-Write-Host "  WORKER_NAME: $Name" -ForegroundColor Cyan
+Write-Host "  Social worker  → queue: $socialQueue" -ForegroundColor Cyan
+Write-Host "  Blog worker    → queue: $blogQueue" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  Keep this window OPEN. Close it to stop posting." -ForegroundColor Yellow
+Write-Host "  Keep this window OPEN. Close it to stop both workers." -ForegroundColor Yellow
 Write-Host ""
 
-# Run Celery worker (must run from ken_backend/ where manage.py lives)
 Set-Location (Join-Path (Get-Location).Path "ken_backend")
 
-# Kill any orphan Beat processes from previous sessions
-Write-Host "  Killing any leftover Celery Beat processes..." -ForegroundColor Gray
+# ── Kill orphan workers + flush queues ────────────────────────────────────────
+Write-Host "  Killing any leftover Celery processes..." -ForegroundColor Gray
 Get-Process -Name "celery" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
 
-# Flush ALL Redis queues on startup so no stale tasks from previous sessions survive
-Write-Host "  Flushing Redis queues (all queues: social, blog, beat, sync, celery)..." -ForegroundColor Gray
+Write-Host "  Flushing this person's queues in Redis..." -ForegroundColor Gray
 python -c "
 import os, sys
 sys.path.insert(0, '.')
@@ -116,28 +83,40 @@ import django; django.setup()
 from django.conf import settings
 import redis
 r = redis.from_url(settings.CELERY_BROKER_URL, ssl_cert_reqs=None)
-r.flushall()
-print('  All Redis queues cleared.')
+name = os.environ.get('WORKER_NAME', '')
+for q in [f'social.{name}', f'blog.{name}']:
+    deleted = r.delete(q)
+    print(f'  Cleared queue: {q} ({deleted} keys)')
 "
-Write-Host "  Starting worker..." -ForegroundColor Gray
 Write-Host ""
 
-# Start Celery Beat in a background window (Windows does not support -B embedded mode)
-Write-Host "  Starting Celery Beat scheduler in background..." -ForegroundColor Gray
-$beatJob = Start-Process -FilePath "celery" `
-    -ArgumentList "-A ken_backend beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler" `
-    -PassThru -WindowStyle Minimized
-Write-Host "  Beat PID: $($beatJob.Id)" -ForegroundColor Gray
+# ── Start Beat (background, only if not already running on Render) ─────────────
+# Uncomment this block if you are NOT using Render for Beat:
+# Write-Host "  Starting Celery Beat in background..." -ForegroundColor Gray
+# $beatJob = Start-Process -FilePath "celery" `
+#     -ArgumentList "-A ken_backend beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler" `
+#     -PassThru -WindowStyle Minimized
+# Write-Host "  Beat PID: $($beatJob.Id)" -ForegroundColor Gray
+
+# ── Start Social worker in background window ───────────────────────────────────
+Write-Host "  Starting social worker ($socialQueue)..." -ForegroundColor Gray
+$socialJob = Start-Process -FilePath "celery" `
+    -ArgumentList "-A ken_backend worker -Q $socialQueue -c 1 --loglevel=info --pool=solo -n `"social-$Name@%h`"" `
+    -PassThru -WindowStyle Normal
+Write-Host "  Social worker PID: $($socialJob.Id)" -ForegroundColor Gray
+
+Start-Sleep -Seconds 3
+
+# ── Start Blog worker in foreground (this window) ─────────────────────────────
+Write-Host "  Starting blog worker ($blogQueue) in this window..." -ForegroundColor Gray
 Write-Host ""
 
-# Start worker in foreground (keeps this window alive)
-# Queues: social + blog (posting) + beat (scheduler + sync)
 try {
-    celery -A ken_backend worker -Q social,blog,celery,beat,sync -c 1 --loglevel=info --pool=solo -n "worker-$Name@%h"
+    celery -A ken_backend worker -Q $blogQueue -c 1 --loglevel=info --pool=solo -n "blog-$Name@%h"
 } finally {
-    # When worker stops, also stop Beat
-    if (-not $beatJob.HasExited) {
-        Stop-Process -Id $beatJob.Id -Force
-        Write-Host "  Beat stopped." -ForegroundColor Gray
+    # When blog worker stops (Ctrl+C), also stop social worker
+    if (-not $socialJob.HasExited) {
+        Stop-Process -Id $socialJob.Id -Force -ErrorAction SilentlyContinue
+        Write-Host "  Social worker stopped." -ForegroundColor Gray
     }
 }

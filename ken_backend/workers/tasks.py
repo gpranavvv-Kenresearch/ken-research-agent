@@ -88,6 +88,32 @@ def _run_ts(args: list[str], timeout: int = 180) -> subprocess.CompletedProcess:
     )
 
 
+# ── Per-person queue dispatchers ──────────────────────────────────────────────
+# social.{nickname} → that person's social posting worker
+# blog.{nickname}   → that person's blog worker (generation + publishing)
+
+def dispatch_social_post(job, platform: str):
+    """Queue a social posting task to the person's dedicated social worker."""
+    execute_social_post.apply_async(
+        args=[job.id, platform],
+        queue=f'social.{job.user.nickname}',
+    )
+
+def dispatch_blog_generation(job):
+    """Queue a blog generation task to the person's dedicated blog worker."""
+    execute_blog_generation.apply_async(
+        args=[job.id],
+        queue=f'blog.{job.user.nickname}',
+    )
+
+def dispatch_blog_publish(job, platform: str):
+    """Queue a blog publish task to the person's dedicated blog worker."""
+    execute_blog_publish.apply_async(
+        args=[job.id, platform],
+        queue=f'blog.{job.user.nickname}',
+    )
+
+
 # ── Social posting ─────────────────────────────────────────────────────────────
 
 @shared_task(bind=True, max_retries=2, default_retry_delay=60, queue='social')
@@ -241,7 +267,7 @@ def execute_blog_generation(self, blog_job_id: int):
         for platform in job.platforms.split(','):
             platform = _normalize_blog_platform(platform)
             if platform:
-                execute_blog_publish.delay(blog_job_id, platform)
+                dispatch_blog_publish(job, platform)
 
     except Exception as exc:
         job.status        = 'failed'
@@ -434,7 +460,7 @@ def generate_and_post(self, job_id: int):
         # Queue posting for each selected social platform
         for platform in [p.strip() for p in job.platforms.split(',')]:
             if platform in ('x', 'facebook', 'linkedin'):
-                execute_social_post.delay(job.id, platform)
+                dispatch_social_post(job, platform)
 
     except Exception as exc:
         job.status = 'failed'
@@ -553,7 +579,7 @@ def sync_and_generate_all():
                 job.save(update_fields=['status', 'error_message'])
 
             print(f'[sync] [{nickname}] Blog row {sheet_row}: {url[:60]}', flush=True)
-            execute_blog_generation.delay(job.id)
+            dispatch_blog_generation(job)
 
     print('[sync] === Sync complete ===', flush=True)
 
@@ -594,7 +620,7 @@ def run_scheduled_batch(batch_label: str, batch_id: int = None):
             for platform in job.platforms.split(','):
                 platform = platform.strip()
                 if platform in ('x', 'facebook', 'linkedin'):
-                    execute_social_post.delay(job.id, platform)
+                    dispatch_social_post(job, platform)
                     total += 1
 
     batch.status   = 'done'

@@ -155,7 +155,7 @@ def post_now(request):
         return Response({'error': f'User "{name}" not found'}, status=status.HTTP_404_NOT_FOUND)
 
     from jobs.models import PostingJob
-    from workers.tasks import execute_social_post
+    from workers.tasks import dispatch_social_post
 
     job, _ = PostingJob.objects.get_or_create(
         user=user, target_url=url, sheet_row=sheet_row,
@@ -166,8 +166,8 @@ def post_now(request):
     if li_post: job.li_post = li_post
     job.save()
 
-    execute_social_post.delay(job.id, platform)
-    return Response({'queued': True, 'job_id': job.id, 'platform': platform})
+    dispatch_social_post(job, platform)
+    return Response({'queued': True, 'job_id': job.id, 'platform': platform, 'queue': f'social.{user.nickname}'})
 
 
 @api_view(['GET'])
