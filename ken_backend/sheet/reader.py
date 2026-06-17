@@ -15,9 +15,10 @@ SHEET_SCRIPT = os.path.join(REPO_ROOT, 'scripts', 'sheet_read.py')
 
 
 def _run_script(args: list[str]) -> list[dict]:
+    env = {**os.environ, 'PYTHONIOENCODING': 'utf-8', 'PYTHONUTF8': '1'}
     result = subprocess.run(
         ['python', SHEET_SCRIPT] + args,
-        capture_output=True, text=True, cwd=REPO_ROOT, timeout=60
+        capture_output=True, text=True, encoding='utf-8', cwd=REPO_ROOT, timeout=60, env=env
     )
     if result.returncode != 0:
         err = result.stderr.strip()
