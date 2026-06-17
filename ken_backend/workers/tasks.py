@@ -30,6 +30,50 @@ PLATFORM_FLAG = {
     'linkedin_pulse': '--html-file',
 }
 
+# Normalize platform names from sheet (any capitalisation/format) → internal slug
+_PLATFORM_ALIASES = {
+    'linkedinpulse':  'linkedin_pulse',
+    'linkedin_pulse': 'linkedin_pulse',
+    'linkedin pulse': 'linkedin_pulse',
+    'medium':         'medium',
+    'devto':          'devto',
+    'dev.to':         'devto',
+    'substack':       'substack',
+    'hackmd':         'hackmd',
+    'wordpress':      'wordpress',
+    'blogger':        'blogger',
+    'notion':         'notion',
+    'googlesite':     'googlesite',
+    'google site':    'googlesite',
+    'note':           'note',
+    'paragraph':      'paragraph',
+    'patreon':        'patreon',
+    'calisthenics':   'calisthenics',
+    'linkmate':       'linkmate',
+}
+
+def _normalize_blog_platform(raw: str) -> str:
+    return _PLATFORM_ALIASES.get(raw.lower().strip(), raw.lower().strip())
+
+# Mapping from platform slug → sheet column prefix
+# e.g. 'linkedin_pulse' → columns: "LinkedIn Pulse URL", "LinkedIn Pulse Status", "LinkedIn Pulse Batch", "LinkedIn Pulse Error"
+BLOG_PLATFORM_COLUMNS = {
+    'linkedin_pulse': {'url': 'LinkedIn Pulse URL',   'status': 'LinkedIn Pulse Status',   'batch': 'LinkedIn Pulse Batch',   'error': 'LinkedIn Pulse Error'},
+    'medium':         {'url': 'Medium Post URL',       'status': 'Medium Status',            'batch': 'Medium Batch',           'error': 'Medium Error'},
+    'devto':          {'url': 'Dev.to Post URL',       'status': 'Dev.to Status',            'batch': 'Dev.to Batch',           'error': 'Dev.to Error'},
+    'substack':       {'url': 'Substack Post URL',     'status': 'Substack Status',          'batch': 'Substack Batch',         'error': 'Substack Error'},
+    'hackmd':         {'url': 'HackMD Post URL',       'status': 'HackMD Status',            'batch': 'HackMD Batch',           'error': 'HackMD Error'},
+    'wordpress':      {'url': 'WordPress Post URL',    'status': 'WordPress Status',         'batch': 'WordPress Batch',        'error': 'WordPress Error'},
+    'blogger':        {'url': 'Blogger Post URL',      'status': 'Blogger Status',           'batch': 'Blogger Batch',          'error': 'Blogger Error'},
+    'notion':         {'url': 'Notion Post URL',       'status': 'Notion Status',            'batch': 'Notion Batch',           'error': 'Notion Error'},
+    'googlesite':     {'url': 'Google Site Post URL',  'status': 'Google Site Status',       'batch': 'Google Site Batch',      'error': 'Google Site Error'},
+    'note':           {'url': 'Note Post URL',         'status': 'Note Status',              'batch': 'Note Batch',             'error': 'Note Error'},
+    'paragraph':      {'url': 'Paragraph Post URL',    'status': 'Paragraph Status',         'batch': 'Paragraph Batch',        'error': 'Paragraph Error'},
+    'patreon':        {'url': 'Patreon Post URL',      'status': 'Patreon Status',           'batch': 'Patreon Batch',          'error': 'Patreon Error'},
+    'calisthenics':   {'url': 'Calisthenics Post URL', 'status': 'Calisthenics Status',      'batch': 'Calisthenics Batch',     'error': 'Calisthenics Error'},
+    'linkmate':       {'url': 'Linkmate Post URL',     'status': 'Linkmate Status',          'batch': 'Linkmate Batch',         'error': 'Linkmate Error'},
+}
+
 
 def _env():
     return {**os.environ, 'NODE_PATH': os.path.join(REPO_ROOT, 'node_modules')}
@@ -193,9 +237,9 @@ def execute_blog_generation(self, blog_job_id: int):
         job.status           = 'done'
         job.save()
 
-        # Queue publishing for each platform
+        # Queue publishing for each platform (normalize names first)
         for platform in job.platforms.split(','):
-            platform = platform.strip()
+            platform = _normalize_blog_platform(platform)
             if platform:
                 execute_blog_publish.delay(blog_job_id, platform)
 
@@ -213,6 +257,10 @@ def execute_blog_generation(self, blog_job_id: int):
 def execute_blog_publish(self, blog_job_id: int, platform: str):
     from jobs.models import BlogJob, BlogResult
     from credentials.models import SocialCredential
+    import subprocess as _sp
+
+    platform = _normalize_blog_platform(platform)
+    cols     = BLOG_PLATFORM_COLUMNS.get(platform)
 
     try:
         job  = BlogJob.objects.select_related('user').get(pk=blog_job_id)
@@ -221,15 +269,31 @@ def execute_blog_publish(self, blog_job_id: int, platform: str):
         return
 
     result, _ = BlogResult.objects.get_or_create(blog_job=job, platform=platform)
+
+    # Platform not yet implemented — mark skipped in sheet and exit cleanly
+    if platform not in PLATFORM_SCRIPT:
+        result.status        = 'skipped'
+        result.error_message = f'No posting script for {platform} yet'
+        result.save(update_fields=['status', 'error_message'])
+        if cols and job.sheet_row:
+            _write_blog_sheet(user.nickname, job.sheet_row, {
+                cols['status']: 'skipped',
+                cols['error']:  f'Not implemented yet',
+            })
+        return
+
     result.status = 'running'
     result.save(update_fields=['status'])
 
     try:
         cred = SocialCredential.objects.get(user=user, platform=platform, is_active=True)
     except SocialCredential.DoesNotExist:
+        msg = f'No active credential for {platform}'
         result.status        = 'failed'
-        result.error_message = f'No active credential for {platform}'
+        result.error_message = msg
         result.save(update_fields=['status', 'error_message'])
+        if cols and job.sheet_row:
+            _write_blog_sheet(user.nickname, job.sheet_row, {cols['status']: 'error', cols['error']: msg})
         return
 
     import tempfile
@@ -243,27 +307,27 @@ def execute_blog_publish(self, blog_job_id: int, platform: str):
         if platform == 'linkedin_pulse':
             proc = _run_ts([
                 'scripts/post-linkedin-pulse.ts',
-                '--email',    cred.login_email,
-                '--password', cred.login_password,
-                '--nickname', user.nickname,
-                '--title',    job.blog_title,
+                '--email',     cred.login_email,
+                '--password',  cred.login_password,
+                '--nickname',  user.nickname,
+                '--title',     job.blog_title,
                 '--html-file', html_path,
-                '--caption',  job.blog_description[:500],
-                '--seo-title', job.blog_seo_title,
-                '--seo-desc',  job.blog_seo_desc,
-                '--row',      str(job.sheet_row or 0),
-                '--batch',    job.batch_label or '',
+                '--caption',   job.blog_description[:500],
+                '--seo-title', getattr(job, 'blog_seo_title', ''),
+                '--seo-desc',  getattr(job, 'blog_seo_desc', ''),
+                '--row',       str(job.sheet_row or 0),
+                '--batch',     job.batch_label or '',
             ], timeout=300)
         elif platform == 'notion':
             proc = _run_ts([
                 'scripts/post-notion.ts',
-                '--email',    cred.login_email,
-                '--password', cred.login_password,
-                '--nickname', user.nickname,
-                '--title',    job.blog_title,
+                '--email',     cred.login_email,
+                '--password',  cred.login_password,
+                '--nickname',  user.nickname,
+                '--title',     job.blog_title,
                 '--html-file', html_path,
-                '--row',      str(job.sheet_row or 0),
-                '--batch',    job.batch_label or '',
+                '--row',       str(job.sheet_row or 0),
+                '--batch',     job.batch_label or '',
             ], timeout=300)
         else:
             raise NotImplementedError(f'publish not implemented for {platform}')
@@ -273,24 +337,47 @@ def execute_blog_publish(self, blog_job_id: int, platform: str):
             for line in proc.stdout.splitlines():
                 if line.startswith('POSTED_URL='):
                     post_url = line.split('=', 1)[1].strip()
-            result.status    = 'done'
-            result.post_url  = post_url
-            result.posted_at = timezone.now()
+            result.status     = 'done'
+            result.post_url   = post_url
+            result.posted_at  = timezone.now()
             result.raw_output = proc.stdout[-2000:]
             result.save(update_fields=['status', 'post_url', 'posted_at', 'raw_output'])
+            if cols and job.sheet_row:
+                _write_blog_sheet(user.nickname, job.sheet_row, {
+                    cols['url']:    post_url,
+                    cols['status']: 'posted',
+                    cols['batch']:  job.batch_label or '',
+                })
         else:
             raise RuntimeError(proc.stderr[-1000:] or proc.stdout[-1000:])
 
     except Exception as exc:
+        msg = str(exc)[:500]
         result.status        = 'failed'
-        result.error_message = str(exc)[:500]
+        result.error_message = msg
         result.save(update_fields=['status', 'error_message'])
+        if cols and job.sheet_row:
+            _write_blog_sheet(user.nickname, job.sheet_row, {cols['status']: 'error', cols['error']: msg[:200]})
         try:
             raise self.retry(exc=exc)
         except self.MaxRetriesExceededError:
             pass
     finally:
         os.unlink(html_path)
+
+
+def _write_blog_sheet(nickname: str, row: int, updates: dict):
+    import json as _json, subprocess as _sp
+    try:
+        _sp.run(
+            ['python', os.path.join(REPO_ROOT, 'scripts', 'sheet_write.py'),
+             '--sheet', 'blog', '--name', nickname,
+             '--row', str(row), '--updates', _json.dumps(updates)],
+            cwd=REPO_ROOT, timeout=30,
+            env={**os.environ, 'PYTHONIOENCODING': 'utf-8', 'PYTHONUTF8': '1'},
+        )
+    except Exception as e:
+        print(f'[blog_sheet_write] failed: {e}', flush=True)
 
 
 # ── Generate & Post (event-driven, triggered by form submission) ───────────────
