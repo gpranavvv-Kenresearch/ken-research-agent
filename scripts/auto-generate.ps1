@@ -110,8 +110,8 @@ function Invoke-SocialPass {
         Write-Host "           Missing: $plats - scraping and writing..." -ForegroundColor DarkGray
 
         $all = & python scripts\generate_content.py `
-            --url       $row.targetUrl `
-            --title     $row.Title `
+            --url       "$($row.targetUrl)" `
+            --title     "$($row.Title)" `
             --name      $Name `
             --row       $row._dataRow `
             --platforms $plats 2>&1
@@ -166,9 +166,10 @@ function Invoke-BlogPass {
         Write-Host ("    ({0}/{1}) BLOG ROW {2}: {3}" -f $i, $todo.Count, $row._dataRow, $label) -ForegroundColor Magenta
         Write-Host "           Scraping + researching + writing article..." -ForegroundColor DarkGray
 
+        $titleVal = if ($row.Title) { $row.Title } else { "" }
         $all = & python scripts\generate_blog.py `
-            --url       $row.targetUrl `
-            --title     $row.Title `
+            --url       "$($row.targetUrl)" `
+            --title     "$titleVal" `
             --name      $Name `
             --row       $row._dataRow `
             --platforms $plats `
