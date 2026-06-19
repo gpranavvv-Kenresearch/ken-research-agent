@@ -75,9 +75,8 @@ function Invoke-SocialPass {
     Write-Host "  [SOCIAL] Reading '$capName Social' sheet..." -ForegroundColor Cyan
 
     try {
-        $raw  = & python scripts\sheet_read.py --sheet social --name $Name --action unposted 2>&1
-        $json = ($raw | Where-Object { "$_" -match '^\s*\{' } | Out-String).Trim()
-        $data = $json | ConvertFrom-Json
+        $raw  = & python scripts\sheet_read.py --sheet social --name $Name --action unposted
+        $data = ($raw | Out-String).Trim() | ConvertFrom-Json
     } catch {
         Write-Host "    Social sheet read failed: $_" -ForegroundColor Yellow
         return
@@ -142,9 +141,8 @@ function Invoke-BlogPass {
     Write-Host "  [BLOG]   Reading '$capName Blog' sheet..." -ForegroundColor Magenta
 
     try {
-        $raw  = & python scripts\sheet_read.py --sheet blog --name $Name --action unposted 2>&1
-        $json = ($raw | Where-Object { "$_" -match '^\s*\{' } | Out-String).Trim()
-        $data = $json | ConvertFrom-Json
+        $raw  = & python scripts\sheet_read.py --sheet blog --name $Name --action unposted
+        $data = ($raw | Out-String).Trim() | ConvertFrom-Json
     } catch {
         Write-Host "    Blog sheet read failed: $_" -ForegroundColor Yellow
         return
