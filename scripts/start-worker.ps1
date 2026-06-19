@@ -22,16 +22,16 @@ param(
     [string]$Name = ""
 )
 
-# ── Load .env ──────────────────────────────────────────────────────────────────
+# ── Load .env (always overwrite — prevents stale env from polluting values) ────
 $envFile = "ken_backend\.env"
 if (Test-Path $envFile) {
     Get-Content $envFile | ForEach-Object {
         if ($_ -match '^\s*([^#][^=]+)=(.*)$') {
             $key   = $Matches[1].Trim()
             $value = $Matches[2].Trim()
-            if (-not [System.Environment]::GetEnvironmentVariable($key)) {
-                [System.Environment]::SetEnvironmentVariable($key, $value, "Process")
-            }
+            # Always set — don't skip if already present (stale session env can block it)
+            [System.Environment]::SetEnvironmentVariable($key, $value, "Process")
+            Set-Item -Path "Env:$key" -Value $value -ErrorAction SilentlyContinue
         }
     }
     Write-Host "  Loaded .env from $envFile" -ForegroundColor Gray
@@ -39,15 +39,23 @@ if (Test-Path $envFile) {
     Write-Host "  WARNING: ken_backend\.env not found" -ForegroundColor Yellow
 }
 
-# ── Resolve nickname ───────────────────────────────────────────────────────────
+# ── Resolve nickname (explicit WORKER_NAME read, then param, then env) ─────────
+if (-not $Name) {
+    # Read directly from .env file — most reliable, immune to env pollution
+    $wLine = Get-Content $envFile -ErrorAction SilentlyContinue |
+             Where-Object { $_ -match '^\s*WORKER_NAME\s*=\s*(\S+)' } |
+             Select-Object -First 1
+    if ($wLine -match '^\s*WORKER_NAME\s*=\s*(\S+)') { $Name = $Matches[1].Trim() }
+}
 if (-not $Name) { $Name = $env:WORKER_NAME }
 if (-not $Name) {
     Write-Host ""
     Write-Host "  ERROR: WORKER_NAME not set. Add WORKER_NAME=yourname to ken_backend\.env" -ForegroundColor Red
     exit 1
 }
-$Name = $Name.ToLower()
+$Name = $Name.ToLower().Trim()
 $env:WORKER_NAME = $Name
+[System.Environment]::SetEnvironmentVariable("WORKER_NAME", $Name, "Process")
 
 # ── Environment ────────────────────────────────────────────────────────────────
 $env:DJANGO_SETTINGS_MODULE = "ken_backend.settings.local"

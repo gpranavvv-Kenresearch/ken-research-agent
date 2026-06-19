@@ -122,8 +122,22 @@ def get_all_rows(sheet_name):
 
 def row_to_dict(headers, row, data_row_num):
     d = {"_dataRow": data_row_num, "_sheetRow": data_row_num + 1}
+    seen_lower = {}  # lowercase → first canonical header already added to d
     for i, h in enumerate(headers):
-        d[h] = row[i] if i < len(row) else ""
+        h_stripped = h.strip()
+        if not h_stripped:
+            continue
+        h_lower = h_stripped.lower()
+        val = row[i] if i < len(row) else ""
+        if h_lower in seen_lower:
+            # Case-insensitive duplicate (e.g. "Linkedin Pulse URL" vs "LinkedIn Pulse URL")
+            # Keep the existing key; only update value if current cell is non-empty and existing is empty
+            existing = seen_lower[h_lower]
+            if val and not d.get(existing):
+                d[existing] = val
+        else:
+            seen_lower[h_lower] = h_stripped
+            d[h_stripped] = val
     return d
 
 
