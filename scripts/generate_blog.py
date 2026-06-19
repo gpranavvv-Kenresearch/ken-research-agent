@@ -346,7 +346,7 @@ def build_generation_prompt(
         'target="_blank" rel="noopener"'
     )
 
-    return f"""You are a senior B2B market intelligence writer for Ken Research. Write a complete HTML microblog article.
+    return f"""You are a senior B2B market intelligence writer for Ken Research. Write a complete HTML article for LinkedIn Pulse.
 
 == MARKET DATA ==
 Report Title: {title}
@@ -354,123 +354,135 @@ Report URL: {target_url}
 Market Name: {market_name}
 Country/Region: {country}
 
-Page Content (from Ken Research report):
+Page Content (from Ken Research report page):
 {page_text[:3000]}
 
-Web Research - Market Size/CAGR/Forecast:
+Web Research - Market Size / CAGR / Forecast:
 {research.get('market_data', '')[:800]}
 
-Web Research - Key Players:
+Web Research - Key Companies / Market Share:
 {research.get('key_players', '')[:500]}
 
-Web Research - Policies/Regulations:
+Web Research - Policy / Regulation / Demand Shifts:
 {research.get('policies', '')[:500]}
 
-== LINKS TO USE ==
+== LINKS TO EMBED ==
 Ken Research Homepage: {kr_home_utm}
-Target Report: {target_utm}
-Sample Report: {sample_utm}
+Target Report (main CTA): {target_utm}
+Sample Report (secondary CTA): {sample_utm}
 
-Related Reports for interlinks (use 8-10 of these spread across body and FAQs):
+Related Reports — use exactly 8-10 of these as interlinks in body paragraphs and FAQ answers:
 {interlinks_block}
 
-Cover Image URL: {cover_image_url or ''}
+Cover Image: {cover_image_url or '(none)'}
 
-== STRICT RULES ==
-1. ZERO em dashes (—) or en dashes (–) anywhere. Use colon, comma, or period instead.
-2. ALL numbers, percentages, currency figures wrapped in <strong> tags. No bare numbers.
-3. 5 FAQs exactly (H3 tags Q1-Q5), 2-3 with interlinks.
-4. 10-12 total links across entire article.
-5. Word count: MINIMUM 1,300 words, target 1,350 words. COUNT CAREFULLY before outputting.
-   - Each main H2 section body (paragraphs + bullet list text): at least 180 words.
-   - Each FAQ answer paragraph: at least 70 words.
-   - Intro block (first 2 paragraphs): at least 100 words combined.
-   - Conclusion paragraph: at least 60 words.
-6. Character count: UNDER 14,000 characters total HTML.
-7. Every anchor: <a href='URL' {link_style}><strong>Anchor Text</strong></a>
-8. Use SINGLE QUOTES for href values.
-9. No Ken Research in any H2 heading.
-10. Every H2 must contain a data figure (%, USD, CAGR, billion).
-11. Intro sentences 1-2: ZERO anchor links. Both intro anchors in sentence 3+.
-12. The target report and KR homepage links MUST be in separate sentences in intro.
-13. Exactly 2 CTAs: CTA1 anchor = "Download Sample Report", CTA2 anchor = "{market_name} Report"
-14. Article ends with Ken Research branding paragraph (last element after FAQs).
-15. Use 2026 as current year for present conditions. Historical data OK as context.
-16. No Research Basis section. No source list at bottom.
-17. Government programme names NOT in double quotes.
-18. Use "as per Ken Research" or "as tracked by Ken Research" at least 3 times in body paragraphs.
+== ABSOLUTE RULES — VIOLATION = REJECT ==
+1. NO em dashes (—) or en dashes (–) anywhere in the entire output. Use comma or colon instead.
+2. ALL numbers, percentages, USD values wrapped in <strong> tags. Zero bare numbers allowed.
+3. Exactly 5 FAQ questions (H3). No more, no less.
+4. Exactly 10-12 <a href links total across the whole article.
+5. Word count: 1,300-1,400 words. Count every word including headings, lists, FAQs.
+6. Every H2 heading must contain at least one data figure (%, USD, CAGR, billion, million).
+7. Use "as per Ken Research" or "as tracked by Ken Research" at least 3 times in body paragraphs.
+8. The intro paragraph (first <p>) must have ZERO anchor links in sentence 1 and 2.
+   Sentence 3 must link to the target report. Sentence 4 must link to KR homepage.
+9. Exactly 2 CTA blocks: first uses "Download Sample Report", second uses "{market_name} Report".
+10. No "Ken Research" in any H2 heading text.
+11. Every <a> tag: use SINGLE QUOTES for href. Include style and target attributes exactly as shown below.
+12. Article MUST end with the Ken Research branding paragraph as the final element.
+13. Use 2026 as the present year. Use historical data only as context.
+14. No source list, no "Research Basis" section at the end.
 
-== TITLE RULES ==
-H1 Title (100-130 chars):
+Link format for ALL anchors (copy exactly):
+<a href='URL' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>Anchor Text</strong></a>
+
+== BLOG TITLE RULES ==
+Blog Title (for the article title field, 85-115 chars):
+- Ends with " | Ken Research"
 - Never starts with "Ken Research"
-- Ken Research appears in MIDDLE or END as an actor
-- Include at least one data figure (CAGR, market size, forecast)
-- No em dashes
-
-Blog Title (85-115 chars total):
-- Always ends with " | Ken Research"
-- Never starts with "Ken Research"
-- Include a striking number
-- Catchy/punchy words: Surge, Race, Explode, Reshape, Dominate, Unlock
+- Must include a specific number (CAGR, market size, or forecast value)
+- Use power words: Surge, Race, Reshape, Dominate, Unlock, Accelerate
 - NOT a question
 
-== HTML STRUCTURE TO FOLLOW ==
-<img src='{cover_image_url or ""}' alt='{market_name}'>
-<h1>{{H1 title — 100-130 chars}}</h1>
+H1 Title (shown at top of article, 100-130 chars):
+- Never starts with "Ken Research"
+- Ken Research appears in the MIDDLE or END
+- Must include one data figure
 
-<p>{{INTRO — sentences 1+2 anchor-free; sentence 3: target report link; sentence 4: KR homepage link}}</p>
+== HTML STRUCTURE — FOLLOW EXACTLY ==
 
-<p><em>This analysis is based on Ken Research market modelling, operator fleet disclosures, {{sector}} indicators, and third-party {{sector}}-sector estimates.</em></p>
+<img src='{cover_image_url or ""}' alt='{market_name} market research'>
+<h1>[H1 title 100-130 chars with data figure, Ken Research in middle or end]</h1>
 
-<h2>{{Section 1 heading WITH data figure}}</h2>
-<p>{{paragraph 1 — exactly 1 related report interlink, 3-4 stats bolded, 80+ words}}</p>
-<p>{{paragraph 2 — expand on implications, 60+ words, no extra links}}</p>
+<p>[INTRO: Sentence 1 — striking market fact, no link. Sentence 2 — second key insight, no link.
+Sentence 3 — "The full analysis is available in the <a href='{target_utm}' ...><strong>[market name] report</strong></a> by Ken Research."
+Sentence 4 — "Ken Research is a leading market intelligence firm; visit the <a href='{kr_home_utm}' ...><strong>Ken Research website</strong></a> for coverage across [sector/region]."]</p>
+
+<p><em>This analysis draws on Ken Research market modelling, [sector] operator disclosures, demand indicators, and third-party [sector] estimates.</em></p>
+
+<h2>[Section 1 heading — market size or valuation WITH USD figure and CAGR]</h2>
+<p>[80+ words. 1 related report interlink. 3-4 bolded stats. Use "as per Ken Research".]</p>
+<p>[60+ words. Implications and context. No extra links.]</p>
 <ul>
-  <li><strong style="color:#000000;">{{Label}}:</strong> {{content with stat}}</li>
+  <li><strong style="color:#000000;">[Segment/Driver Label]:</strong> [detail with bolded stat]</li>
+  <li><strong style="color:#000000;">[Segment/Driver Label]:</strong> [detail with bolded stat]</li>
+  <li><strong style="color:#000000;">[Segment/Driver Label]:</strong> [detail with bolded stat]</li>
+  <li><strong style="color:#000000;">[Segment/Driver Label]:</strong> [detail with bolded stat]</li>
+</ul>
+
+<h2>[Section 2 heading — key growth drivers WITH % or USD figure]</h2>
+<p>[80+ words. 1 related report interlink. 3+ bolded stats. Use "as tracked by Ken Research".]</p>
+<p>[60+ words. Expand on competitive or regulatory context. No extra links.]</p>
+<ul>
+  <li>...</li>
   <li>...</li>
   <li>...</li>
   <li>...</li>
 </ul>
 
-<h2>{{Section 2 heading WITH data figure}}</h2>
-<p>{{paragraph 1 — 1 related report interlink, 3+ stats bolded, 80+ words}}</p>
-<p>{{paragraph 2 — expand with market context, 60+ words, no extra links}}</p>
-<ul>...</ul>
-
 <div class="cta-block">
-  <p>{{hook sentence}}? <a href='{sample_utm}' {link_style}><strong>Download Sample Report</strong></a> {{closing clause}}.</p>
+  <p>Need granular segment data and company benchmarks? <a href='{sample_utm}' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>Download Sample Report</strong></a> to preview the full methodology and data tables.</p>
 </div>
 
-<h2>{{Section 3 heading — question format ending with ?}}</h2>
-<p>{{paragraph — 1 related report interlink}}</p>
+<h2>[Section 3 heading — phrased as a question ending with ?]</h2>
+<p>[80+ words. 1 related report interlink. Address the question with data.]</p>
 
-<h2>{{Section 4 heading — forward-looking WITH year}}</h2>
-<p>{{paragraph — 1 related report interlink}}</p>
-<ul>...</ul>
+<h2>[Section 4 heading — forward-looking, includes a year like 2027/2028/2030]</h2>
+<p>[80+ words. 1 related report interlink. Use "as per Ken Research".]</p>
+<ul>
+  <li>...</li>
+  <li>...</li>
+  <li>...</li>
+</ul>
 
 <div class="cta-block">
-  <p>{{hook}}? <a href='{target_utm}' {link_style}><strong>{market_name} Report</strong></a> {{closing clause}}.</p>
+  <p>For the complete competitive landscape and segment-level forecasts, access the <a href='{target_utm}' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>{market_name} Report</strong></a> from Ken Research.</p>
 </div>
 
 <h2>Conclusion</h2>
-<p>{{conclusion — MUST include target report UTM link}}</p>
+<p>[60+ words. Summarise the 3 most important insights. Include one final link to the target report.]</p>
 
 <h2>Frequently Asked Questions</h2>
-<h3>Q1: {{question}}</h3>
-<p>{{Answer — no interlink, min 2 stats bolded, 70+ words}}</p>
-<h3>Q2: {{question}}</h3>
-<p>{{Answer WITH 1 interlink, 70+ words}}</p>
-<h3>Q3: {{question}}</h3>
-<p>{{Answer WITH 1 interlink, 70+ words}}</p>
-<h3>Q4: {{question}}</h3>
-<p>{{Answer — no interlink, 70+ words}}</p>
-<h3>Q5: {{question}}</h3>
-<p>{{Answer WITH 1 interlink, 70+ words}}</p>
 
-<p>For the full competitive benchmarking, segment-level forecasts, and regional breakdown, access the <a href='{target_utm}' {link_style}><strong>{market_name} Report</strong></a> from Ken Research, a leading market intelligence firm covering {{sector}} across {{region}}.</p>
+<h3>Q1: [Specific question about market size or CAGR]</h3>
+<p>[70+ words. No interlink. At least 2 bolded stats. Answer directly.]</p>
+
+<h3>Q2: [Question about key growth drivers]</h3>
+<p>[70+ words. Include 1 interlink. Reference "Ken Research".]</p>
+
+<h3>Q3: [Question about leading companies or segments]</h3>
+<p>[70+ words. Include 1 interlink. Use specific company names or segment shares.]</p>
+
+<h3>Q4: [Question about policy, regulation, or government initiative]</h3>
+<p>[70+ words. No interlink. Ground in data from the research.]</p>
+
+<h3>Q5: [Question about the forecast or future outlook]</h3>
+<p>[70+ words. Include 1 interlink. Forward-looking with year.]</p>
+
+<p>For the full competitive benchmarking, segment-level forecasts, and regional breakdown, access the <a href='{target_utm}' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>{market_name} Report</strong></a> from Ken Research, a leading market intelligence firm specialising in [sector] across [region/country].</p>
 
 == OUTPUT FORMAT ==
-Return ONLY valid JSON with these exact keys. No markdown, no code blocks, just JSON:
+Return ONLY valid JSON — no markdown fences, no commentary, just the raw JSON object:
 {{
   "blog_title": "...",
   "h1_title": "...",
@@ -479,11 +491,11 @@ Return ONLY valid JSON with these exact keys. No markdown, no code blocks, just 
   "linkedin_caption": "..."
 }}
 
-blog_title: 85-115 chars, ends with " | Ken Research"
-h1_title: 100-130 chars, Ken Research in middle or end
-html_content: complete HTML starting with <img ...> and ending with the KR branding paragraph
-seo_description: 160-180 chars plain text, no HTML, no em dashes
-linkedin_caption: 150-300 words, hook line + 3-4 bullet points (use checkmark emoji) + CTA + 5-7 hashtags
+blog_title: 85-115 chars total, ends with " | Ken Research", includes a number, never starts with "Ken Research"
+h1_title: 100-130 chars, Ken Research in middle or end, includes a data figure
+html_content: complete HTML from <img> to the final KR branding <p>, no markdown
+seo_description: 155-165 chars plain text, no HTML, no em dashes, includes market name and a figure
+linkedin_caption: 180-250 words — hook sentence (data stat) + blank line + 3-4 checkmark bullet points of key findings + blank line + one CTA sentence + blank line + 5-6 hashtags
 """
 
 

@@ -153,77 +153,104 @@ Web Research:
 
 
 def generate_x(context: str) -> str:
-    prompt = f"""You are a market intelligence analyst posting on behalf of Ken Research. Write a single tweet about this market report.
+    prompt = f"""You are a market intelligence analyst at Ken Research. Write ONE tweet for this market report.
 
 {context}
 
-STRICT RULES:
-- Exactly 200-220 characters (the URL is added separately on a new line — do NOT include it)
-- Lead with a specific number: market size, CAGR %, or forecast year value — no vague openers
-- Professional, data-first tone — no hype or filler
-- 1-2 hashtags max, placed at the end
-- FORBIDDEN words: "Check out", "Read more", "Excited to share", "Discover", "Explore", "Learn"
-- No em dashes (—) or en dashes (–)
-- No quotation marks around the whole tweet
+MANDATORY FORMAT:
+[Country/Region] [market name] [market size OR CAGR fact]. [Second key finding or driver]. #[Tag1] #[Tag2]
 
-GOOD EXAMPLES:
-"India's cold chain market to reach $22B by 2028, driven by 14.2% CAGR. Pharma, e-grocery fuel 73% of capacity adds. #ColdChain #LogisticsIndia"
-"Saudi Arabia lubricants market hits $1.4B in 2025, growing at 6.8% CAGR through 2029. Automotive and industrial demand lead. #Lubricants #SaudiArabia"
+HARD RULES:
+- 200-220 characters TOTAL (count carefully — URL is added separately, do NOT include it)
+- First word group MUST be a number: market size in USD, CAGR %, or YoY growth rate
+- "Ken Research" must NOT appear in the tweet (it will be on the account profile)
+- Exactly 2 hashtags — specific to the market and geography
+- BANNED: "projected to", "is set to", "poised to", "expected to outpace", "revenues are"
+  Use direct statements: "market hits", "to reach", "grows at", "valued at"
+- No em dashes, no en dashes, no quotes around the tweet
 
-Return ONLY the tweet text. No explanation, no quotes around it."""
+CORRECT EXAMPLES (count characters before posting):
+India cold chain market to reach $22B by 2028 at 14.2% CAGR. Pharma and e-grocery drive 73% of capacity adds. #ColdChain #India
+Saudi Arabia e-learning market at $380M in 2021, growing 12.4% CAGR through 2026. Mobile-first adoption leads. #Edtech #SaudiArabia
+Philippines casino GGR hits $2.1B in 2022 at 9.3% CAGR. Integrated resort expansion drives 68% of revenue. #GamingAsia #Philippines
+
+Return ONLY the tweet text. No quotes around it, no explanation."""
     return call_ai(prompt)
 
 
 def generate_facebook(context: str) -> str:
-    prompt = f"""You are a market intelligence analyst posting on behalf of Ken Research on Facebook. Write an engaging post about this market report.
+    prompt = f"""You are a market intelligence analyst at Ken Research. Write a Facebook post for this market report.
 
 {context}
 
-STRICT RULES:
-- 180-280 words
-- Open with a compelling data point or trend — never a generic opener
-- Include: market size figure, CAGR, forecast year, 2-3 key growth drivers
-- Use short paragraphs (2-3 sentences each) for readability
-- 1-2 relevant emojis, placed naturally (not at start of every line)
-- End with a clear call to action: "Read the full report below ↓" or "Full report linked below ↓"
-- DO NOT include the URL
-- No em dashes (—) or en dashes (–)
-- No filler phrases: "In today's world", "In an era of", "It is well known that"
+MANDATORY STRUCTURE (follow exactly):
 
-STRUCTURE:
-Line 1: Striking stat or insight (hook)
-Body: Key findings with specific numbers
-Closing: 1-line CTA
+LINE 1 (hook): One sentence with a specific market figure. Start with the number.
+Example: "$2.1B — that is the size of the Philippines casino market in 2022, growing at 9.3% CAGR."
+
+PARAGRAPH 2 (market overview, 3-4 sentences):
+- Total market size and CAGR
+- Forecast year and projected value
+- Top 1-2 growth drivers with data
+
+PARAGRAPH 3 (key insights, 3-4 sentences):
+- Key market segment driving growth
+- Regional or competitive angle
+- Any policy, regulation, or demand shift worth noting
+
+CLOSING LINE: "Full report linked below."
+
+RULES:
+- 160-220 words total
+- 1 emoji max, only if it fits naturally (not at the start of every line)
+- Mention "Ken Research" once as the source: "as per Ken Research" or "according to Ken Research"
+- No em dashes, no en dashes
+- No URL in body
+- BANNED openers: "In today's", "In an era of", "The world is witnessing", "It is no secret"
 
 Return ONLY the post text."""
     return call_ai(prompt)
 
 
 def generate_linkedin(context: str) -> str:
-    prompt = f"""You are a senior B2B market intelligence analyst posting on LinkedIn on behalf of Ken Research. Write a professional post about this market report.
+    prompt = f"""You are a senior market intelligence analyst at Ken Research. Write a LinkedIn post for this market report.
 
 {context}
 
-STRICT RULES:
-- 250-350 words
-- Written for: investors, CXOs, strategy consultants, sector analysts
-- First line MUST be a specific, data-driven insight that stops the scroll — e.g. a surprising CAGR, market size milestone, or unexpected growth driver
-- Include at least 3 specific figures: CAGR, market size (USD), forecast year, or segment share %
-- Use 1-3 short bullet points (optional) to highlight key segments or drivers
-- End with ONE thought-provoking question for professionals OR a forward-looking observation
-- 3-5 relevant hashtags on the LAST line only
-- No em dashes (—) or en dashes (–)
-- No filler: "In today's rapidly evolving", "It goes without saying", "As we all know"
-- DO NOT include the report URL in the body
+MANDATORY STRUCTURE:
 
-STRUCTURE:
-Hook line (data insight)
+LINE 1 (scroll-stopper): A single bold data statement. No question. No filler.
+Example: "The Thailand catering market is valued at $4.8B in 2022 and growing at 8.1% CAGR through 2027."
+
 [blank line]
-2-3 body paragraphs with specifics
+
+PARAGRAPH 1 (market context, 3-4 sentences):
+What is driving this market? Quantify the top 2 drivers with % or USD figures.
+Use: "As per Ken Research analysis..." or "Ken Research estimates..."
+
+PARAGRAPH 2 (segments and players, 3-4 sentences):
+Which segment leads? Which geography or player is winning? What is the market share split?
+At least 2 data points with numbers.
+
+PARAGRAPH 3 (outlook, 2-3 sentences):
+What changes in policy, tech, or consumer behavior will shape the next 3-5 years?
+Forward-looking but grounded in data from the report.
+
 [blank line]
-Closing question or forward observation
+
+CLOSING (1 sentence): A sharp question for professionals — investment angle, competitive strategy, or policy implication.
+
 [blank line]
-#Hashtag1 #Hashtag2 #Hashtag3
+
+HASHTAGS: Exactly 4-5 hashtags relevant to the market and region. Last line only.
+
+RULES:
+- 220-300 words total (tight and dense — no padding)
+- At least 4 specific numbers across the post (CAGR, USD value, %, year)
+- No em dashes, no en dashes
+- No URL in body
+- BANNED: "In today's rapidly evolving landscape", "It goes without saying", "As we navigate",
+  "Exciting times", "Proud to share", "Thrilled to announce"
 
 Return ONLY the post text."""
     return call_ai(prompt)
@@ -250,7 +277,7 @@ def write_to_sheet(name: str, row: int, updates: dict) -> None:
             '--updates', json.dumps(updates),
         ],
         cwd=repo_root,
-        timeout=30,
+        timeout=60,
         check=False,
     )
 
