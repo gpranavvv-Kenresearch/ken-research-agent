@@ -82,7 +82,7 @@ function Invoke-SocialPass {
         return
     }
 
-    if (-not $data.ok) { Write-Host "    Social read not ok." -ForegroundColor Yellow; return }
+    if (-not $data.ok) { Write-Host "    Social read failed: $($data.error)" -ForegroundColor Yellow; return }
 
     $todo = @($data.rows | Where-Object {
         $_.targetUrl -and (
@@ -148,7 +148,7 @@ function Invoke-BlogPass {
         return
     }
 
-    if (-not $data.ok) { Write-Host "    Blog read not ok." -ForegroundColor Yellow; return }
+    if (-not $data.ok) { Write-Host "    Blog read failed: $($data.error)" -ForegroundColor Yellow; return }
 
     $todo = @($data.rows | Where-Object {
         $_.targetUrl -and -not $_.'Blog Content'

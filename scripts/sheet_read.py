@@ -44,9 +44,47 @@ except ImportError:
     print(json.dumps({"ok": False, "error": "Missing dependencies. Run: pip install google-auth requests"}))
     sys.exit(1)
 
+# Load .env so GOOGLE_APPLICATION_CREDENTIALS is available before _find_service_account()
+def _load_env():
+    for candidate in [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'ken_backend', '.env'),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '.env'),
+    ]:
+        path = os.path.normpath(candidate)
+        if os.path.exists(path):
+            with open(path, encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        k, _, v = line.partition('=')
+                        os.environ.setdefault(k.strip(), v.strip())
+            break
+
+_load_env()
+
 SPREADSHEET_ID = "1ZTgKCRs6Hcmi4pymYa6pZOerxX5cqT23FS1Z8c-RwJU"
-SERVICE_ACCOUNT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "service_account.json")
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+
+def _find_service_account() -> str:
+    # 1. Explicit env var (set in .env as GOOGLE_APPLICATION_CREDENTIALS)
+    env_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+    if env_path and os.path.exists(env_path):
+        return env_path
+    # 2. scripts/service_account.json (legacy location)
+    legacy = os.path.join(os.path.dirname(os.path.abspath(__file__)), "service_account.json")
+    if os.path.exists(legacy):
+        return legacy
+    # 3. .accounts/google-service-account.json (Pranav's machine)
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    alt = os.path.join(repo_root, ".accounts", "google-service-account.json")
+    if os.path.exists(alt):
+        return alt
+    raise FileNotFoundError(
+        "Service account JSON not found. Set GOOGLE_APPLICATION_CREDENTIALS in ken_backend/.env "
+        f"or place it at {legacy}"
+    )
+
+SERVICE_ACCOUNT_FILE = _find_service_account()
 
 SHEET_MAP = {
     "social": "Social",
