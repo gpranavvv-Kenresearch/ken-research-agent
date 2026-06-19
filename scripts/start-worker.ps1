@@ -90,18 +90,19 @@ for q in [f'social.{name}', f'blog.{name}']:
 "
 Write-Host ""
 
-# ── Start Beat (background, only if not already running on Render) ─────────────
-# Uncomment this block if you are NOT using Render for Beat:
-# Write-Host "  Starting Celery Beat in background..." -ForegroundColor Gray
-# $beatJob = Start-Process -FilePath "celery" `
-#     -ArgumentList "-A ken_backend beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler" `
-#     -PassThru -WindowStyle Minimized
-# Write-Host "  Beat PID: $($beatJob.Id)" -ForegroundColor Gray
+# ── Start per-person Beat (fires sync_and_generate_for_me every 5 min) ────────
+Write-Host "  Starting local Beat scheduler (every 5 min, scoped to $Name)..." -ForegroundColor Gray
+$beatArgs = "-A ken_backend beat --loglevel=warning " +
+            "--scheduler django_celery_beat.schedulers:DatabaseScheduler"
+$beatJob = Start-Process -FilePath "celery" `
+    -ArgumentList $beatArgs `
+    -PassThru -WindowStyle Minimized
+Write-Host "  Beat PID: $($beatJob.Id)" -ForegroundColor Gray
 
 # ── Start Social worker in background window ───────────────────────────────────
 Write-Host "  Starting social worker ($socialQueue)..." -ForegroundColor Gray
 $socialJob = Start-Process -FilePath "celery" `
-    -ArgumentList "-A ken_backend worker -Q $socialQueue -c 1 --loglevel=info --pool=solo -n `"social-$Name@%h`"" `
+    -ArgumentList "-A ken_backend worker -Q $socialQueue,beat.$Name -c 1 --loglevel=info --pool=solo -n `"social-$Name@%h`"" `
     -PassThru -WindowStyle Normal
 Write-Host "  Social worker PID: $($socialJob.Id)" -ForegroundColor Gray
 

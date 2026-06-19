@@ -153,55 +153,79 @@ Web Research:
 
 
 def generate_x(context: str) -> str:
-    prompt = f"""Generate a tweet for this Ken Research market report.
+    prompt = f"""You are a market intelligence analyst posting on behalf of Ken Research. Write a single tweet about this market report.
 
 {context}
 
-Rules:
-- Max 220 characters (the URL will be added on a new line separately — do NOT include it)
-- Professional, insightful tone
-- Lead with a key finding or stat
-- 1–2 relevant hashtags only
-- No filler: "Check out", "Read more", "Excited to share", "Discover"
-- No em dashes
+STRICT RULES:
+- Exactly 200-220 characters (the URL is added separately on a new line — do NOT include it)
+- Lead with a specific number: market size, CAGR %, or forecast year value — no vague openers
+- Professional, data-first tone — no hype or filler
+- 1-2 hashtags max, placed at the end
+- FORBIDDEN words: "Check out", "Read more", "Excited to share", "Discover", "Explore", "Learn"
+- No em dashes (—) or en dashes (–)
+- No quotation marks around the whole tweet
 
-Return ONLY the tweet text, nothing else."""
+GOOD EXAMPLES:
+"India's cold chain market to reach $22B by 2028, driven by 14.2% CAGR. Pharma, e-grocery fuel 73% of capacity adds. #ColdChain #LogisticsIndia"
+"Saudi Arabia lubricants market hits $1.4B in 2025, growing at 6.8% CAGR through 2029. Automotive and industrial demand lead. #Lubricants #SaudiArabia"
+
+Return ONLY the tweet text. No explanation, no quotes around it."""
     return call_ai(prompt)
 
 
 def generate_facebook(context: str) -> str:
-    prompt = f"""Generate a Facebook post for this Ken Research market report.
+    prompt = f"""You are a market intelligence analyst posting on behalf of Ken Research on Facebook. Write an engaging post about this market report.
 
 {context}
 
-Rules:
-- 150–280 words
-- Professional but engaging
-- Include key market insights — CAGR, market size, forecast year if available
-- 1–2 relevant emojis maximum
-- End with a short call to action (e.g. "Read the full report ↓")
-- Do NOT include the URL
+STRICT RULES:
+- 180-280 words
+- Open with a compelling data point or trend — never a generic opener
+- Include: market size figure, CAGR, forecast year, 2-3 key growth drivers
+- Use short paragraphs (2-3 sentences each) for readability
+- 1-2 relevant emojis, placed naturally (not at start of every line)
+- End with a clear call to action: "Read the full report below ↓" or "Full report linked below ↓"
+- DO NOT include the URL
+- No em dashes (—) or en dashes (–)
+- No filler phrases: "In today's world", "In an era of", "It is well known that"
 
-Return ONLY the post text, nothing else."""
+STRUCTURE:
+Line 1: Striking stat or insight (hook)
+Body: Key findings with specific numbers
+Closing: 1-line CTA
+
+Return ONLY the post text."""
     return call_ai(prompt)
 
 
 def generate_linkedin(context: str) -> str:
-    prompt = f"""Generate a LinkedIn post for this Ken Research market report.
+    prompt = f"""You are a senior B2B market intelligence analyst posting on LinkedIn on behalf of Ken Research. Write a professional post about this market report.
 
 {context}
 
-Rules:
-- 200–350 words
-- Professional B2B tone, written for analysts, investors and industry leaders
-- Open with a striking market insight or surprising stat
-- Include data points: CAGR, market size, key growth drivers, forecast year
-- End with a thought-provoking question or insight
-- 3–5 relevant hashtags at the very end (separate line)
-- No em dashes
-- Do NOT include the URL in the body
+STRICT RULES:
+- 250-350 words
+- Written for: investors, CXOs, strategy consultants, sector analysts
+- First line MUST be a specific, data-driven insight that stops the scroll — e.g. a surprising CAGR, market size milestone, or unexpected growth driver
+- Include at least 3 specific figures: CAGR, market size (USD), forecast year, or segment share %
+- Use 1-3 short bullet points (optional) to highlight key segments or drivers
+- End with ONE thought-provoking question for professionals OR a forward-looking observation
+- 3-5 relevant hashtags on the LAST line only
+- No em dashes (—) or en dashes (–)
+- No filler: "In today's rapidly evolving", "It goes without saying", "As we all know"
+- DO NOT include the report URL in the body
 
-Return ONLY the post text, nothing else."""
+STRUCTURE:
+Hook line (data insight)
+[blank line]
+2-3 body paragraphs with specifics
+[blank line]
+Closing question or forward observation
+[blank line]
+#Hashtag1 #Hashtag2 #Hashtag3
+
+Return ONLY the post text."""
     return call_ai(prompt)
 
 

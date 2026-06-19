@@ -479,6 +479,110 @@ ACTIVE_MEMBERS = [
     'vijay', 'shivani', 'vishal', 'sanya', 'kamakshi', 'avdhesh', 'pranav',
 ]
 
+@shared_task(soft_time_limit=3600, time_limit=3600)
+def sync_and_generate_for_me():
+    """
+    Per-person version of sync_and_generate_all.
+    Reads WORKER_NAME from environment — processes ONLY that person.
+    Beat on each laptop calls this every 5 min on the beat.{name} queue.
+    """
+    nickname = os.environ.get('WORKER_NAME', '').lower().strip()
+    if not nickname:
+        print('[sync_me] WORKER_NAME not set — skipping', flush=True)
+        return
+
+    from accounts.models import User
+    from sheet.reader import read_unposted_social, read_unposted_blog
+    from jobs.models import PostingJob, BlogJob
+
+    print(f'[sync_me] === Starting sync for {nickname} ===', flush=True)
+
+    try:
+        user = User.objects.get(nickname=nickname)
+    except Exception:
+        print(f'[sync_me] User {nickname} not found in DB', flush=True)
+        return
+
+    # ── Social rows ───────────────────────────────────────────────────────
+    try:
+        social_rows = read_unposted_social(nickname)
+    except Exception as e:
+        print(f'[sync_me] Social read error: {e}', flush=True)
+        social_rows = []
+
+    for row in social_rows:
+        url       = row.get('targetUrl', '').strip()
+        sheet_row = row.get('_dataRow') or row.get('_sheetRow') or row.get('row')
+        title     = row.get('title') or row.get('Title', '')
+        platforms = row.get('Platforms', 'x,facebook,linkedin').strip() or 'x,facebook,linkedin'
+
+        if not url or not sheet_row:
+            continue
+
+        job, is_new = PostingJob.objects.get_or_create(
+            user=user, target_url=url, sheet_row=int(sheet_row),
+            defaults={'title': title, 'platforms': platforms, 'status': 'running'},
+        )
+        if not is_new:
+            if job.status not in ('failed', 'running'):
+                continue
+            job.status = 'running'
+            job.error_message = ''
+            job.save(update_fields=['status', 'error_message'])
+
+        print(f'[sync_me] Social row {sheet_row}: {url[:60]}', flush=True)
+        plat_list = [p.strip().lower() for p in platforms.split(',') if p.strip()]
+        proc = subprocess.run(
+            [sys.executable,
+             os.path.join(REPO_ROOT, 'scripts', 'generate_content.py'),
+             '--url', url, '--title', title,
+             '--name', nickname, '--row', str(sheet_row),
+             '--platforms', ','.join(plat_list)],
+            capture_output=True, text=True, cwd=REPO_ROOT, timeout=300,
+            env={**os.environ, 'PYTHONIOENCODING': 'utf-8', 'PYTHONUTF8': '1'},
+        )
+        if proc.returncode == 0:
+            job.status = 'done'
+            print(f'[sync_me] Social row {sheet_row}: content written ✓', flush=True)
+        else:
+            job.status = 'failed'
+            job.error_message = proc.stderr[-500:]
+            print(f'[sync_me] Social row {sheet_row}: FAILED — {proc.stderr[-200:]}', flush=True)
+        job.save(update_fields=['status', 'error_message'])
+
+    # ── Blog rows ─────────────────────────────────────────────────────────
+    try:
+        blog_rows = read_unposted_blog(nickname)
+    except Exception as e:
+        print(f'[sync_me] Blog read error: {e}', flush=True)
+        blog_rows = []
+
+    for row in blog_rows:
+        url       = row.get('targetUrl', '').strip()
+        sheet_row = row.get('_dataRow') or row.get('_sheetRow') or row.get('row')
+        title     = row.get('title') or row.get('Title', '')
+        platforms = row.get('Platforms', 'linkedin_pulse').strip() or 'linkedin_pulse'
+
+        if not url or not sheet_row:
+            continue
+
+        job, is_new = BlogJob.objects.get_or_create(
+            user=user, target_url=url, sheet_row=int(sheet_row),
+            defaults={'title': title, 'platforms': platforms, 'status': 'running'},
+        )
+        if not is_new:
+            if job.status not in ('failed', 'running'):
+                continue
+            job.status = 'running'
+            job.error_message = ''
+            job.save(update_fields=['status', 'error_message'])
+
+        print(f'[sync_me] Blog row {sheet_row}: {url[:60]}', flush=True)
+        dispatch_blog_generation(job)
+
+    print(f'[sync_me] === Sync complete for {nickname} ===', flush=True)
+
+
 @shared_task(queue='beat', soft_time_limit=3600, time_limit=3600)
 def sync_and_generate_all():
     """

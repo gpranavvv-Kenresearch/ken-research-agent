@@ -12,8 +12,15 @@ Batch slots (IST = UTC+5:30) → UTC:
   B8 17:15 → 11:45 UTC
 
 Heartbeat + stale-worker check run every 60s and 5 min respectively.
+
+Per-person Beat (runs on each laptop):
+  WORKER_NAME env var is read at module import time.
+  sync-and-generate-for-me → beat.{WORKER_NAME} queue → social worker picks it up.
 """
+import os
 from celery.schedules import crontab
+
+_worker_name = os.environ.get('WORKER_NAME', 'default').lower().strip()
 
 CELERY_BEAT_SCHEDULE = {
     # ── Batch slots ──────────────────────────────────────────────────────────
@@ -57,7 +64,15 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(hour=11, minute=45),
         'args': ('B8',),
     },
-    # ── Sheet sync + content generation (every 5 min) ────────────────────────
+    # ── Per-person sync (runs on each laptop, scoped to WORKER_NAME) ────────────
+    # Beat reads WORKER_NAME at startup, routes to beat.{name} queue.
+    # Social worker listens on social.{name},beat.{name} — picks this up immediately.
+    'sync-and-generate-for-me': {
+        'task': 'workers.tasks.sync_and_generate_for_me',
+        'schedule': 300.0,
+        'options': {'queue': f'beat.{_worker_name}'},
+    },
+    # ── Central sync (runs on Render if Beat is deployed there) ─────────────────
     'sync-and-generate': {
         'task': 'workers.tasks.sync_and_generate_all',
         'schedule': 300.0,
