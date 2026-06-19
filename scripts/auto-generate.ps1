@@ -166,14 +166,16 @@ function Invoke-BlogPass {
         Write-Host ("    ({0}/{1}) BLOG ROW {2}: {3}" -f $i, $todo.Count, $row._dataRow, $label) -ForegroundColor Magenta
         Write-Host "           Scraping + researching + writing article..." -ForegroundColor DarkGray
 
-        $titleVal = if ($row.Title) { $row.Title } else { "" }
-        $all = & python scripts\generate_blog.py `
-            --url       "$($row.targetUrl)" `
-            --title     "$titleVal" `
-            --name      $Name `
-            --row       $row._dataRow `
-            --platforms $plats `
-            --output-json 2>&1
+        $blogArgs = @(
+            'scripts\generate_blog.py',
+            '--url',       $row.targetUrl,
+            '--name',      $Name,
+            '--row',       "$($row._dataRow)",
+            '--platforms', $plats,
+            '--output-json'
+        )
+        if ($row.Title) { $blogArgs += @('--title', $row.Title) }
+        $all = & python @blogArgs 2>&1
 
         if ($LASTEXITCODE -eq 0) {
             $jsonLine = $all | Where-Object { "$_" -match '"blog_title"\s*:' } | Select-Object -Last 1
