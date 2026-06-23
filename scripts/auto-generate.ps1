@@ -132,17 +132,54 @@ function Invoke-SocialPass {
         if ($LASTEXITCODE -eq 0) {
             $jsonLine = $all | Where-Object { "$_" -match '"x"\s*:|"threads"\s*:|"instagram"\s*:' } | Select-Object -Last 1
             $xl = 0; $fl = 0; $ll = 0; $tl = 0; $il = 0
+            $genData = $null
             if ($jsonLine) {
                 try {
-                    $c = "$jsonLine" | ConvertFrom-Json
-                    $xl = if ($c.x)         { $c.x.Length }         else { 0 }
-                    $fl = if ($c.facebook)  { $c.facebook.Length }  else { 0 }
-                    $ll = if ($c.linkedin)  { $c.linkedin.Length }  else { 0 }
-                    $tl = if ($c.threads)   { $c.threads.Length }   else { 0 }
-                    $il = if ($c.instagram) { $c.instagram.Length } else { 0 }
+                    $genData = "$jsonLine" | ConvertFrom-Json
+                    $xl = if ($genData.x)         { $genData.x.Length }         else { 0 }
+                    $fl = if ($genData.facebook)  { $genData.facebook.Length }  else { 0 }
+                    $ll = if ($genData.linkedin)  { $genData.linkedin.Length }  else { 0 }
+                    $tl = if ($genData.threads)   { $genData.threads.Length }   else { 0 }
+                    $il = if ($genData.instagram) { $genData.instagram.Length } else { 0 }
                 } catch {}
             }
             Write-Host ("           [OK] X={0} | FB={1} | LI={2} | TH={3} | IG={4} chars" -f $xl, $fl, $ll, $tl, $il) -ForegroundColor Green
+
+            # Auto-queue posting for each generated platform
+            $djangoUrl = $env:DJANGO_API_URL
+            if ($djangoUrl -and $genData) {
+                foreach ($plat in $missing) {
+                    $postContent = switch ($plat) {
+                        'x'         { if ($genData.x)         { $genData.x }         else { "" } }
+                        'facebook'  { if ($genData.facebook)  { $genData.facebook }  else { "" } }
+                        'linkedin'  { if ($genData.linkedin)  { $genData.linkedin }  else { "" } }
+                        'threads'   { if ($genData.threads)   { $genData.threads }   else { "" } }
+                        'instagram' { if ($genData.instagram) { $genData.instagram } else { "" } }
+                        default     { "" }
+                    }
+                    if (-not $postContent) { continue }
+
+                    $body = @{
+                        name      = $Name
+                        sheetRow  = $row._dataRow
+                        platform  = $plat
+                        tab       = "social"
+                        targetUrl = $row.targetUrl
+                        title     = $row.Title
+                        xPost     = if ($genData.x)        { $genData.x }        else { "" }
+                        fbPost    = if ($genData.facebook) { $genData.facebook } else { "" }
+                        liPost    = if ($genData.linkedin) { $genData.linkedin } else { "" }
+                    } | ConvertTo-Json -Compress
+
+                    try {
+                        $resp = Invoke-RestMethod -Uri "$djangoUrl/api/v1/sheet/post-now/" `
+                            -Method POST -ContentType "application/json" -Body $body -TimeoutSec 10
+                        Write-Host ("           [QUEUED] {0} → worker will post" -f $plat.ToUpper()) -ForegroundColor Green
+                    } catch {
+                        Write-Host ("           [QUEUE FAILED] {0}: {1}" -f $plat, $_) -ForegroundColor Yellow
+                    }
+                }
+            }
         } else {
             Write-Host "           [FAILED]" -ForegroundColor Red
             $all | Select-Object -Last 5 | ForEach-Object { Write-Host "             $_" -ForegroundColor DarkYellow }
@@ -198,14 +235,47 @@ function Invoke-BlogPass {
             $jsonLine = $all | Where-Object { "$_" -match '"blog_title"\s*:' } | Select-Object -Last 1
             $titleOut = ""
             $wordCount = 0
+            $blogData = $null
             if ($jsonLine) {
                 try {
-                    $c = "$jsonLine" | ConvertFrom-Json
-                    $titleOut = $c.blog_title
-                    if ($c.html_content) { $wordCount = ($c.html_content -split '\s+').Count }
+                    $blogData = "$jsonLine" | ConvertFrom-Json
+                    $titleOut = $blogData.blog_title
+                    if ($blogData.html_content) { $wordCount = ($blogData.html_content -split '\s+').Count }
                 } catch {}
             }
             Write-Host ("           [OK] '{0}'  (~{1} words)" -f $titleOut, $wordCount) -ForegroundColor Green
+
+            # Auto-queue publishing for each blog platform
+            $djangoUrl = $env:DJANGO_API_URL
+            if ($djangoUrl -and $blogData -and $blogData.blog_content) {
+                foreach ($plat in ($plats -split ',')) {
+                    $plat = $plat.Trim()
+                    if (-not $plat) { continue }
+
+                    $body = @{
+                        name             = $Name
+                        sheetRow         = $row._dataRow
+                        platform         = $plat
+                        tab              = "blog"
+                        targetUrl        = $row.targetUrl
+                        title            = $row.Title
+                        blogTitle        = $blogData.blog_title
+                        blogContent      = $blogData.blog_content
+                        blogDescription  = $blogData.blog_description
+                        seoTitle         = $blogData.seo_title
+                        seoDescription   = $blogData.seo_description
+                        coverImageUrl    = $blogData.cover_image_url
+                    } | ConvertTo-Json -Compress
+
+                    try {
+                        $resp = Invoke-RestMethod -Uri "$djangoUrl/api/v1/sheet/post-now/" `
+                            -Method POST -ContentType "application/json" -Body $body -TimeoutSec 10
+                        Write-Host ("           [QUEUED] {0} → worker will publish" -f $plat.ToUpper()) -ForegroundColor Green
+                    } catch {
+                        Write-Host ("           [QUEUE FAILED] {0}: {1}" -f $plat, $_) -ForegroundColor Yellow
+                    }
+                }
+            }
         } else {
             Write-Host "           [FAILED]" -ForegroundColor Red
             $all | Select-Object -Last 6 | ForEach-Object { Write-Host "             $_" -ForegroundColor DarkYellow }
