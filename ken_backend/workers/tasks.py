@@ -370,9 +370,10 @@ def execute_blog_publish(self, blog_job_id: int, platform: str):
             result.save(update_fields=['status', 'post_url', 'posted_at', 'raw_output'])
             if cols and job.sheet_row:
                 _write_blog_sheet(user.nickname, job.sheet_row, {
-                    cols['url']:    post_url,
-                    cols['status']: 'posted',
-                    cols['batch']:  job.batch_label or '',
+                    cols['url']:       post_url,
+                    cols['status']:    'posted',
+                    cols['batch']:     job.batch_label or '',
+                    'lastPostedBlog':  timezone.now().isoformat(),
                 })
         else:
             raise RuntimeError(proc.stderr[-1000:] or proc.stdout[-1000:])
@@ -395,15 +396,20 @@ def execute_blog_publish(self, blog_job_id: int, platform: str):
 def _write_blog_sheet(nickname: str, row: int, updates: dict):
     import json as _json, subprocess as _sp
     try:
-        _sp.run(
+        proc = _sp.run(
             ['python', os.path.join(REPO_ROOT, 'scripts', 'sheet_write.py'),
              '--sheet', 'blog', '--name', nickname,
-             '--row', str(row), '--updates', _json.dumps(updates)],
-            cwd=REPO_ROOT, timeout=30,
+             '--row', str(row), '--updates', _json.dumps(updates, ensure_ascii=False)],
+            capture_output=True, text=True,
+            cwd=REPO_ROOT, timeout=60,
             env={**os.environ, 'PYTHONIOENCODING': 'utf-8', 'PYTHONUTF8': '1'},
         )
+        if proc.returncode != 0:
+            print(f'[blog_sheet_write] FAILED row={row} nick={nickname}: {proc.stderr[-500:]}', flush=True)
+        else:
+            print(f'[blog_sheet_write] OK row={row} nick={nickname}', flush=True)
     except Exception as e:
-        print(f'[blog_sheet_write] failed: {e}', flush=True)
+        print(f'[blog_sheet_write] exception row={row}: {e}', flush=True)
 
 
 # ── Generate & Post (event-driven, triggered by form submission) ───────────────
