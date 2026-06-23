@@ -37,6 +37,13 @@ function PlatformSection({ title, platforms, row, name, tab }: {
   const liPost = getField(row, 'LinkedIn Post', 'linkedinPost');
   const targetUrl = getField(row, 'targetUrl', 'Target URL');
   const rowTitle  = getField(row, 'Title', 'title', 'Blog Title');
+  const blogContentLocal = getField(row, 'Blog Content', 'blogContent');
+  const blogTitleLocal   = getField(row, 'Blog Title', 'blogTitle');
+  const blogDesc         = getField(row, 'Blog Description', 'blogDescription');
+  const liCaption        = getField(row, 'LinkedIn Caption', 'linkedinCaption', 'caption');
+  const seoTitle         = getField(row, 'SEO Title', 'seoTitle');
+  const seoDesc          = getField(row, 'SEO Description', 'seoDescription', 'seoDesc');
+  const coverImage       = getField(row, 'Cover Image URL', 'coverImageUrl', 'imageUrl');
 
   const contentMap: Record<string, string> = { x: xPost, facebook: fbPost, linkedin: liPost };
 
@@ -48,14 +55,24 @@ function PlatformSection({ title, platforms, row, name, tab }: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name:      name.toLowerCase(),
-          sheetRow:  row._sheetRow,
-          platform:  platformKey,
+          name:        name.toLowerCase(),
+          sheetRow:    row._sheetRow,
+          platform:    platformKey,
+          tab,
           targetUrl,
-          title:     rowTitle,
+          title:       rowTitle,
+          // social
           xPost,
           fbPost,
           liPost,
+          // blog
+          blogContent: blogContentLocal,
+          blogTitle:   blogTitleLocal,
+          blogDescription: blogDesc,
+          linkedinCaption: liCaption,
+          seoTitle,
+          seoDescription: seoDesc,
+          coverImageUrl:  coverImage,
         }),
       });
       const data = await res.json();
@@ -81,8 +98,8 @@ function PlatformSection({ title, platforms, row, name, tab }: {
           const batch   = getField(row, ...p.batchCols);
           const error   = getField(row, ...p.errorCols);
           const isPosted = status === 'posted' || status === 'success' || status === 'done';
-          const hasContent = tab === 'social' ? !!contentMap[p.key] : false;
-          const canPost = tab === 'social' && hasContent && !isPosted;
+          const hasContent = tab === 'social' ? !!contentMap[p.key] : !!blogContentLocal;
+          const canPost = hasContent && !isPosted;
 
           return (
             <div key={p.key} className="flex items-center justify-between bg-slate-800/60 rounded-lg px-3 py-2 gap-3">
