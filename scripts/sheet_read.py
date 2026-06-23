@@ -227,19 +227,39 @@ def action_blog_unprocessed(sheet_name, limit=15):
 
 def action_unposted_main(sheet_name, limit=15):
     """
-    Returns rows from Agentic Sheet where any of X/FB/LI Status is empty.
+    Returns rows from Social tab where any enabled platform's Status is empty.
+    Checks X, FB, LinkedIn, Threads, and Instagram — but only those listed in
+    the row's Platforms column (empty Platforms = X,Facebook,LinkedIn defaults).
     """
     headers, data_rows = get_all_rows(sheet_name)
 
-    status_cols = ["X Status", "FB Status", "LinkedIn Status"]
+    PLATFORM_STATUS_COL = {
+        "x":         "X Status",
+        "facebook":  "FB Status",
+        "linkedin":  "LinkedIn Status",
+        "threads":   "Thread status",
+        "instagram": "Instagram Status",
+    }
+    DEFAULT_PLATFORMS = {"x", "facebook", "linkedin"}
+
     result = []
     for i, row in enumerate(data_rows):
         d = row_to_dict(headers, row, i + 1)
         if not d.get("targetUrl", "").strip():
             continue
-        pending = [p for p in status_cols if not d.get(p, "").strip()]
+
+        platforms_raw = d.get("Platforms", "").strip()
+        if platforms_raw:
+            enabled = {p.strip().lower() for p in platforms_raw.split(",")}
+        else:
+            enabled = DEFAULT_PLATFORMS
+
+        pending = [
+            plat for plat, col in PLATFORM_STATUS_COL.items()
+            if plat in enabled and not d.get(col, "").strip()
+        ]
         if pending:
-            d["_pending"] = [p.replace(" Status", "") for p in pending]
+            d["_pending"] = pending
             result.append(d)
             if len(result) >= limit:
                 break

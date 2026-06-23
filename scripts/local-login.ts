@@ -8,6 +8,8 @@
  *   npx tsx scripts/local-login.ts --name aniket --platform x
  *   npx tsx scripts/local-login.ts --name aniket --platform fb
  *   npx tsx scripts/local-login.ts --name aniket --platform li
+ *   npx tsx scripts/local-login.ts --name aniket --platform threads
+ *   npx tsx scripts/local-login.ts --name aniket --platform instagram
  *
  * Blog platforms (LinkedIn Pulse reuses --platform li):
  *   npx tsx scripts/local-login.ts --name aniket --platform medium
@@ -42,11 +44,14 @@ if (!name || !platform) {
   process.exit(1);
 }
 
-const PLATFORMS: Record<string, { url: string; label: string; filePrefix: string }> = {
+const PLATFORMS: Record<string, { url: string; label: string; filePrefix: string; outDir?: string }> = {
   // Social
   x:         { url: 'https://x.com/i/flow/login',               label: 'X (Twitter)',     filePrefix: 'x'         },
   fb:        { url: 'https://www.facebook.com/login',            label: 'Facebook',        filePrefix: 'fb'        },
   li:        { url: 'https://www.linkedin.com/login',            label: 'LinkedIn',        filePrefix: 'li'        },
+  // Threads + Instagram — sessions saved to scripts/sessions/ (prefix_name.json format)
+  threads:   { url: 'https://www.threads.net/login',             label: 'Threads',         filePrefix: 'threads',  outDir: 'scripts/sessions' },
+  instagram: { url: 'https://www.instagram.com/accounts/login/', label: 'Instagram',       filePrefix: 'instagram', outDir: 'scripts/sessions' },
   // Blog — LinkedIn Pulse reuses the li session (no separate login needed)
   medium:    { url: 'https://medium.com/m/signin',               label: 'Medium',          filePrefix: 'medium'    },
   notion:    { url: 'https://www.notion.so/login',               label: 'Notion',          filePrefix: 'notion'    },
@@ -65,7 +70,6 @@ if (!PLATFORMS[platform]) {
 }
 
 const OUT_DIR = '.sessions-cookies';
-fs.mkdirSync(OUT_DIR, { recursive: true });
 
 const { url: loginUrl, label: platformLabel, filePrefix } = PLATFORMS[platform];
 
@@ -120,7 +124,12 @@ async function main() {
     return;
   }
 
-  const outFile = path.join(OUT_DIR, `${filePrefix}-${name}.json`);
+  const saveDir = PLATFORMS[platform].outDir ?? OUT_DIR;
+  fs.mkdirSync(saveDir, { recursive: true });
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  // threads/instagram use underscore (threads_pranav.json) to match posting scripts
+  const sep = PLATFORMS[platform].outDir ? '_' : '-';
+  const outFile = path.join(saveDir, `${filePrefix}${sep}${name}.json`);
 
   console.log(`\n  Logging into ${platformLabel} as "${name}"`);
   console.log(`    Output: ${outFile}\n`);

@@ -88,7 +88,9 @@ function Invoke-SocialPass {
         $_.targetUrl -and (
             -not $_.'X Post' -or
             -not $_.'FB Post' -or
-            -not $_.'LinkedIn Post'
+            -not $_.'LinkedIn Post' -or
+            -not $_.'Thread Post' -or
+            -not $_.'Instagram Post'
         )
     })
 
@@ -99,10 +101,21 @@ function Invoke-SocialPass {
         $i++
         $label = if ($row.Title) { $row.Title } else { $row.targetUrl }
 
+        # Determine which platforms are enabled for this row (from Platforms column)
+        $enabledPlatforms = if ($row.Platforms) {
+            @($row.Platforms -split ',\s*' | ForEach-Object { $_.Trim().ToLower() })
+        } else {
+            @('x', 'facebook', 'linkedin')
+        }
+
         $missing = @()
-        if (-not $row.'X Post')        { $missing += 'x' }
-        if (-not $row.'FB Post')       { $missing += 'facebook' }
-        if (-not $row.'LinkedIn Post') { $missing += 'linkedin' }
+        if ((-not $row.'X Post')         -and ($enabledPlatforms -contains 'x'))         { $missing += 'x' }
+        if ((-not $row.'FB Post')        -and ($enabledPlatforms -contains 'facebook'))   { $missing += 'facebook' }
+        if ((-not $row.'LinkedIn Post')  -and ($enabledPlatforms -contains 'linkedin'))   { $missing += 'linkedin' }
+        if ((-not $row.'Thread Post')    -and ($enabledPlatforms -contains 'threads'))    { $missing += 'threads' }
+        if ((-not $row.'Instagram Post') -and ($enabledPlatforms -contains 'instagram')) { $missing += 'instagram' }
+
+        if ($missing.Count -eq 0) { continue }
         $plats = $missing -join ','
 
         Write-Host ""
@@ -117,15 +130,19 @@ function Invoke-SocialPass {
             --platforms $plats 2>&1
 
         if ($LASTEXITCODE -eq 0) {
-            $jsonLine = $all | Where-Object { "$_" -match '"x"\s*:' } | Select-Object -Last 1
-            $xl = 0; $fl = 0; $ll = 0
+            $jsonLine = $all | Where-Object { "$_" -match '"x"\s*:|"threads"\s*:|"instagram"\s*:' } | Select-Object -Last 1
+            $xl = 0; $fl = 0; $ll = 0; $tl = 0; $il = 0
             if ($jsonLine) {
                 try {
                     $c = "$jsonLine" | ConvertFrom-Json
-                    $xl = $c.x.Length; $fl = $c.facebook.Length; $ll = $c.linkedin.Length
+                    $xl = if ($c.x)         { $c.x.Length }         else { 0 }
+                    $fl = if ($c.facebook)  { $c.facebook.Length }  else { 0 }
+                    $ll = if ($c.linkedin)  { $c.linkedin.Length }  else { 0 }
+                    $tl = if ($c.threads)   { $c.threads.Length }   else { 0 }
+                    $il = if ($c.instagram) { $c.instagram.Length } else { 0 }
                 } catch {}
             }
-            Write-Host ("           [OK] X={0} | FB={1} | LI={2} chars" -f $xl, $fl, $ll) -ForegroundColor Green
+            Write-Host ("           [OK] X={0} | FB={1} | LI={2} | TH={3} | IG={4} chars" -f $xl, $fl, $ll, $tl, $il) -ForegroundColor Green
         } else {
             Write-Host "           [FAILED]" -ForegroundColor Red
             $all | Select-Object -Last 5 | ForEach-Object { Write-Host "             $_" -ForegroundColor DarkYellow }

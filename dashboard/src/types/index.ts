@@ -49,6 +49,20 @@ export const SOCIAL_PLATFORMS: PlatformDef[] = [
     batchCols: ['liBatch', 'LI Batch'],
     errorCols: ['LinkedIn Error', 'linkedinError'],
   },
+  {
+    key: 'threads', label: 'Threads', icon: '@', color: '#000000',
+    statusCols: ['Thread status'],
+    urlCols: ['Thread Post URl'],
+    batchCols: ['Thread Batch'],
+    errorCols: ['Thread Error'],
+  },
+  {
+    key: 'instagram', label: 'Instagram', icon: '📷', color: '#E1306C',
+    statusCols: ['Instagram Status'],
+    urlCols: ['Instagram Post URl'],
+    batchCols: ['instagram Batch'],
+    errorCols: ['Instagram Error'],
+  },
 ];
 
 export const BLOG_PLATFORMS: PlatformDef[] = [

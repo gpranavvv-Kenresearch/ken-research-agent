@@ -45,7 +45,9 @@ For each row, read the `Platforms` column (e.g. `X,Facebook` or `LinkedIn` or em
   - `x` / `X` / `twitter` / `Twitter` → **X**
   - `fb` / `FB` / `facebook` / `Facebook` → **Facebook**
   - `li` / `LI` / `linkedin` / `LinkedIn` → **LinkedIn**
-- Store the resolved set for the row (e.g. `{X, Facebook}`).
+  - `threads` / `Threads` → **Threads**
+  - `instagram` / `Instagram` / `ig` / `IG` → **Instagram**
+- Store the resolved set for the row (e.g. `{X, Threads}`).
 - This is checked **before** the batch-schedule gate in Phase 4: if a platform is not in the row's set, skip it for that row regardless of batch schedule.
 
 ---
@@ -277,7 +279,29 @@ If current batch not in platform's schedule → skip that platform for ALL rows 
 - **Exit 1** → read `scripts/artifacts/resume.json` → MCP fallback via `skills/post-linkedin.md`
 - On login failure → error must include email
 
-**On any failure:** write error to sheet via sheet.py, close browser, move on — never stop batch.
+**4d. Post to Threads** (only if row's `Threads Status` is empty AND `Threads` is in row's platform set)
+- Use the Threads post generated in Phase 3.5 (generate_content.py with `--platforms threads`)
+- Look up row's `Name` in Threads/Instagram Accounts list → get email + password (same as Instagram credentials)
+- If not found → write `Threads Status` = `error`, `Threads Error` = `Account not found` → skip
+- Write post text to temp file `/tmp/threads_post_row{n}.txt`, then run:
+  ```
+  npx tsx scripts/post-threads.ts --nickname {name} --email {e} --password {p} --post-file /tmp/threads_post_row{n}.txt --row {n} --batch {b}
+  ```
+- **Exit 0** → done ✓
+- **Exit 1** → read `scripts/artifacts/resume.json` → MCP fallback (navigate threads.net manually)
+
+**4e. Post to Instagram** (only if row's `Instagram Status` is empty AND `Instagram` is in row's platform set AND `Instagram Post` content is generated AND `Cover Image URL` is set in the row)
+- Use the Instagram caption generated in Phase 3.5 (generate_content.py with `--platforms instagram`)
+- Look up row's `Name` in Threads/Instagram Accounts list → get email + password
+- If not found → write `Instagram Status` = `error` → skip
+- Write caption to temp file `/tmp/ig_post_row{n}.txt`, then run:
+  ```
+  npx tsx scripts/post-instagram.ts --nickname {name} --email {e} --password {p} --post-file /tmp/ig_post_row{n}.txt --image-url {coverImageUrl} --row {n} --batch {b}
+  ```
+- **Exit 0** → done ✓
+- **Exit 1** → read `scripts/artifacts/resume.json` → MCP fallback
+
+**On any failure:** write error to sheet via sheet_write.py, close browser, move on — never stop batch.
 
 ---
 
@@ -286,9 +310,11 @@ If current batch not in platform's schedule → skip that platform for ALL rows 
 ```
 === Batch {label} Complete ===
 Rows processed: {N}
-X:  {posted} posted, {errors} errors
-FB: {posted} posted, {errors} errors
-LI: {posted} posted, {errors} errors
+X:         {posted} posted, {errors} errors
+FB:        {posted} posted, {errors} errors
+LI:        {posted} posted, {errors} errors
+Threads:   {posted} posted, {errors} errors
+Instagram: {posted} posted, {errors} errors
 ```
 
 ---
@@ -308,5 +334,6 @@ LI: {posted} posted, {errors} errors
 - Each post = its own browser session (navigate → post → close)
 - Never reuse browser across accounts or platforms
 - If sheet read fails → stop and report
-- Max 15 rows × 3 platforms = 45 posts per batch
+- Max 15 rows × 5 platforms = 75 posts per batch (when all platforms enabled)
+- Threads and Instagram only run when explicitly listed in row's `Platforms` column
 - **Fallback:** If Web App is down, use `python sheet.py` commands

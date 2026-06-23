@@ -138,6 +138,28 @@ def call_ai(prompt: str) -> str:
         return call_nvidia(prompt)
 
 
+# ── Text sanitiser ───────────────────────────────────────────────────────────
+
+def _sanitise(text: str) -> str:
+    """Remove every dash/hyphen variant the model loves to sneak in."""
+    import re as _re
+    replacements = {
+        '—': ' - ',   # em dash —
+        '–': '-',     # en dash –
+        '‑': '-',     # non-breaking hyphen ‑
+        '‒': '-',     # figure dash ‒
+        '―': ' - ',   # horizontal bar ―
+        '﹘': '-',     # small em dash ﹘
+        '﹣': '-',     # small hyphen-minus ﹣
+        '－': '-',     # fullwidth hyphen－
+    }
+    for char, repl in replacements.items():
+        text = text.replace(char, repl)
+    # Collapse any accidental double-spaces left behind
+    text = _re.sub(r'  +', ' ', text)
+    return text.strip()
+
+
 # ── Content generators ────────────────────────────────────────────────────────
 
 def build_context(title: str, url: str, description: str, page_text: str, web_snippets: str) -> str:
@@ -152,108 +174,273 @@ Web Research:
 {web_snippets[:800]}"""
 
 
-def generate_x(context: str) -> str:
-    prompt = f"""You are a market intelligence analyst at Ken Research. Write ONE tweet for this market report.
+def generate_x(context: str, url: str = '', name: str = '') -> str:
+    # Build UTM URL — appended after tweet body
+    sep = '&' if '?' in url else '?'
+    campaign = f'Automation{name.strip().title()}' if name else 'Automation'
+    utm_url = f'{url}{sep}utm_source=X&utm_medium=Social&utm_campaign={campaign}' if url else ''
+
+    prompt = f"""You are a market intelligence analyst at Ken Research. Write ONE tweet body for this market report.
 
 {context}
 
-MANDATORY FORMAT:
-[Country/Region] [market name] [market size OR CAGR fact]. [Second key finding or driver]. #[Tag1] #[Tag2]
+MANDATORY FORMAT — TWO SENTENCES ONLY:
+Sentence 1: [Market name] [verb] [USD value] [by year] at [X%] CAGR.
+Sentence 2: [Key driver or segment] [verb] [specific data point].
+Last: #[Tag1] #[Tag2]
 
-HARD RULES:
-- 200-220 characters TOTAL (count carefully — URL is added separately, do NOT include it)
-- First word group MUST be a number: market size in USD, CAGR %, or YoY growth rate
-- "Ken Research" must NOT appear in the tweet (it will be on the account profile)
-- Exactly 2 hashtags — specific to the market and geography
-- BANNED: "projected to", "is set to", "poised to", "expected to outpace", "revenues are"
-  Use direct statements: "market hits", "to reach", "grows at", "valued at"
-- No em dashes, no en dashes, no quotes around the tweet
+ABSOLUTE RULES — BREAKING ANY OF THESE = WRONG:
+- DO NOT include any URL or link. The URL is appended automatically.
+- DO NOT write any call-to-action. BANNED: "Dive into", "Explore", "Check out", "Read more", "See the full report", "Learn more", "Full picture", "Find out"
+- DO NOT use vague language. BANNED: "sees big shifts", "gearing up", "game-changing", "big changes ahead", "surging demand lifts", "set to", "poised to", "is expected to"
+- DO NOT include "Ken Research" anywhere in the tweet
+- DO NOT use em dashes, en dashes, or non-breaking hyphens
+- DO NOT put quotes around the tweet
+- Exactly 2 hashtags at the end — specific to market and geography
+- 160-190 characters for the tweet body ONLY (URL is added on a separate line)
 
-CORRECT EXAMPLES (count characters before posting):
+CORRECT FORMAT (copy this style exactly):
+Indonesia animal health market to reach $794M by 2030 at 4.2% CAGR. Government vaccination drives 38% of demand growth. #AnimalHealth #Indonesia
+
+Spain ceramic market valued at $4.0B by 2030 growing at 3.6% CAGR. Residential construction leads with 52% segment share. #Ceramics #Spain
+
 India cold chain market to reach $22B by 2028 at 14.2% CAGR. Pharma and e-grocery drive 73% of capacity adds. #ColdChain #India
-Saudi Arabia e-learning market at $380M in 2021, growing 12.4% CAGR through 2026. Mobile-first adoption leads. #Edtech #SaudiArabia
-Philippines casino GGR hits $2.1B in 2022 at 9.3% CAGR. Integrated resort expansion drives 68% of revenue. #GamingAsia #Philippines
 
-Return ONLY the tweet text. No quotes around it, no explanation."""
-    return call_ai(prompt)
+WRONG (do not do this):
+"Indonesia's animal health sector sees big shifts ahead as surging demand lifts market toward $794M. Dive into: https://..." — WRONG: has CTA, has URL, vague language
+"Spain ceramic market is gearing up for a game-changing outlook. Explore the momentum: https://..." — WRONG: has CTA, has URL, vague language
+
+Return ONLY the tweet body text. Two sentences + 2 hashtags. No URL. Nothing else."""
+    body = _sanitise(call_ai(prompt))
+    import re as _re
+    body = _re.sub(r'https?://\S+', '', body).strip()
+    if utm_url:
+        return f'{body}\n{utm_url}'
+    return body
 
 
-def generate_facebook(context: str) -> str:
+def generate_facebook(context: str, url: str = '', name: str = '') -> str:
+    sep = '&' if '?' in url else '?'
+    campaign = f'Automation{name.strip().title()}' if name else 'Automation'
+    utm_url = f'{url}{sep}utm_source=Facebook&utm_medium=Social&utm_campaign={campaign}' if url else ''
+
     prompt = f"""You are a market intelligence analyst at Ken Research. Write a Facebook post for this market report.
 
 {context}
 
-MANDATORY STRUCTURE (follow exactly):
+MANDATORY STRUCTURE — follow this exactly, section by section:
 
-LINE 1 (hook): One sentence with a specific market figure. Start with the number.
-Example: "$2.1B — that is the size of the Philippines casino market in 2022, growing at 9.3% CAGR."
+LINE 1 (hook — one sentence only):
+Either: A surprising or counter-intuitive insight about this market.
+Or: The single most important number with context.
+Examples:
+"The Malaysia furniture market is shifting faster than most suppliers realise, and the numbers confirm it."
+"Most analysts spotlight residential construction as the main driver of India's PVC pipes market. The real surge is coming from large-scale infrastructure projects in the North-East region."
+DO NOT start with: "In today's", "In an era", "The world is witnessing", "It is no secret", "As we navigate"
 
-PARAGRAPH 2 (market overview, 3-4 sentences):
-- Total market size and CAGR
-- Forecast year and projected value
-- Top 1-2 growth drivers with data
+BLANK LINE
 
-PARAGRAPH 3 (key insights, 3-4 sentences):
-- Key market segment driving growth
-- Regional or competitive angle
-- Any policy, regulation, or demand shift worth noting
+PARAGRAPH (2-3 sentences — market size, CAGR, geography leader):
+State the projected market value, CAGR %, forecast year, and dominant region or segment. Be specific.
 
-CLOSING LINE: "Full report linked below."
+BLANK LINE
+
+BULLET POINTS (3-4 bullets using this labeled format):
+• [Label] - [specific insight with data or company name or policy name]
+• [Label] - [specific insight]
+• [Label] - [specific insight]
+• [Label] - [specific insight, optional]
+
+Label examples: "Residential segment", "Share shift", "Competitor move", "Policy tailwind", "Demand driver", "Key player", "Sustainability angle"
+Each bullet must have a concrete fact, number, company name, or policy name.
+
+BLANK LINE
+
+ACTION LINE (1-2 sentences):
+Start with "This means..." or "Companies should..." or "Procurement teams must..."
+Give a specific, time-bound recommendation for investors, procurement, or strategy teams.
+
+BLANK LINE
+
+CTA LINE (exact format):
+Read the full report: {utm_url if utm_url else '[URL]'}
+
+BLANK LINE
+
+HASHTAGS (5-7 tags, last line):
+Always include #KenResearch. Add 4-6 tags specific to the market, geography, and theme.
 
 RULES:
-- 160-220 words total
-- 1 emoji max, only if it fits naturally (not at the start of every line)
-- Mention "Ken Research" once as the source: "as per Ken Research" or "according to Ken Research"
+- 220-300 words total (not counting hashtag line)
+- Use specific numbers, company names, policy names — no vague statements
 - No em dashes, no en dashes
-- No URL in body
-- BANNED openers: "In today's", "In an era of", "The world is witnessing", "It is no secret"
+- No emojis
+- "Ken Research" must NOT appear in the body text (it is in the hashtag only)
+- The bullet label format is: "• Label - insight" (dash, not colon)
 
-Return ONLY the post text."""
-    return call_ai(prompt)
+Return ONLY the post text. Follow the structure above exactly."""
+    return _sanitise(call_ai(prompt))
 
 
-def generate_linkedin(context: str) -> str:
+def generate_linkedin(context: str, url: str = '', name: str = '') -> str:
+    sep = '&' if '?' in url else '?'
+    campaign = f'Automation{name.strip().title()}' if name else 'Automation'
+    utm_url = f'{url}{sep}utm_source=LinkedIn&utm_medium=Social&utm_campaign={campaign}' if url else ''
+
     prompt = f"""You are a senior market intelligence analyst at Ken Research. Write a LinkedIn post for this market report.
+
+{context}
+
+MANDATORY STRUCTURE — follow section by section:
+
+LINE 1 (hook — ONE sentence, must be a question):
+Frame it as: "When [specific business pain or operational pressure the reader faces], [direct question about their readiness or decision for a specific year]?"
+The question must speak directly to a procurement lead, investor, or strategy director — use their language.
+
+CORRECT hook examples:
+"When vehicle downtime starts eating into your service-center margins, which multi-brand car-service contracts have you secured for 2026?"
+"When cold-chain failures cost your pharma clients millions per shipment, which logistics partners have you locked in for 2025?"
+"When EV fleet adoption outpaces your current charging infrastructure, which energy contracts have you negotiated for 2027?"
+
+WRONG hooks (do not use):
+"The India AI market is booming and here is why." — statement, not a question
+"Did you know the Indonesia market is growing at 9%?" — weak generic question
+"In today's rapidly evolving landscape..." — banned opener
+
+BLANK LINE
+
+PARAGRAPH 1 (market context, 2-3 sentences):
+State the market trajectory and key geography or segment angle.
+IMPORTANT: If you do not have a precise dollar value, write "multi-billion-dollar" or "multi-crore" — do NOT write "XX billion" or "$0" or any placeholder number.
+Mention CAGR % if known. Mention which city tier or region is accelerating fastest.
+
+BLANK LINE
+
+BULLET POINTS (3-4 bullets using this exact format):
+• [Specific stat or label] - [insight with real number, company name, or policy name]
+• [Specific stat or label] - [insight]
+• [Company name or policy name] - [what they announced or what the rule requires]
+• [Demand or trend stat] - [insight with number and year]
+
+Each bullet must contain at least one of: a %, a year, a company name, or a policy name.
+NEVER write a bullet with only vague language and no data anchor.
+
+BLANK LINE
+
+ACTION LINE (1-2 sentences):
+Start with "Lock in", "Evaluate", "Secure", or "Set a".
+Give a specific, time-bound recommendation — mention a deadline (90-day window, Q4 2026, etc.)
+
+BLANK LINE
+
+CTA LINE (exact format):
+Explore the full report: {utm_url if utm_url else '[URL]'}
+
+RULES:
+- 200-270 words total (not counting CTA line)
+- No hashtags
+- No em dashes, no en dashes
+- No emojis
+- Do NOT mention "Ken Research" in the body
+- Do NOT write placeholder numbers like "XX billion", "$0", "X%"
+- BANNED: "In today's rapidly evolving landscape", "It goes without saying", "As we navigate", "Thrilled to share", "Proud to share", "Exciting times"
+
+Return ONLY the post text. Follow the structure above exactly."""
+    return _sanitise(call_ai(prompt))
+
+
+def generate_threads(context: str, url: str = '', name: str = '') -> str:
+    sep = '&' if '?' in url else '?'
+    campaign = f'Automation{name.strip().title()}' if name else 'Automation'
+    utm_url = f'{url}{sep}utm_source=Threads&utm_medium=Social&utm_campaign={campaign}' if url else ''
+
+    prompt = f"""You are a market intelligence analyst at Ken Research. Write a Threads post for this market report.
+
+{context}
+
+MANDATORY FORMAT — 5 lines exactly, then URL and hashtags:
+
+LINE 1 (hook statement): "The real question for [specific audience — procurement teams / investors / operators] is [who/what] will [strategic outcome] as [market dynamic]."
+The hook must name a specific competitive or strategic pressure. NOT a question. NOT generic.
+CORRECT: "The real question for logistics operators is who will lock in the capacity contracts before regional freight rates spike again."
+WRONG: "The market is growing rapidly." / "Have you considered this market?"
+
+LINE 2 (market data): "By [year] the [market name] is projected to [reach/surpass] [value or multi-billion-dollar], driven by [top driver 1] and [top driver 2]."
+If no precise USD value is available, write "a multi-billion-dollar valuation" — never write "XX billion" or "$0".
+
+LINE 3: "→ [Specific pain point, blind spot, or competitive pressure that creates urgency for the reader]"
+LINE 4: "→ [Second pressure — policy, supply constraint, pricing, or demand shift]"
+LINE 5: "→ [Third pressure — margin risk, capacity gap, or regulatory deadline]"
+
+BLANK LINE
+
+URL: {utm_url if utm_url else '[URL]'}
+
+HASHTAGS (3-4 on last line): Always specific to market and geography. No #KenResearch needed.
+
+RULES:
+- Lines 1-5 must total 350-420 characters (tight — count carefully)
+- No em dashes, no en dashes
+- No emojis
+- No URL in lines 1-5 (URL goes on its own line after the blank line)
+- Arrow must be → (Unicode right arrow), not - or *
+
+Return ONLY the post text in this format. Nothing else."""
+    body = _sanitise(call_ai(prompt))
+    import re as _re
+    body = _re.sub(r'https?://\S+', '', body).strip()
+    if utm_url:
+        return f'{body}\n\n{utm_url}'
+    return body
+
+
+def generate_instagram(context: str, url: str = '', name: str = '') -> str:
+    sep = '&' if '?' in url else '?'
+    campaign = f'Automation{name.strip().title()}' if name else 'Automation'
+    utm_url = f'{url}{sep}utm_source=Instagram&utm_medium=Social&utm_campaign={campaign}' if url else ''
+
+    prompt = f"""You are a market intelligence analyst at Ken Research. Write an Instagram caption for this market report (the image is already provided separately).
 
 {context}
 
 MANDATORY STRUCTURE:
 
-LINE 1 (scroll-stopper): A single bold data statement. No question. No filler.
-Example: "The Thailand catering market is valued at $4.8B in 2022 and growing at 8.1% CAGR through 2027."
+LINE 1 (hook — 1 sentence): A bold market statement with a specific number. Make it visual and punchy.
+CORRECT: "$794M and growing — Indonesia's animal health market is moving faster than most investors realise."
+WRONG: "In today's rapidly evolving landscape..." / "Did you know..."
 
-[blank line]
+BLANK LINE
 
-PARAGRAPH 1 (market context, 3-4 sentences):
-What is driving this market? Quantify the top 2 drivers with % or USD figures.
-Use: "As per Ken Research analysis..." or "Ken Research estimates..."
+PARAGRAPH (3-4 sentences): Market size, CAGR, forecast year, dominant segment or geography. Each stat bolded with emojis allowed here only.
+Use real numbers. If no precise value, write "multi-billion-dollar".
 
-PARAGRAPH 2 (segments and players, 3-4 sentences):
-Which segment leads? Which geography or player is winning? What is the market share split?
-At least 2 data points with numbers.
+BLANK LINE
 
-PARAGRAPH 3 (outlook, 2-3 sentences):
-What changes in policy, tech, or consumer behavior will shape the next 3-5 years?
-Forward-looking but grounded in data from the report.
+INSIGHTS (4-5 bullet points using • symbol):
+• [Key segment or driver] — [specific stat or company name]
+• [Policy or regulation] — [impact with year]
+• [Competitive angle] — [specific player or market share]
+• [Geographic angle] — [city/region + stat]
+• [Forward-looking insight] — [what changes by 2028/2030]
 
-[blank line]
+BLANK LINE
 
-CLOSING (1 sentence): A sharp question for professionals — investment angle, competitive strategy, or policy implication.
+CTA LINE: "Full report linked in bio. 🔗" OR "Link in bio for the complete forecast. 📊"
 
-[blank line]
+BLANK LINE
 
-HASHTAGS: Exactly 4-5 hashtags relevant to the market and region. Last line only.
+HASHTAGS (12-15 tags): Mix of broad (#MarketResearch #BusinessIntelligence) and specific (#IndonesiaAnimalHealth #VetCare).
+Always include: #KenResearch #MarketIntelligence
 
 RULES:
-- 220-300 words total (tight and dense — no padding)
-- At least 4 specific numbers across the post (CAGR, USD value, %, year)
+- 150-250 words total (not counting hashtags)
+- DO NOT include the URL in the caption body (it goes in bio)
 - No em dashes, no en dashes
-- No URL in body
-- BANNED: "In today's rapidly evolving landscape", "It goes without saying", "As we navigate",
-  "Exciting times", "Proud to share", "Thrilled to announce"
+- Up to 5 emojis total (used sparingly, only on data lines and CTA)
+- BANNED openers: "In today's", "In an era", "The world is witnessing"
 
-Return ONLY the post text."""
-    return call_ai(prompt)
+Return ONLY the caption text."""
+    return _sanitise(call_ai(prompt))
 
 
 # ── Sheet write helper ────────────────────────────────────────────────────────
@@ -318,7 +505,7 @@ def main():
 
     if 'x' in platforms:
         print('[generate_content] Generating X tweet...', file=sys.stderr)
-        results['x'] = generate_x(context)
+        results['x'] = generate_x(context, url=args.url, name=args.name)
         if args.row > 0:
             write_to_sheet(args.name, args.row, {'X Post': results['x']})
             print('[generate_content] X Post written to sheet', file=sys.stderr)
@@ -326,7 +513,7 @@ def main():
 
     if 'facebook' in platforms:
         print('[generate_content] Generating Facebook post...', file=sys.stderr)
-        results['facebook'] = generate_facebook(context)
+        results['facebook'] = generate_facebook(context, url=args.url, name=args.name)
         if args.row > 0:
             write_to_sheet(args.name, args.row, {'FB Post': results['facebook']})
             print('[generate_content] FB Post written to sheet', file=sys.stderr)
@@ -334,10 +521,26 @@ def main():
 
     if 'linkedin' in platforms:
         print('[generate_content] Generating LinkedIn post...', file=sys.stderr)
-        results['linkedin'] = generate_linkedin(context)
+        results['linkedin'] = generate_linkedin(context, url=args.url, name=args.name)
         if args.row > 0:
             write_to_sheet(args.name, args.row, {'LinkedIn Post': results['linkedin']})
             print('[generate_content] LinkedIn Post written to sheet', file=sys.stderr)
+        time.sleep(1)
+
+    if 'threads' in platforms:
+        print('[generate_content] Generating Threads post...', file=sys.stderr)
+        results['threads'] = generate_threads(context, url=args.url, name=args.name)
+        if args.row > 0:
+            write_to_sheet(args.name, args.row, {'Thread Post': results['threads']})
+            print('[generate_content] Threads Post written to sheet', file=sys.stderr)
+        time.sleep(1)
+
+    if 'instagram' in platforms:
+        print('[generate_content] Generating Instagram caption...', file=sys.stderr)
+        results['instagram'] = generate_instagram(context, url=args.url, name=args.name)
+        if args.row > 0:
+            write_to_sheet(args.name, args.row, {'Instagram Post': results['instagram']})
+            print('[generate_content] Instagram Post written to sheet', file=sys.stderr)
         time.sleep(1)
 
     # Output results as JSON to stdout (read by Celery task)

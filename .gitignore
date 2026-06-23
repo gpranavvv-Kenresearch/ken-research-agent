@@ -42,3 +42,9 @@ scripts/__pycache__/
 Thumbs.db
 
 .vercel
+
+# Auto-generated / cache dirs (not source code)
+graphify-out/
+.agents/
+.codex/
+pollinations-sample.png

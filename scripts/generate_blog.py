@@ -206,9 +206,22 @@ def pick_related_urls(target_url: str, url_pool: list, n: int = 10) -> list:
     return [url for _, url in scored[:n]]
 
 
-def make_utm_url(url: str, platform_slug: str) -> str:
+def make_utm_url(url: str, platform_slug: str, name: str = '') -> str:
     sep = '&' if '?' in url else '?'
-    return f'{url}{sep}utm_source={platform_slug}&utm_medium=Referral&utm_campaign=Automation'
+    campaign = f'Automation{name.strip().title()}' if name else 'Automation'
+    return f'{url}{sep}utm_source={platform_slug}&utm_medium=Referral&utm_campaign={campaign}'
+
+
+def _sanitise(text: str) -> str:
+    """Strip every dash variant the model sneaks in."""
+    import re as _re
+    for char, repl in {
+        '—': ' - ', '–': '-', '‑': '-',
+        '‒': '-', '―': ' - ', '﹘': '-',
+        '﹣': '-', '－': '-',
+    }.items():
+        text = text.replace(char, repl)
+    return _re.sub(r'  +', ' ', text).strip()
 
 
 def url_to_anchor(url: str) -> str:
@@ -331,10 +344,11 @@ def build_generation_prompt(
     cover_image_url: str,
     market_name: str,
     country: str,
+    name: str = '',
 ) -> str:
 
-    sample_utm = make_utm_url(sample_url, platform_slug)
-    kr_home_utm = make_utm_url('https://www.kenresearch.com/', platform_slug)
+    sample_utm = make_utm_url(sample_url, platform_slug, name)
+    kr_home_utm = make_utm_url('https://www.kenresearch.com/', platform_slug, name)
 
     interlinks_block = '\n'.join(
         f'  {i+1}. URL: {make_utm_url(url, platform_slug)}\n     Anchor: {url_to_anchor(url)}'
@@ -346,7 +360,7 @@ def build_generation_prompt(
         'target="_blank" rel="noopener"'
     )
 
-    return f"""You are a senior B2B market intelligence writer for Ken Research. Write a complete HTML article for LinkedIn Pulse.
+    return f"""You are a senior B2B market intelligence writer for Ken Research. Write a complete HTML article for LinkedIn Pulse optimised for Google E-E-A-T, AIO (AI search engines), and GEO (ChatGPT/Gemini/Perplexity citations).
 
 == MARKET DATA ==
 Report Title: {title}
@@ -367,122 +381,175 @@ Web Research - Policy / Regulation / Demand Shifts:
 {research.get('policies', '')[:500]}
 
 == LINKS TO EMBED ==
-Ken Research Homepage: {kr_home_utm}
 Target Report (main CTA): {target_utm}
 Sample Report (secondary CTA): {sample_utm}
 
-Related Reports — use exactly 8-10 of these as interlinks in body paragraphs and FAQ answers:
+Related Reports — pick exactly 8 from this list, one per H2 body section:
 {interlinks_block}
 
 Cover Image: {cover_image_url or '(none)'}
 
 == ABSOLUTE RULES — VIOLATION = REJECT ==
-1. NO em dashes (—) or en dashes (–) anywhere in the entire output. Use comma or colon instead.
+1. NO em dashes (—) or en dashes (–) anywhere. Use comma or colon instead.
 2. ALL numbers, percentages, USD values wrapped in <strong> tags. Zero bare numbers allowed.
 3. Exactly 5 FAQ questions (H3). No more, no less.
 4. Exactly 10-12 <a href links total across the whole article.
-5. Word count: 1,300-1,400 words. Count every word including headings, lists, FAQs.
-6. Every H2 heading must contain at least one data figure (%, USD, CAGR, billion, million).
+5. Word count: 1,500-1,800 words. Count every word including headings, lists, FAQs.
+6. Every H2 body paragraph MUST contain exactly 1 related report interlink (except the at-a-glance box).
 7. Use "as per Ken Research" or "as tracked by Ken Research" at least 3 times in body paragraphs.
-8. The intro paragraph (first <p>) must have ZERO anchor links in sentence 1 and 2.
-   Sentence 3 must link to the target report. Sentence 4 must link to KR homepage.
-9. Exactly 2 CTA blocks: first uses "Download Sample Report", second uses "{market_name} Report".
-10. No "Ken Research" in any H2 heading text.
-11. Every <a> tag: use SINGLE QUOTES for href. Include style and target attributes exactly as shown below.
-12. Article MUST end with the Ken Research branding paragraph as the final element.
-13. Use 2026 as the present year. Use historical data only as context.
-14. No source list, no "Research Basis" section at the end.
+8. Exactly 2 CTA blocks: first uses "Download Sample Report", second uses "{market_name} Report".
+9. No "Ken Research" in any H2 heading text.
+10. Every <a> tag: SINGLE QUOTES for href. Include style and target attributes exactly as shown.
+11. Article MUST end with the Ken Research branding paragraph as the final element.
+12. Use 2026 as the present year. Use historical data only as context.
+13. DO NOT include a Research Methodology section, Analyst Perspective section, or any comparison table.
 
 Link format for ALL anchors (copy exactly):
 <a href='URL' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>Anchor Text</strong></a>
 
 == BLOG TITLE RULES ==
-Blog Title (for the article title field, 85-115 chars):
+Blog Title (85-115 chars):
 - Ends with " | Ken Research"
 - Never starts with "Ken Research"
-- Must include a specific number (CAGR, market size, or forecast value)
-- Use power words: Surge, Race, Reshape, Dominate, Unlock, Accelerate
+- Must include a specific number: CAGR %, USD value, or forecast year
+- Use active power verbs: Surges, Races, Reshapes, Unlocks, Accelerates, Hits, Crosses
 - NOT a question
+- CORRECT: "India Cold Chain Market to Hit $22B by 2028 at 14.2% CAGR, Driven by Pharma | Ken Research"
+- WRONG: "Ken Research Report on..." or "The Growing Market for..."
 
-H1 Title (shown at top of article, 100-130 chars):
+H1 Title (100-130 chars):
 - Never starts with "Ken Research"
-- Ken Research appears in the MIDDLE or END
+- Ken Research appears in the MIDDLE or END only
 - Must include one data figure
+- CORRECT: "India Cold Chain Logistics Market Set to Hit $22B by 2028 at 14.2% CAGR: Ken Research Analysis"
 
-== HTML STRUCTURE — FOLLOW EXACTLY ==
+== AIO H2 HEADING RULES ==
+H2 headings must match how users ask AI engines questions. Use natural language:
+- CORRECT: "Why Is the {market_name} Growing So Fast?" (AIO query format)
+- CORRECT: "Which Segment Is Driving Growth in the {market_name}?" (AIO query)
+- CORRECT: "Top Trends Shaping the {market_name}" (trend discovery query)
+- WRONG: "Market Overview" / "Key Growth Drivers" / "Market Analysis" (generic, not AI-query-friendly)
+
+== HTML STRUCTURE — FOLLOW EXACTLY IN THIS ORDER ==
 
 <img src='{cover_image_url or ""}' alt='{market_name} market research'>
 <h1>[H1 title 100-130 chars with data figure, Ken Research in middle or end]</h1>
 
-<p>[INTRO: Sentence 1 — striking market fact, no link. Sentence 2 — second key insight, no link.
-Sentence 3 — "The full analysis is available in the <a href='{target_utm}' ...><strong>[market name] report</strong></a> by Ken Research."
-Sentence 4 — "Ken Research is a leading market intelligence firm; visit the <a href='{kr_home_utm}' ...><strong>Ken Research website</strong></a> for coverage across [sector/region]."]</p>
+<!-- EXECUTIVE SUMMARY — first paragraph, functions as AIO snippet bait -->
+<p>[EXECUTIVE SUMMARY — 5-6 sentences. This must read like a dense briefing note, not an introduction.
+S1: Current market size in USD and the forecast value with year. Both figures bolded. E.g. "The {market_name} was valued at <strong>$X billion in 2025</strong> and is projected to reach <strong>$Y billion by 203X</strong>."
+S2: CAGR figure bolded. Name the single biggest growth driver with a specific stat or policy reference.
+S3: Name the fastest-growing segment and its share or growth rate. Bold the figure.
+S4: Name the dominant geography or city tier and its contribution. Bold the figure.
+S5: One forward-looking insight — what will change by 2028/2030 and why (policy, tech, demand).
+S6: "The complete <a href='{target_utm}' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>{market_name} report</strong></a> by Ken Research covers segment forecasts, competitive benchmarks, and regional breakdown."
+DO NOT add: "Ken Research is a leading firm; visit our website". DO NOT add a link to the KR homepage here.]</p>
 
-<p><em>This analysis draws on Ken Research market modelling, [sector] operator disclosures, demand indicators, and third-party [sector] estimates.</em></p>
+<p><em>This analysis draws on Ken Research market modelling, [sector] operator disclosures, government data, and third-party estimates.</em></p>
 
-<h2>[Section 1 heading — market size or valuation WITH USD figure and CAGR]</h2>
-<p>[80+ words. 1 related report interlink. 3-4 bolded stats. Use "as per Ken Research".]</p>
-<p>[60+ words. Implications and context. No extra links.]</p>
+<!-- AT A GLANCE BOX — AIO structured data signal -->
+<h2>{market_name} at a Glance</h2>
 <ul>
-  <li><strong style="color:#000000;">[Segment/Driver Label]:</strong> [detail with bolded stat]</li>
-  <li><strong style="color:#000000;">[Segment/Driver Label]:</strong> [detail with bolded stat]</li>
-  <li><strong style="color:#000000;">[Segment/Driver Label]:</strong> [detail with bolded stat]</li>
-  <li><strong style="color:#000000;">[Segment/Driver Label]:</strong> [detail with bolded stat]</li>
+  <li><strong>Market Size (2025/2026):</strong> [USD value — use real number from data, not placeholder]</li>
+  <li><strong>Forecast Value:</strong> [USD value by forecast year]</li>
+  <li><strong>CAGR:</strong> <strong>[X.X]%</strong></li>
+  <li><strong>Fastest Growing Segment:</strong> [specific segment name]</li>
+  <li><strong>Dominant Region:</strong> [specific region, city, or country tier]</li>
+  <li><strong>Major Growth Driver:</strong> [specific policy, tech, or demand force]</li>
+</ul>
+<p>[40-60 words. 1-2 sentences contextualising the glance box — what these numbers mean strategically. No interlink here.]</p>
+
+<!-- SECTION 1: Market size — AIO query H2 -->
+<h2>[H2: AIO query — e.g. "How Big Is the {market_name} and Where Is It Headed?"]</h2>
+<p>[100+ words. 3-4 bolded stats. Use "as per Ken Research". MUST include 1 related report interlink from the list above.]</p>
+<ul>
+  <li><strong style="color:#000000;">[Segment/Layer Label]:</strong> [detail with bolded stat]</li>
+  <li><strong style="color:#000000;">[Segment/Layer Label]:</strong> [detail with bolded stat]</li>
+  <li><strong style="color:#000000;">[Segment/Layer Label]:</strong> [detail with bolded stat]</li>
+  <li><strong style="color:#000000;">[Segment/Layer Label]:</strong> [detail with bolded stat]</li>
 </ul>
 
-<h2>[Section 2 heading — key growth drivers WITH % or USD figure]</h2>
-<p>[80+ words. 1 related report interlink. 3+ bolded stats. Use "as tracked by Ken Research".]</p>
-<p>[60+ words. Expand on competitive or regulatory context. No extra links.]</p>
+<!-- SECTION 2: Growth drivers — AIO query H2 -->
+<h2>[H2: AIO query — e.g. "Why Is the {market_name} Growing So Rapidly?"]</h2>
+<p>[100+ words. 3+ bolded stats. Use "as tracked by Ken Research". MUST include 1 related report interlink.]</p>
 <ul>
-  <li>...</li>
-  <li>...</li>
-  <li>...</li>
-  <li>...</li>
+  <li><strong style="color:#000000;">[Driver Label]:</strong> [detail with bolded stat or policy name]</li>
+  <li><strong style="color:#000000;">[Driver Label]:</strong> [detail with bolded stat]</li>
+  <li><strong style="color:#000000;">[Driver Label]:</strong> [detail with bolded stat]</li>
+  <li><strong style="color:#000000;">[Driver Label]:</strong> [detail with bolded stat]</li>
 </ul>
 
 <div class="cta-block">
   <p>Need granular segment data and company benchmarks? <a href='{sample_utm}' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>Download Sample Report</strong></a> to preview the full methodology and data tables.</p>
 </div>
 
-<h2>[Section 3 heading — phrased as a question ending with ?]</h2>
-<p>[80+ words. 1 related report interlink. Address the question with data.]</p>
+<!-- SECTION 3: Top Trends — AIO discovery queries via H3 -->
+<h2>Top Trends Shaping the {market_name}</h2>
+<p>[30-40 words. Scene-setting sentence for the trends. MUST include 1 related report interlink.]</p>
+<h3>[Trend 1 — specific technology or behaviour name, 4-6 words]</h3>
+<p>[60+ words. 1 bolded stat or company name. No interlink.]</p>
+<h3>[Trend 2]</h3>
+<p>[60+ words. 1 bolded stat or policy. No interlink.]</p>
+<h3>[Trend 3]</h3>
+<p>[60+ words. 1 bolded stat. No interlink.]</p>
+<h3>[Trend 4]</h3>
+<p>[60+ words. No interlink.]</p>
+<h3>[Trend 5]</h3>
+<p>[60+ words. No interlink.]</p>
 
-<h2>[Section 4 heading — forward-looking, includes a year like 2027/2028/2030]</h2>
-<p>[80+ words. 1 related report interlink. Use "as per Ken Research".]</p>
+<!-- SECTION 4: Competitive landscape -->
+<h2>[H2: AIO query — e.g. "Who Are the Major Players in the {market_name}?"]</h2>
 <ul>
-  <li>...</li>
-  <li>...</li>
-  <li>...</li>
+  <li>[Company 1]: [1 sentence — what they do in this market, known market share or recent strategic move]</li>
+  <li>[Company 2]: [1 sentence]</li>
+  <li>[Company 3]: [1 sentence]</li>
+  <li>[Company 4]: [1 sentence]</li>
+  <li>[Company 5]: [1 sentence]</li>
+  <li>[Company 6]: [1 sentence]</li>
 </ul>
+<p>[60+ words. Competitive dynamics summary. Use "as per Ken Research". MUST include 1 related report interlink.]</p>
+
+<!-- SECTION 5: Challenges -->
+<h2>[H2: AIO query — e.g. "What Challenges Does the {market_name} Face?"]</h2>
+<ul>
+  <li>[Challenge 1 — specific: include a measurable impact, company name, or policy constraint]</li>
+  <li>[Challenge 2]</li>
+  <li>[Challenge 3]</li>
+  <li>[Challenge 4]</li>
+  <li>[Challenge 5]</li>
+</ul>
+<p>[60+ words. Commentary on how the market is responding to these challenges. MUST include 1 related report interlink.]</p>
 
 <div class="cta-block">
   <p>For the complete competitive landscape and segment-level forecasts, access the <a href='{target_utm}' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>{market_name} Report</strong></a> from Ken Research.</p>
 </div>
 
+<!-- CONCLUSION -->
 <h2>Conclusion</h2>
-<p>[60+ words. Summarise the 3 most important insights. Include one final link to the target report.]</p>
+<p>[80+ words. Summarise the 3 most important takeaways. Use "as per Ken Research". MUST include 1 related report interlink pointing to the target report.]</p>
 
+<!-- FAQ — 5 questions, Q1/Q3/Q5 have interlinks -->
 <h2>Frequently Asked Questions</h2>
 
-<h3>Q1: [Specific question about market size or CAGR]</h3>
-<p>[70+ words. No interlink. At least 2 bolded stats. Answer directly.]</p>
+<h3>Q1: What is the current size of the {market_name} and what is the projected value by the end of the forecast period?</h3>
+<p>[90+ words. At least 2 bolded stats. MUST include 1 related report interlink.]</p>
 
-<h3>Q2: [Question about key growth drivers]</h3>
-<p>[70+ words. Include 1 interlink. Reference "Ken Research".]</p>
+<h3>Q2: What compound annual growth rate is the {market_name} expected to maintain over the next five to seven years, and what factors sustain this pace?</h3>
+<p>[90+ words. Bold the CAGR. Name 2 specific drivers. No interlink.]</p>
 
-<h3>Q3: [Question about leading companies or segments]</h3>
-<p>[70+ words. Include 1 interlink. Use specific company names or segment shares.]</p>
+<h3>Q3: Which segment within the {market_name} is recording the fastest expansion, and what structural demand forces are behind this acceleration?</h3>
+<p>[90+ words. Name the segment, give share or growth rate. MUST include 1 related report interlink.]</p>
 
-<h3>Q4: [Question about policy, regulation, or government initiative]</h3>
-<p>[70+ words. No interlink. Ground in data from the research.]</p>
+<h3>Q4: How are government policies, digital initiatives, or regulatory frameworks in {country} shaping the trajectory of the {market_name}?</h3>
+<p>[90+ words. Name the specific policy or initiative, year enacted, and measurable impact. No interlink.]</p>
 
-<h3>Q5: [Question about the forecast or future outlook]</h3>
-<p>[70+ words. Include 1 interlink. Forward-looking with year.]</p>
+<h3>Q5: Where can business leaders, investors, and procurement teams access the full forecast data, competitive benchmarks, and segment-level analysis for the {market_name}?</h3>
+<p>[70+ words. Direct answer pointing to Ken Research. MUST include link to the target report.]</p>
 
-<p>For the full competitive benchmarking, segment-level forecasts, and regional breakdown, access the <a href='{target_utm}' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>{market_name} Report</strong></a> from Ken Research, a leading market intelligence firm specialising in [sector] across [region/country].</p>
+<p>For the full competitive benchmarking, segment-level forecasts, and regional breakdown, access the <a href='{target_utm}' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>{market_name} Report</strong></a> from Ken Research, a leading market intelligence firm covering [sector] across [region/country].</p>
 
 == OUTPUT FORMAT ==
-Return ONLY valid JSON — no markdown fences, no commentary, just the raw JSON object:
+Return ONLY valid JSON — no markdown fences, no commentary:
 {{
   "blog_title": "...",
   "h1_title": "...",
@@ -491,11 +558,39 @@ Return ONLY valid JSON — no markdown fences, no commentary, just the raw JSON 
   "linkedin_caption": "..."
 }}
 
-blog_title: 85-115 chars total, ends with " | Ken Research", includes a number, never starts with "Ken Research"
+blog_title: 85-115 chars, ends with " | Ken Research", includes a number, never starts with "Ken Research"
 h1_title: 100-130 chars, Ken Research in middle or end, includes a data figure
 html_content: complete HTML from <img> to the final KR branding <p>, no markdown
-seo_description: 155-165 chars plain text, no HTML, no em dashes, includes market name and a figure
-linkedin_caption: 180-250 words — hook sentence (data stat) + blank line + 3-4 checkmark bullet points of key findings + blank line + one CTA sentence + blank line + 5-6 hashtags
+seo_description: 155-165 chars plain text, no HTML, no em dashes, no placeholder numbers, includes market name and a specific figure
+
+linkedin_caption: 200-260 words. Follow this structure EXACTLY:
+
+LINE 1 (hook — one question): "When [specific business pain], [direct question about their readiness for a specific year]?"
+
+BLANK LINE
+
+PARAGRAPH (2-3 sentences — market size, CAGR, geography angle. Use real numbers if known; write "multi-billion-dollar" if not):
+
+BLANK LINE
+
+BULLETS (3-4 labeled bullets):
+- [Label] - [specific insight with real number, company name, or policy name]
+- [Label] - [specific insight]
+- [Label] - [specific insight]
+
+BLANK LINE
+
+ACTION LINE: "Lock in [specific action] within [timeframe] to [specific benefit]."
+
+BLANK LINE
+
+CTA: "Read the full article: {target_utm}"
+
+BLANK LINE
+
+HASHTAGS: 4-5 hashtags. Always include #KenResearch.
+
+RULES for caption: no em dashes, no en dashes, no placeholder numbers, no "In today's", no "Thrilled to share"
 """
 
 
@@ -509,11 +604,11 @@ def generate_blog_content(
     cover_image_url: str,
     market_name: str,
     country: str,
+    name: str = '',
 ) -> dict:
     print('[generate_blog] Generating blog HTML content...', file=sys.stderr)
 
-    target_utm = make_utm_url(target_url, platform_slug)
-    # Build sample report URL from target slug
+    target_utm = make_utm_url(target_url, platform_slug, name)
     slug = urlparse(target_url).path.rstrip('/').split('/')[-1]
     sample_url = f'https://www.kenresearch.com/sample-report/{slug}'
 
@@ -529,6 +624,7 @@ def generate_blog_content(
         cover_image_url=cover_image_url,
         market_name=market_name,
         country=country,
+        name=name,
     )
 
     raw = call_ai(prompt, max_tokens=10000)
@@ -591,17 +687,21 @@ def find_unbolded_stats(html: str) -> bool:
 
 def run_quality_checks(html: str, blog_title: str, blog_desc: str) -> dict:
     combined = html + blog_title + blog_desc
+    wc = count_words(html)
+    lc = count_links(html)
+    fc = count_faqs(html)
     return {
         'no_em_dashes': not has_em_dashes(combined),
-        'word_count': count_words(html),
-        'link_count': count_links(html),
-        'faq_count': count_faqs(html),
+        'word_count': wc,
+        'link_count': lc,
+        'faq_count': fc,
         'char_count': len(html),
         'no_unbolded_stats': not find_unbolded_stats(html),
-        'word_count_ok': 1200 <= count_words(html) <= 1400,
-        'link_count_ok': 10 <= count_links(html) <= 12,
-        'faq_count_ok': count_faqs(html) == 5,
-        'char_count_ok': len(html) < 14000,
+        'word_count_ok': 1500 <= wc <= 1800,
+        'link_count_ok': 10 <= lc <= 12,
+        'faq_count_ok': fc == 5,
+        'char_count_ok': len(html) < 20000,
+        'has_glance_box': 'at a Glance' in html,
     }
 
 
@@ -609,71 +709,60 @@ def rate_blog(checks: dict, html: str, blog_title: str) -> int:
     """13-point rating system normalized to 10."""
     points = 0
 
-    # Check 1 (2pts): Zero em dashes
+    # 1 (2pts): Zero em dashes — non-negotiable
     if checks['no_em_dashes']:
         points += 2
 
-    # Check 2: Word count 1200-1400
+    # 2: Word count 1500-1800
     if checks['word_count_ok']:
         points += 1
 
-    # Check 3: Links 10-12
+    # 3: Links 10-12
     if checks['link_count_ok']:
         points += 1
 
-    # Check 4: Exactly 5 FAQs
+    # 4: Exactly 5 FAQs
     if checks['faq_count_ok']:
         points += 1
 
-    # Check 5: No unbolded stats
+    # 5: No unbolded stats
     if checks['no_unbolded_stats']:
         points += 1
 
-    # Check 6: Data density — at least 3 stats per paragraph (simplified)
+    # 6: Data density
     para_count = len(re.findall(r'<p>', html))
     strong_count = len(re.findall(r'<strong>', html))
     if para_count > 0 and strong_count / para_count >= 2:
         points += 1
 
-    # Check 7: H1 100-130 chars AND blog title 85-115 chars
+    # 7: H1 and blog title length
     h1_match = re.search(r'<h1>(.*?)</h1>', html, re.DOTALL)
     h1_text = re.sub(r'<[^>]+>', '', h1_match.group(1)) if h1_match else ''
-    h1_ok = 100 <= len(h1_text) <= 130
-    bt_ok = 85 <= len(blog_title) <= 115
-    if h1_ok and bt_ok:
+    if 100 <= len(h1_text) <= 130 and 85 <= len(blog_title) <= 115:
         points += 1
 
-    # Check 8: Both CTAs present
-    has_sample = 'Download Sample Report' in html
-    has_report_cta = 'cta-block' in html
-    if has_sample and has_report_cta:
+    # 8: Both CTAs present
+    if 'Download Sample Report' in html and 'cta-block' in html:
         points += 1
 
-    # Check 9: Ken Research mentioned 5-7 times
+    # 9: Ken Research mentioned 4-10 times
     kr_count = html.lower().count('ken research')
-    if 5 <= kr_count <= 9:
+    if 4 <= kr_count <= 10:
         points += 1
 
-    # Check 10: Implication density (3+ paragraphs with implication clause)
-    implication_words = ['signals', 'underpins', 'reshaping', 'validates', 'reflects',
-                         'directly', 'rewards', 'accelerating', 'creates a']
-    impl_count = sum(1 for w in implication_words if w in html.lower())
-    if impl_count >= 3:
+    # 10: Source attribution
+    source_phrases = ['as per ken research', 'as tracked by ken research',
+                      'as recorded', 'according to ken']
+    if sum(1 for p in source_phrases if p in html.lower()) >= 2:
         points += 1
 
-    # Check 11: Source attribution (2+ citation signals)
-    source_phrases = ['as per ken research', 'as per government', 'as tracked by',
-                      'as recorded', 'as per operator', 'as per official',
-                      'as per independent', 'according to ken']
-    src_count = sum(1 for p in source_phrases if p in html.lower())
-    if src_count >= 2:
-        points += 1
-
-    # Check 12: Decision-framer H2s (1+ with why/how/what/which or outcome verbs)
+    # 11: AIO H2s — at least 2 natural-language query H2s
     h2_texts = re.findall(r'<h2>(.*?)</h2>', html, re.IGNORECASE | re.DOTALL)
-    decision_h2 = sum(1 for h in h2_texts
-                      if re.search(r'\b(why|how|what|which|reshaping|unlocking|racing|signals|drives|marks|powering|emerging|leading)\b', h, re.IGNORECASE))
-    if decision_h2 >= 1:
+    if sum(1 for h in h2_texts if re.search(r'\b(why|how|what|which|who|where)\b', h, re.IGNORECASE)) >= 2:
+        points += 1
+
+    # 12: At-a-glance box present
+    if checks.get('has_glance_box'):
         points += 1
 
     normalized = round(points / 13 * 10)
@@ -691,8 +780,8 @@ def repair_blog(html: str, blog_title: str, blog_desc: str, checks: dict, resear
         failed.append('- Remove ALL em dashes (—) and en dashes (–). Replace each with a comma or colon.')
     if not checks['word_count_ok']:
         wc = checks['word_count']
-        if wc < 1200:
-            shortage = 1300 - wc
+        if wc < 1500:
+            shortage = 1600 - wc
             word_expansion_needed = shortage
             # Identify which H2 sections are short
             sections = re.findall(r'<h2>(.*?)</h2>(.*?)(?=<h2>|<div class="cta|<h2>Frequently|$)',
@@ -711,7 +800,7 @@ def repair_blog(html: str, blog_title: str, blog_desc: str, checks: dict, resear
                 f'  Use ONLY facts already in the article or from the research below — no invented data.'
             )
         else:
-            failed.append(f'- Word count is {wc}, above 1400. Remove some bullet points and trim FAQ answers.')
+            failed.append(f'- Word count is {wc}, above 2200. Trim bullet point descriptions and shorten FAQ answers.')
     if not checks['link_count_ok']:
         lc = checks['link_count']
         if lc < 10:
@@ -758,8 +847,7 @@ Output rules:
     repaired = repaired.strip()
     if repaired.endswith('```'):
         repaired = repaired[:-3].strip()
-    # Apply dash sanitization to repaired output too
-    repaired = repaired.replace('—', ',').replace('–', ',')
+    repaired = _sanitise(repaired)
     return repaired
 
 
@@ -864,6 +952,7 @@ def main():
         cover_image_url=cover_image_url,
         market_name=market_name,
         country=country,
+        name=args.name,
     )
 
     blog_title = data.get('blog_title', '')
@@ -872,18 +961,12 @@ def main():
     seo_description = data.get('seo_description', '')
     linkedin_caption = data.get('linkedin_caption', '')
 
-    # Post-process: strip em/en dashes from titles and descriptions before quality checks
-    # Replacing programmatically is more reliable than relying on the repair loop.
-    def _strip_dashes(text: str) -> str:
-        text = text.replace('—', ',').replace('–', ',')
-        text = re.sub(r'\s*,\s*', ', ', text)
-        return text
-
-    blog_title = _strip_dashes(blog_title)
-    h1_title = _strip_dashes(h1_title)
-    seo_description = _strip_dashes(seo_description)
-    # Replace dashes in HTML content too (within text nodes, not attributes)
-    html_content = html_content.replace('—', ',').replace('–', ',')
+    # Post-process: strip all dash variants from every output field
+    blog_title      = _sanitise(blog_title)
+    h1_title        = _sanitise(h1_title)
+    seo_description = _sanitise(seo_description)
+    linkedin_caption = _sanitise(linkedin_caption)
+    html_content    = _sanitise(html_content)
 
     # Combine blog description
     blog_description = f'{seo_description}, caption- {linkedin_caption}'
