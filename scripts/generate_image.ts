@@ -257,15 +257,18 @@ async function main() {
     if (sendBtn) await sendBtn.click();
     else await page.keyboard.press('Enter');
 
-    console.error('[generate_image] Prompt sent — waiting for DALL-E image (up to 5 min)...');
+    console.error('[generate_image] Prompt sent — checking every 60s, max 3 min...');
 
-    // Step 6: Poll for generated image
+    // Step 6: Poll for generated image — every 60s, max 3 minutes
     let imgSrc = '';
     const pollStart = Date.now();
-    const TIMEOUT_MS = 5 * 60 * 1000;
+    const TIMEOUT_MS = 3 * 60 * 1000;
 
     while (Date.now() - pollStart < TIMEOUT_MS) {
-      await page.waitForTimeout(15000);
+      await page.waitForTimeout(60000);
+
+      const elapsed = Math.round((Date.now() - pollStart) / 1000);
+      console.error(`[generate_image] Checking at ${elapsed}s...`);
 
       const bodyText = await page.evaluate(() => document.body.innerText);
       for (const phrase of ["can't create images", "content policy", "generation limit", "try again later", "something went wrong"]) {
@@ -285,13 +288,13 @@ async function main() {
 
       if (newSrc) {
         imgSrc = newSrc;
-        console.error(`[generate_image] Image found ✓`);
+        console.error(`[generate_image] Image found ✓ at ${elapsed}s`);
         break;
       }
-      console.error(`[generate_image] Waiting... ${Math.round((Date.now() - pollStart) / 1000)}s`);
+      console.error(`[generate_image] Not ready yet...`);
     }
 
-    if (!imgSrc) throw new Error('Image not generated within 5 minutes');
+    if (!imgSrc) throw new Error('Image not generated within 3 minutes');
 
     // Step 7: Download + upload to Cloudinary
     const imageBuffer = await fetchImageAsBuffer(imgSrc);

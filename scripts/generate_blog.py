@@ -303,7 +303,7 @@ def generate_cover_image(market_name: str, market_size: str = '', cagr: str = ''
             capture_output=True,
             text=True,
             cwd=repo_root,
-            timeout=360,  # 6 minutes: DALL-E generation can take up to 5 min
+            timeout=240,  # 4 minutes: 3 min poll + buffer
         )
         # Last stdout line is the JSON result
         stdout_lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
