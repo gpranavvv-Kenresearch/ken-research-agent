@@ -159,19 +159,26 @@ def post_now(request):
 
     if is_blog:
         from jobs.models import BlogJob
-        from workers.tasks import dispatch_blog_generation
+        from workers.tasks import dispatch_blog_generation, dispatch_blog_publish
+
+        blog_content = data.get('blogContent', '').strip()
 
         job, _ = BlogJob.objects.get_or_create(
             user=user, target_url=url, sheet_row=sheet_row,
             defaults={'title': title, 'platforms': platform, 'status': 'queued'},
         )
-        job.blog_title       = data.get('blogTitle', '') or job.blog_title
-        job.blog_content     = data.get('blogContent', '') or job.blog_content
-        job.blog_description = data.get('blogDescription', '') or job.blog_description
+        if data.get('blogTitle'):       job.blog_title       = data['blogTitle']
+        if blog_content:                job.blog_content     = blog_content
+        if data.get('blogDescription'): job.blog_description = data['blogDescription']
         job.save()
 
-        dispatch_blog_generation(job)
-        return Response({'queued': True, 'job_id': job.id, 'platform': platform, 'queue': f'blog.{user.nickname}'})
+        # If blog content already exists → skip generation, go straight to publish
+        if blog_content:
+            dispatch_blog_publish(job, platform)
+            return Response({'queued': True, 'job_id': job.id, 'platform': platform, 'action': 'publish', 'queue': f'blog.{user.nickname}'})
+        else:
+            dispatch_blog_generation(job)
+            return Response({'queued': True, 'job_id': job.id, 'platform': platform, 'action': 'generate', 'queue': f'blog.{user.nickname}'})
 
     else:
         from jobs.models import PostingJob
