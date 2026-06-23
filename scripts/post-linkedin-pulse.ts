@@ -60,8 +60,6 @@ async function main() {
   }
   const htmlContent = fs.readFileSync(htmlFile, 'utf-8');
 
-  // Load saved session or start fresh
-  const hasSession = fs.existsSync(SESSION_FILE);
   const browser = await chromium.launch({
     headless: false,
     channel: 'chrome',
@@ -75,51 +73,41 @@ async function main() {
     permissions: ['clipboard-read', 'clipboard-write'] as const,
   };
 
-  const context = await (hasSession
-    ? browser.newContext({ ...ctxOptions, storageState: SESSION_FILE })
-    : browser.newContext(ctxOptions)
-  );
-
+  // Always start fresh — LinkedIn invalidates sessions aggressively on automation detection
+  const context = await browser.newContext(ctxOptions);
   const page = await context.newPage();
 
   try {
-    // Step 1: Navigate to LinkedIn and verify login
-    await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(2000);
+    // Step 1: Login with credentials every time
+    console.log('[pulse] Logging in with credentials');
+    await page.goto('https://www.linkedin.com/login', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(1500);
 
-    const currentUrl = page.url();
-    const isLoggedIn = !currentUrl.includes('/login') && !currentUrl.includes('/checkpoint') && !currentUrl.includes('/authwall');
+    const emailField = await findElement(page, ['#username', 'input[name="session_key"]', 'input[autocomplete="username"]']);
+    if (!emailField) {
+      writeResumeFile('post-linkedin-pulse.ts', 'login-email', 'Email field not found', { email, row, batch, htmlFile });
+      await saveArtifacts(page, 'login-email', 'Email field not found');
+      await browser.close();
+      process.exit(1);
+    }
+    await emailField.fill(email);
 
-    if (!isLoggedIn) {
-      console.log('[pulse] Not logged in — logging in with credentials');
-      await page.goto('https://www.linkedin.com/login', { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForTimeout(1500);
+    const passField = await findElement(page, ['#password', 'input[name="session_password"]', 'input[type="password"]']);
+    if (!passField) {
+      writeResumeFile('post-linkedin-pulse.ts', 'login-password', 'Password field not found', { email, row });
+      await saveArtifacts(page, 'login-password', 'Password field not found');
+      await browser.close();
+      process.exit(1);
+    }
+    await passField.fill(password);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(5000);
 
-      const emailField = await findElement(page, ['#username', 'input[name="session_key"]', 'input[autocomplete="username"]']);
-      if (!emailField) {
-        writeResumeFile('post-linkedin-pulse.ts', 'login-email', 'Email field not found', { email, row, batch, htmlFile });
-        await saveArtifacts(page, 'login-email', 'Email field not found');
-        await browser.close();
-        process.exit(1);
-      }
-      await emailField.fill(email);
-
-      const passField = await findElement(page, ['#password', 'input[name="session_password"]', 'input[type="password"]']);
-      if (!passField) {
-        writeResumeFile('post-linkedin-pulse.ts', 'login-password', 'Password field not found', { email, row });
-        await saveArtifacts(page, 'login-password', 'Password field not found');
-        await browser.close();
-        process.exit(1);
-      }
-      await passField.fill(password);
-      await page.keyboard.press('Enter');
-      await page.waitForTimeout(5000);
-
-      // Check login success
-      const afterUrl = page.url();
-      if (afterUrl.includes('/login') || afterUrl.includes('/checkpoint')) {
-        writeResumeFile('post-linkedin-pulse.ts', 'login-verify', 'Login failed', { email, row });
-        await saveArtifacts(page, 'login-verify', 'Still on login page after submit');
+    // Check login success
+    const afterUrl = page.url();
+    if (afterUrl.includes('/login') || afterUrl.includes('/checkpoint')) {
+      writeResumeFile('post-linkedin-pulse.ts', 'login-verify', 'Login failed', { email, row });
+      await saveArtifacts(page, 'login-verify', 'Still on login page after submit');
         await browser.close();
         process.exit(1);
       }
