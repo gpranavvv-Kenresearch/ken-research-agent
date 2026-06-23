@@ -360,21 +360,26 @@ def execute_blog_publish(self, blog_job_id: int, platform: str):
 
         if proc.returncode == 0:
             post_url = ''
-            for line in proc.stdout.splitlines():
+            all_lines = proc.stdout.splitlines() + proc.stderr.splitlines()
+            for line in all_lines:
                 if line.startswith('POSTED_URL='):
                     post_url = line.split('=', 1)[1].strip()
+            print(f'[blog_publish] post_url={post_url!r}', flush=True)
+            print(f'[blog_publish] stdout tail: {proc.stdout[-500:]}', flush=True)
             result.status     = 'done'
             result.post_url   = post_url
             result.posted_at  = timezone.now()
             result.raw_output = proc.stdout[-2000:]
             result.save(update_fields=['status', 'post_url', 'posted_at', 'raw_output'])
             if cols and job.sheet_row:
-                _write_blog_sheet(user.nickname, job.sheet_row, {
+                updates = {
                     cols['url']:       post_url,
                     cols['status']:    'posted',
                     cols['batch']:     job.batch_label or '',
                     'lastPostedBlog':  timezone.now().isoformat(),
-                })
+                }
+                print(f'[blog_publish] writing sheet: {updates}', flush=True)
+                _write_blog_sheet(user.nickname, job.sheet_row, updates)
         else:
             raise RuntimeError(proc.stderr[-1000:] or proc.stdout[-1000:])
 
