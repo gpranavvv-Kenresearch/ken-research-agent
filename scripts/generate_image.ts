@@ -1,7 +1,7 @@
 /**
- * generate_image.ts — Generate a cover image via Pollinations.ai and upload to Cloudinary.
+ * generate_image.ts — Generate a cover image via ChatGPT DALL-E 3 and upload to Cloudinary.
  *
- * No browser, no login, no session required.
+ * Uses a persistent Chrome profile for ChatGPT (stays logged in long-term).
  * Called as a subprocess by generate_blog.py.
  *
  * Usage:
@@ -13,12 +13,19 @@
  *
  * Outputs JSON to stdout:
  *   {"status":"success","cloudinaryUrl":"https://res.cloudinary.com/..."}
- *   {"status":"error","message":"..."}
+ *   {"status":"error","message":"ChatGPT not logged in"}
  */
 
+import { chromium } from 'playwright';
+import fs from 'fs';
+import path from 'path';
 import https from 'https';
 import http from 'http';
 import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ── Arg parsing ───────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
@@ -32,11 +39,16 @@ const marketSize = get('--market-size', '');
 const cagr       = get('--cagr', '');
 const forecast   = get('--forecast', '');
 
-// ── Cloudinary config ────────────────────────────────────────────────────────
+// ── Cloudinary config ─────────────────────────────────────────────────────────
 const CLOUD_NAME = 'dutg2rtvr';
 const API_KEY    = '226785248494346';
 const API_SECRET = '6pX9f6a_QAFQmPriZDTCTgwtj0w';
 const FOLDER     = 'microblogs';
+
+// ── Persistent ChatGPT Chrome profile ─────────────────────────────────────────
+const SESSIONS_DIR   = path.join(__dirname, '..', '.sessions-cookies');
+const CHATGPT_PROFILE = path.join(SESSIONS_DIR, 'chatgpt-profile');
+fs.mkdirSync(CHATGPT_PROFILE, { recursive: true });
 
 // ── Sector detection ──────────────────────────────────────────────────────────
 function detectSector(name: string): { sectorName: string; accent: string; gradient: string } {
@@ -67,60 +79,88 @@ function detectSector(name: string): { sectorName: string; accent: string; gradi
 function deriveHeroVisual(name: string): string {
   const n = name.toLowerCase();
   if (/cold storage|cold chain/.test(n))
-    return 'A vast refrigerated warehouse with automated racking systems and reefer trucks loading at the dock';
+    return 'A vast refrigerated warehouse with automated racking systems and reefer trucks loading at the dock. Cold vapor rising from open blast-freeze chambers, forklifts moving pallets.';
   if (/courier|parcel|logistics|express/.test(n))
-    return 'A high-throughput last-mile logistics sorting hub with conveyor belts and delivery vehicles';
+    return 'A high-throughput last-mile logistics sorting hub with conveyor belts, delivery motorcycles, and stacked parcel bins.';
   if (/electric|ev|bus/.test(n))
-    return 'A wide electric vehicle charging plaza with rows of EVs plugged in under solar-paneled canopies';
+    return 'A wide electric vehicle charging plaza with rows of EVs plugged in under solar-paneled canopies.';
   if (/solar|renewable|wind/.test(n))
-    return 'A vast solar farm with rows of photovoltaic panels, wind turbines visible in the distance';
+    return 'A vast solar farm with rows of photovoltaic panels stretching to the horizon, wind turbines visible in the distance.';
   if (/pharma|drug|medicine|diagnostic|healthcare/.test(n))
-    return 'A modern pharmaceutical and diagnostics facility with precision equipment and digital health screens';
+    return 'A modern pharmaceutical and diagnostics facility with sterile cleanroom environment and precision medical equipment.';
   if (/ai|artificial intelligence/.test(n))
-    return 'A sleek AI operations center with neural network visualizations, data flows, and intelligent diagnostic screens';
+    return 'A sleek AI operations center with neural network visualizations, glowing data flows, and intelligent diagnostic screens.';
   if (/bank|financial|fintech/.test(n))
-    return 'A sleek modern financial data center with server racks and holographic trading screens';
+    return 'A sleek modern financial data center with server racks, holographic trading screens, and digital transaction flows.';
   if (/food|agriculture|crop|grain/.test(n))
-    return 'Vast agricultural fields with precision farming equipment and grain silos';
+    return 'Vast agricultural fields stretching to the horizon with precision farming equipment and grain silos.';
   if (/real estate|construction|building/.test(n))
-    return 'A modern skyline under construction with cranes and glass skyscrapers';
-  return 'A premium corporate intelligence operations center with market trend displays and analytical dashboards';
+    return 'A modern skyline under construction with cranes, glass skyscrapers, and urban infrastructure.';
+  return 'A premium corporate intelligence operations center with multiple data visualization screens, market trend displays, and analytical dashboards.';
 }
 
 function buildImagePrompt(name: string, size: string, cagr: string, forecast: string): string {
   const sector = detectSector(name);
   const hero   = deriveHeroVisual(name);
   const parts  = [size, cagr, forecast].filter(Boolean);
-  const dataLine = parts.join(' · ').slice(0, 120);
+  const dataLine = parts.join(' · ').slice(0, 100);
 
-  return `Premium editorial market intelligence cover image, 16:9 landscape (1920x1080). ` +
-    `Topic: ${name}. Sector: ${sector.sectorName}. ` +
-    `${dataLine ? `Data: ${dataLine}. ` : ''}` +
-    `Visual style: McKinsey or Bloomberg Intelligence strategic report cover. ` +
-    `Dark cinematic background: ${sector.gradient}. ` +
-    `Left 55%: bold white sans-serif title text "${name}", ${sector.accent} data line below. ` +
-    `Right 45%: ${hero}, with premium line chart overlay in ${sector.accent} showing market growth. ` +
-    `Thin ${sector.accent} accent strip at top. ` +
-    `No Ken Research logo, no company name, no watermark. ` +
-    `Professional, enterprise-grade, photorealistic quality.`;
+  return `Act as a premium editorial data visualization designer creating a production-ready cover image for a global strategic market intelligence firm.
+
+Create a finished 16:9 landscape cover (1920×1080) for:
+Post Title: ${name}
+${dataLine ? `Data Line: ${dataLine}` : ''}
+Sector: ${sector.sectorName}
+
+VISUAL DIRECTION:
+Design a premium, enterprise-grade editorial intelligence cover. The image must feel like a strategic market intelligence visual from McKinsey, Bain, or Bloomberg Intelligence. It must combine a cinematic sector hero scene with a layered analytical data visualization. The dominant accent color is ${sector.accent}.
+
+CANVAS LAYOUT:
+- LEFT ZONE = 55%: title text, data hook line, sector badge
+- RIGHT ZONE = 45%: data visualization chart + hero visual backdrop
+- 7% safe margin on all sides
+
+TOP ACCENT STRIP: Thin 3-4px bar in ${sector.accent} across the full top edge.
+
+BACKGROUND: Dark cinematic gradient: ${sector.gradient}. Left side darkest behind the text.
+
+LEFT TEXT CONTENT:
+Render EXACTLY this text: "${name}" — cross-check every word character by character. White text, 600 weight, clean premium sans-serif. Break into 3-4 lines naturally.
+${dataLine ? `DATA HOOK LINE directly below: "${dataLine}" — single line, ${sector.accent} color.` : ''}
+SECTOR BADGE: Small pill: "${sector.sectorName}" with transparent background, rounded corners.
+
+RIGHT-SIDE DATA VISUALIZATION:
+Premium analytical chart — line/area chart showing market growth trajectory over time. Bloomberg Terminal or McKinsey strategy visual style. Colored data points, trend curves, subtle grid lines at low opacity. Chart color: ${sector.accent}.
+
+MARKET INTELLIGENCE LABEL: Small top-right micro label "MARKET INTELLIGENCE" in tiny white text.
+
+HERO VISUAL (behind chart): ${hero} Apply schematic blueprint wireframe overlay. Keep at moderated opacity so chart remains primary.
+
+SIGNATURE OVERLAY: Thin wireframe mesh, drafting arcs, measurement ticks across full canvas at 8-12% opacity.
+
+BOTTOM-LEFT: Single thin vertical accent line in ${sector.accent}, 28-36px tall. NO text, NO brand name, NO logo, NO company name.
+BOTTOM-RIGHT: Clean negative space for manual logo placement. No text.
+
+STRICT RULES — DO NOT:
+- Render "Ken Research" or ANY company/brand name ANYWHERE on the image
+- Add any logo, monogram, or wordmark
+- Misspell the title "${name}"
+- Use cartoon colors or generic infographic style
+- Add any text except: the title, data line, sector badge, and MARKET INTELLIGENCE micro label
+
+OUTPUT: A finished premium consulting-grade market intelligence cover image. Cinematic atmosphere + analytical chart + bold editorial typography. Ready for publishing after manual logo placement in the bottom-right reserved zone.`;
 }
 
 // ── Fetch image buffer from URL ───────────────────────────────────────────────
-function fetchBuffer(url: string): Promise<Buffer> {
+function fetchImageAsBuffer(url: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const client = url.startsWith('https') ? https : http;
-    const req = client.get(url, { timeout: 60000 }, (res) => {
-      if (res.statusCode && res.statusCode >= 400) {
-        reject(new Error(`HTTP ${res.statusCode} from ${url}`));
-        return;
-      }
+    client.get(url, (res) => {
       const chunks: Buffer[] = [];
-      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('data', (chunk: Buffer) => chunks.push(chunk));
       res.on('end', () => resolve(Buffer.concat(chunks)));
       res.on('error', reject);
-    });
-    req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('Request timed out')); });
+    }).on('error', reject);
   });
 }
 
@@ -165,42 +205,116 @@ async function uploadToCloudinary(imageBuffer: Buffer, publicId: string): Promis
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
-  const prompt   = buildImagePrompt(marketName, marketSize, cagr, forecast);
-  const encoded  = encodeURIComponent(prompt);
-  const seed     = Math.floor(Math.random() * 999999);
+  const prompt = buildImagePrompt(marketName, marketSize, cagr, forecast);
 
-  // Pollinations.ai — free, no API key, no browser needed
-  const pollinationsUrl = `https://image.pollinations.ai/prompt/${encoded}?model=flux&width=1920&height=1080&seed=${seed}&nologo=true&enhance=true`;
+  console.error(`[generate_image] Starting ChatGPT DALL-E 3 for: ${marketName}`);
 
-  console.error(`[generate_image] Generating via Pollinations.ai for: ${marketName}`);
-  console.error(`[generate_image] URL length: ${pollinationsUrl.length} chars`);
+  const context = await chromium.launchPersistentContext(CHATGPT_PROFILE, {
+    headless: false,
+    channel: 'chrome',
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled', '--disable-infobars'],
+    viewport: { width: 1280, height: 900 },
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    ignoreDefaultArgs: ['--enable-automation'],
+  });
+
+  const page = context.pages()[0] || await context.newPage();
 
   try {
-    // Pollinations generates synchronously — just fetch the URL
-    const imageBuffer = await fetchBuffer(pollinationsUrl);
+    // Step 1: Navigate to ChatGPT
+    await page.goto('https://chatgpt.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(3000);
 
-    if (imageBuffer.length < 10000) {
-      throw new Error(`Image too small (${imageBuffer.length} bytes) — likely an error response`);
+    // Step 2: Verify login
+    const loginBtn = await page.$('button:has-text("Log in"), a:has-text("Log in")');
+    if (loginBtn) {
+      console.log(JSON.stringify({ status: 'error', message: 'ChatGPT not logged in — open Chrome with the chatgpt-profile and log in once, then retry' }));
+      await context.close();
+      process.exit(1);
+    }
+    console.error('[generate_image] ChatGPT logged in ✓');
+
+    // Step 3: Snapshot pre-existing images to detect new ones
+    const knownSrcs: string[] = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('img')).map(img => img.src).filter(Boolean)
+    );
+
+    // Step 4: Find chat input
+    const chatInput = await page.waitForSelector(
+      '#prompt-textarea, [data-testid="prompt-textarea"], [placeholder*="Message"], [contenteditable="true"]',
+      { timeout: 15000 }
+    );
+    if (!chatInput) throw new Error('Chat input not found');
+
+    await chatInput.click();
+    await page.waitForTimeout(500);
+
+    // Step 5: Send prompt
+    await chatInput.fill(prompt);
+    await page.waitForTimeout(500);
+
+    const sendBtn = await page.$('button[data-testid="send-button"], button[aria-label="Send prompt"], button[aria-label*="Send"]');
+    if (sendBtn) await sendBtn.click();
+    else await page.keyboard.press('Enter');
+
+    console.error('[generate_image] Prompt sent — waiting for DALL-E image (up to 5 min)...');
+
+    // Step 6: Poll for generated image
+    let imgSrc = '';
+    const pollStart = Date.now();
+    const TIMEOUT_MS = 5 * 60 * 1000;
+
+    while (Date.now() - pollStart < TIMEOUT_MS) {
+      await page.waitForTimeout(15000);
+
+      const bodyText = await page.evaluate(() => document.body.innerText);
+      for (const phrase of ["can't create images", "content policy", "generation limit", "try again later", "something went wrong"]) {
+        if (bodyText.toLowerCase().includes(phrase))
+          throw new Error(`ChatGPT error: "${phrase}" detected`);
+      }
+
+      const newSrc: string = await page.evaluate((known: string[]) => {
+        const imgs = Array.from(document.querySelectorAll('img'));
+        const candidates = imgs.filter(img =>
+          img.naturalWidth > 100 && img.naturalHeight > 100 && img.src && !known.includes(img.src) &&
+          (img.src.includes('oaidalleapiprodscus') || img.src.includes('oaiusercontent') ||
+           (img.closest('article') !== null && !img.src.includes('avatar')))
+        );
+        return candidates.length > 0 ? candidates[candidates.length - 1].src : '';
+      }, knownSrcs);
+
+      if (newSrc) {
+        imgSrc = newSrc;
+        console.error(`[generate_image] Image found ✓`);
+        break;
+      }
+      console.error(`[generate_image] Waiting... ${Math.round((Date.now() - pollStart) / 1000)}s`);
     }
 
+    if (!imgSrc) throw new Error('Image not generated within 5 minutes');
+
+    // Step 7: Download + upload to Cloudinary
+    const imageBuffer = await fetchImageAsBuffer(imgSrc);
     console.error(`[generate_image] Downloaded ${imageBuffer.length} bytes`);
 
-    const slug     = marketName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50);
-    const publicId = `${slug}-${Math.floor(Date.now() / 1000)}`;
-
-    console.error(`[generate_image] Uploading to Cloudinary as ${publicId}...`);
+    const publicId     = `${marketName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 55)}-${Math.floor(Date.now() / 1000)}`;
     const cloudinaryUrl = await uploadToCloudinary(imageBuffer, publicId);
+    console.error(`[generate_image] Uploaded: ${cloudinaryUrl}`);
 
-    console.error(`[generate_image] Done: ${cloudinaryUrl}`);
+    // Step 8: Reset to new chat (never close browser)
+    await page.goto('https://chatgpt.com/new', { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+
     console.log(JSON.stringify({ status: 'success', cloudinaryUrl }));
     process.exit(0);
 
   } catch (err: unknown) {
     const msg = (err as Error).message || String(err);
     console.error(`[generate_image] Error: ${msg}`);
+    await page.goto('https://chatgpt.com/new', { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
     console.log(JSON.stringify({ status: 'error', message: msg }));
     process.exit(1);
   }
+  // intentionally never close context — keep Chrome alive
 }
 
 main().catch(err => {
