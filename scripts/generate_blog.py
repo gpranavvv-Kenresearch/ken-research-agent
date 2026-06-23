@@ -932,14 +932,18 @@ def main():
     related_urls = pick_related_urls(args.url, url_pool, n=12)
     print(f'[generate_blog] Found {len(related_urls)} related report URLs for interlinks', file=sys.stderr)
 
-    # Step 4: Generate cover image (Pollinations + Cloudinary)
-    # Extract market size / CAGR hints from page text for better image
-    size_match = re.search(r'(USD\s+\d+\.?\d*\s*(?:billion|million))', page_text, re.IGNORECASE)
-    cagr_match = re.search(r'(\d+\.?\d*\s*%\s*CAGR)', page_text, re.IGNORECASE)
+    # Step 4: Generate cover image
+    # Extract market size / CAGR from Tavily research first, fall back to page_text regex
+    combined_text = research.get('market_data', '') + ' ' + page_text
+    size_match = re.search(r'(USD\s+\d+\.?\d*\s*(?:billion|million))', combined_text, re.IGNORECASE)
+    cagr_match = re.search(r'(\d+\.?\d*\s*%\s*(?:CAGR|growth))', combined_text, re.IGNORECASE)
+    forecast_match = re.search(r'(USD\s+\d+\.?\d*\s*(?:billion|million)\s*by\s*20\d\d)', combined_text, re.IGNORECASE)
     market_size = size_match.group(1) if size_match else ''
     cagr = cagr_match.group(1) if cagr_match else ''
+    forecast = forecast_match.group(1) if forecast_match else ''
+    print(f'[generate_blog] Image data — size={market_size!r} cagr={cagr!r} forecast={forecast!r}', file=sys.stderr)
 
-    cover_image_url = generate_cover_image(market_name, market_size, cagr)
+    cover_image_url = generate_cover_image(market_name, market_size, cagr, forecast)
 
     # Step 5: Generate blog HTML content
     data = generate_blog_content(
