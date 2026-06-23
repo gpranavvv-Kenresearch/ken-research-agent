@@ -932,20 +932,28 @@ def main():
     related_urls = pick_related_urls(args.url, url_pool, n=12)
     print(f'[generate_blog] Found {len(related_urls)} related report URLs for interlinks', file=sys.stderr)
 
-    # Step 4: Generate cover image
-    # Extract market size / CAGR from Tavily research first, fall back to page_text regex
+    # Step 4: Launch image generation in background (non-blocking)
     combined_text = research.get('market_data', '') + ' ' + page_text
-    size_match = re.search(r'(USD\s+\d+\.?\d*\s*(?:billion|million))', combined_text, re.IGNORECASE)
-    cagr_match = re.search(r'(\d+\.?\d*\s*%\s*(?:CAGR|growth))', combined_text, re.IGNORECASE)
+    size_match     = re.search(r'(USD\s+\d+\.?\d*\s*(?:billion|million))', combined_text, re.IGNORECASE)
+    cagr_match     = re.search(r'(\d+\.?\d*\s*%\s*(?:CAGR|growth))', combined_text, re.IGNORECASE)
     forecast_match = re.search(r'(USD\s+\d+\.?\d*\s*(?:billion|million)\s*by\s*20\d\d)', combined_text, re.IGNORECASE)
     market_size = size_match.group(1) if size_match else ''
-    cagr = cagr_match.group(1) if cagr_match else ''
-    forecast = forecast_match.group(1) if forecast_match else ''
+    cagr        = cagr_match.group(1) if cagr_match else ''
+    forecast    = forecast_match.group(1) if forecast_match else ''
     print(f'[generate_blog] Image data — size={market_size!r} cagr={cagr!r} forecast={forecast!r}', file=sys.stderr)
 
-    cover_image_url = generate_cover_image(market_name, market_size, cagr, forecast)
+    npx = 'npx.cmd' if sys.platform == 'win32' else 'npx'
+    image_cmd = [npx, 'tsx', os.path.join(repo_root, 'scripts', 'generate_image.ts'),
+                 '--market-name', market_name]
+    if market_size: image_cmd += ['--market-size', market_size]
+    if cagr:        image_cmd += ['--cagr', cagr]
+    if forecast:    image_cmd += ['--forecast', forecast]
 
-    # Step 5: Generate blog HTML content
+    print('[generate_blog] Launching image generation in background...', file=sys.stderr)
+    image_proc = subprocess.Popen(image_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  cwd=repo_root, text=True)
+
+    # Step 5: Generate blog HTML content while image is being generated
     data = generate_blog_content(
         title=args.title or market_name,
         target_url=args.url,
@@ -953,11 +961,41 @@ def main():
         research=research,
         related_urls=related_urls,
         platform_slug=platform_slug,
-        cover_image_url=cover_image_url,
+        cover_image_url='',          # placeholder — injected after image finishes
         market_name=market_name,
         country=country,
         name=args.name,
     )
+
+    # Step 5b: Wait for image generation to finish, then inject URL
+    print('[generate_blog] Blog text done — waiting for image...', file=sys.stderr)
+    try:
+        img_stdout, img_stderr = image_proc.communicate(timeout=240)
+        print(img_stderr[-500:] if img_stderr else '', file=sys.stderr)
+        stdout_lines = [l.strip() for l in img_stdout.splitlines() if l.strip()]
+        cover_image_url = ''
+        if stdout_lines:
+            img_data = json.loads(stdout_lines[-1])
+            if img_data.get('status') == 'success':
+                cover_image_url = img_data.get('cloudinaryUrl', '')
+                print(f'[generate_blog] Cover image ready: {cover_image_url}', file=sys.stderr)
+            else:
+                print(f'[generate_blog] Image error: {img_data.get("message")}', file=sys.stderr)
+    except subprocess.TimeoutExpired:
+        image_proc.kill()
+        print('[generate_blog] Image generation timed out — blog will publish without image', file=sys.stderr)
+        cover_image_url = ''
+    except Exception as e:
+        print(f'[generate_blog] Image wait error: {e}', file=sys.stderr)
+        cover_image_url = ''
+
+    # Inject image URL into blog HTML
+    if cover_image_url and data.get('html_content'):
+        data['html_content'] = data['html_content'].replace(
+            "<img src='' ", f"<img src='{cover_image_url}' "
+        ).replace(
+            '<img src="" ', f'<img src="{cover_image_url}" '
+        )
 
     blog_title = data.get('blog_title', '')
     h1_title = data.get('h1_title', '')
