@@ -122,13 +122,16 @@ def sync_blog(request):
         return Response({'error': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+BLOG_PLATFORMS = {'linkedinpulse', 'linkedin_pulse', 'linkedin pulse', 'medium', 'devto', 'dev.to',
+                  'substack', 'hackmd', 'wordpress', 'blogger', 'notion', 'googlesite',
+                  'note', 'paragraph', 'patreon', 'calisthenics', 'linkmate'}
+
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def post_now(request):
     """
     Triggered by Vercel "Post Now" button.
-    Queues execute_social_post for a specific platform on a specific row.
-    Expects: { name, sheetRow, platform, targetUrl, title, xPost, fbPost, liPost }
+    Routes to social or blog task based on platform.
     """
     secret = request.headers.get('X-Webhook-Secret', '')
     expected = getattr(settings, 'WEBHOOK_SECRET', '')
@@ -140,11 +143,9 @@ def post_now(request):
     raw_row   = data.get('sheetRow')
     sheet_row = (int(raw_row) - 1) if raw_row is not None else None
     platform  = (data.get('platform') or '').lower().strip()
+    tab       = (data.get('tab') or 'social').lower().strip()
     url       = data.get('targetUrl', '')
     title     = data.get('title', '')
-    x_post    = data.get('xPost', '')
-    fb_post   = data.get('fbPost', '')
-    li_post   = data.get('liPost', '')
 
     if not name or not platform or not url or sheet_row is None:
         return Response({'error': 'name, platform, targetUrl, sheetRow required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -154,20 +155,43 @@ def post_now(request):
     except User.DoesNotExist:
         return Response({'error': f'User "{name}" not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    from jobs.models import PostingJob
-    from workers.tasks import dispatch_social_post
+    is_blog = tab == 'blog' or platform in BLOG_PLATFORMS
 
-    job, _ = PostingJob.objects.get_or_create(
-        user=user, target_url=url, sheet_row=sheet_row,
-        defaults={'title': title, 'platforms': platform, 'status': 'queued'},
-    )
-    if x_post:  job.x_post  = x_post
-    if fb_post: job.fb_post = fb_post
-    if li_post: job.li_post = li_post
-    job.save()
+    if is_blog:
+        from jobs.models import BlogJob
+        from workers.tasks import dispatch_blog_generation
 
-    dispatch_social_post(job, platform)
-    return Response({'queued': True, 'job_id': job.id, 'platform': platform, 'queue': f'social.{user.nickname}'})
+        job, _ = BlogJob.objects.get_or_create(
+            user=user, target_url=url, sheet_row=sheet_row,
+            defaults={'title': title, 'platforms': platform, 'status': 'queued'},
+        )
+        job.blog_title       = data.get('blogTitle', '') or job.blog_title
+        job.blog_content     = data.get('blogContent', '') or job.blog_content
+        job.blog_description = data.get('blogDescription', '') or job.blog_description
+        job.save()
+
+        dispatch_blog_generation(job)
+        return Response({'queued': True, 'job_id': job.id, 'platform': platform, 'queue': f'blog.{user.nickname}'})
+
+    else:
+        from jobs.models import PostingJob
+        from workers.tasks import dispatch_social_post
+
+        x_post  = data.get('xPost', '')
+        fb_post = data.get('fbPost', '')
+        li_post = data.get('liPost', '')
+
+        job, _ = PostingJob.objects.get_or_create(
+            user=user, target_url=url, sheet_row=sheet_row,
+            defaults={'title': title, 'platforms': platform, 'status': 'queued'},
+        )
+        if x_post:  job.x_post  = x_post
+        if fb_post: job.fb_post = fb_post
+        if li_post: job.li_post = li_post
+        job.save()
+
+        dispatch_social_post(job, platform)
+        return Response({'queued': True, 'job_id': job.id, 'platform': platform, 'queue': f'social.{user.nickname}'})
 
 
 @api_view(['GET'])

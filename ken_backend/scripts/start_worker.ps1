@@ -36,6 +36,16 @@ if (-not $workerName) {
 Write-Host "Starting Celery worker for: $workerName" -ForegroundColor Green
 Write-Host "Connecting to Redis: $($env:REDIS_URL -replace ':.*@', ':***@')" -ForegroundColor Cyan
 
+# Flush entire Redis DB before starting (kills ALL leftover/stale tasks permanently)
+Write-Host "Flushing Redis..." -ForegroundColor Yellow
+python -c "
+import os, redis
+r = redis.from_url(os.environ['REDIS_URL'], ssl_cert_reqs=None)
+r.flushdb()
+print('Redis flushed clean.')
+"
+Write-Host "Redis clean. Starting fresh." -ForegroundColor Green
+
 # Start heartbeat loop in the background (pings server every 60 seconds)
 $heartbeatJob = Start-Job -ScriptBlock {
     param($name, $settings, $pythonPath)
@@ -52,9 +62,10 @@ worker_heartbeat.delay('$name')
     }
 } -ArgumentList $workerName, $env:DJANGO_SETTINGS_MODULE, $env:PYTHONPATH
 
-# Start the worker (one concurrent task — critical for Playwright)
+# Start the worker (solo pool — required on Windows, avoids prefork spawn issues)
+# Listens on both generic queues AND person-specific queues (social.pranav, blog.pranav)
 celery -A ken_backend worker `
-    --queues social,blog,heartbeat,sync `
-    --concurrency 1 `
+    --queues "social,blog,heartbeat,sync,social.$workerName,blog.$workerName,beat.$workerName" `
+    --pool solo `
     --loglevel info `
     --hostname "$workerName@%h"
