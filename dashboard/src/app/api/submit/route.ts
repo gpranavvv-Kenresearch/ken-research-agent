@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
       platforms:      body.platforms ?? [],
       socialPlatforms: body.socialPlatforms ?? [],
       description:    body.description,
+      customPrompt:   body.customPrompt,
       blogTab:        user.blogTab,
       socialTab:      user.socialTab,
     };
@@ -49,6 +50,8 @@ export async function POST(req: NextRequest) {
               sheetRow:  blogSheetRow,
               title:     basePayload.title,
               targetUrl: basePayload.targetUrl,
+              format:    basePayload.format,
+              customPrompt: basePayload.customPrompt,
               platforms: basePayload.platforms,
             }),
           });

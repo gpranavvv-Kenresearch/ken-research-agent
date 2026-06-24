@@ -29,7 +29,7 @@ SOCIAL_HEADERS = [
 ]
 
 BLOG_HEADERS = [
-    "targetUrl", "Blog Title", "Name", "Format", "Submitted At",
+    "targetUrl", "Blog Title", "Name", "Format", "Custom Prompt", "Submitted At",
     "Blog Description", "Blog Caption", "Cover Image URL", "Blog Content", "Rating", "Platforms",
     # Medium
     "Medium Post URL", "Medium Status", "Medium Batch", "Medium Error",

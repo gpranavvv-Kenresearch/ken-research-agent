@@ -37,6 +37,8 @@ def sheet_webhook(request):
     sheet_row = (int(raw_row) - 1) if raw_row is not None else None
     title     = data.get('title', '')
     url       = data.get('targetUrl', '')
+    blog_format = (data.get('format') or 'linkedin').strip()
+    custom_prompt = data.get('customPrompt', '')
 
     if not name or not url:
         return Response({'error': 'name and targetUrl are required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -96,7 +98,7 @@ def sheet_webhook(request):
                 },
             )
             if created:
-                execute_blog_generation.delay(blog_job.id)
+                execute_blog_generation.delay(blog_job.id, blog_format, custom_prompt)
                 queued.append({'type': 'blog', 'job_id': blog_job.id, 'platforms': blog_platforms})
 
     return Response({'queued': queued}, status=status.HTTP_201_CREATED)
@@ -146,6 +148,8 @@ def post_now(request):
     tab       = (data.get('tab') or 'social').lower().strip()
     url       = data.get('targetUrl', '')
     title     = data.get('title', '')
+    blog_format = (data.get('format') or 'linkedin').strip()
+    custom_prompt = data.get('customPrompt', '')
 
     if not name or not platform or not url or sheet_row is None:
         return Response({'error': 'name, platform, targetUrl, sheetRow required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -177,7 +181,7 @@ def post_now(request):
             dispatch_blog_publish(job, platform)
             return Response({'queued': True, 'job_id': job.id, 'platform': platform, 'action': 'publish', 'queue': f'blog.{user.nickname}'})
         else:
-            dispatch_blog_generation(job)
+            dispatch_blog_generation(job, blog_format, custom_prompt)
             return Response({'queued': True, 'job_id': job.id, 'platform': platform, 'action': 'generate', 'queue': f'blog.{user.nickname}'})
 
     else:

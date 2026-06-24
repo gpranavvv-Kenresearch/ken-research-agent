@@ -197,4 +197,11 @@ export const FORMATS = [
     sampleRoute: '/samples/format-3.html',
     color: 'teal',
   },
+  {
+    id: 'custom',
+    label: 'Format 4',
+    subLabel: 'Custom Prompt',
+    desc: 'Use your own blog instructions while keeping Ken Research data, Tavily research, and system quality rules.',
+    color: 'amber',
+  }
 ];

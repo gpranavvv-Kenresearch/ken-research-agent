@@ -71,6 +71,7 @@ export interface SubmitPayload {
   platforms: string[];       // blog platforms
   socialPlatforms: string[]; // social platforms (x, facebook, linkedin)
   description?: string;
+  customPrompt?: string;
   blogTab: string;
   socialTab: string;
 }
@@ -94,6 +95,7 @@ export async function appendBlogRow(payload: SubmitPayload): Promise<number> {
     'Blog Title':       payload.title,
     'Name':             payload.name,
     'Format':           payload.format,
+    'Custom Prompt':    payload.customPrompt ?? '',
     'Submitted At':     timestamp,
     'Blog Description': payload.description ?? '',
     'Platforms':        payload.platforms.join(', '),

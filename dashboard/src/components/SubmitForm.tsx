@@ -20,6 +20,7 @@ export default function SubmitForm() {
     description: '',
     platforms: BLOG_PLATFORMS.map((p) => p.key),
     social: [] as string[],
+    customPrompt: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError]   = useState('');
@@ -34,7 +35,10 @@ export default function SubmitForm() {
     if (!user) { setError('No user selected.'); return; }
     const lines = bulkText.split('\n').map((l) => l.trim()).filter(Boolean);
     if (!lines.length) { setError('Paste at least one line.'); return; }
-
+    if (form.format === 'custom' && !form.customPrompt.trim()) {
+      setError('Custom prompt is required for Format 4.');
+      return;
+    }
     setLoading(true); setError(''); setBulkResults([]);
     const results: typeof bulkResults = [];
 
@@ -52,7 +56,7 @@ export default function SubmitForm() {
         const res = await fetch('/api/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, targetUrl: url, name: user.displayName, format: form.format, description: '', platforms: form.platforms, socialPlatforms: form.social, userId: user.id }),
+          body: JSON.stringify({ title, targetUrl: url, name: user.displayName, format: form.format, description: '', platforms: form.platforms, socialPlatforms: form.social, userId: user.id, customPrompt: form.customPrompt }),
         });
         const data = await res.json() as { success?: boolean; blogSheetRow?: number; socialSheetRow?: number; error?: string };
         if (!res.ok) results.push({ title, url, error: data.error ?? 'Failed' });
@@ -65,10 +69,13 @@ export default function SubmitForm() {
     setBulkResults(results);
     setLoading(false);
   }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) { setError('No user selected — please refresh and choose your name.'); return; }
+    if (form.format === 'custom' && !form.customPrompt.trim()) {
+      setError('Custom prompt is required for Format 4.');
+      return;
+    }
     setLoading(true); setError(''); setSuccess('');
     try {
       const res = await fetch('/api/submit', {
@@ -83,6 +90,7 @@ export default function SubmitForm() {
           platforms:       form.platforms,
           socialPlatforms: form.social,
           userId:          user.id,
+          customPrompt: form.customPrompt,
         }),
       });
       const data = await res.json() as { success?: boolean; blogSheetRow?: number; socialSheetRow?: number; blogTab?: string; socialTab?: string; error?: string };
@@ -179,6 +187,20 @@ export default function SubmitForm() {
                 </label>
               ))}
             </div>
+            {form.format === 'custom' && (
+              <div className="space-y-2">
+                <p className="text-xs text-slate-400">
+                  Describe the audience, tone, length, section structure, focus areas, CTA style, and any special instructions. Ken Research data, Tavily research, and quality rules still apply.
+                </p>
+                <textarea
+                  rows={7}
+                  value={form.customPrompt}
+                  onChange={(e) => setForm({ ...form, customPrompt: e.target.value })}
+                  placeholder="Example: Write a 1200-word B2B blog for CXOs and investors. Use a data-heavy tone. Include an executive summary, 4 H2 sections, bullet points, 5 FAQs, and a final CTA."
+                  className="w-full bg-card border border-border rounded-lg px-4 py-3 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500 resize-y"
+                />
+              </div>
+            )}
           </section>
 
           {/* Blog platforms */}
@@ -325,6 +347,20 @@ export default function SubmitForm() {
             </label>
           ))}
         </div>
+        {form.format === 'custom' && (
+          <div className="space-y-2">
+            <p className="text-xs text-slate-400">
+              Describe the audience, tone, length, section structure, focus areas, CTA style, and any special instructions. Ken Research data, Tavily research, and quality rules still apply.
+            </p>
+            <textarea
+              rows={7}
+              value={form.customPrompt}
+              onChange={(e) => setForm({ ...form, customPrompt: e.target.value })}
+              placeholder="Example: Write a 1200-word B2B blog for CXOs and investors. Use a data-heavy tone. Include an executive summary, 4 H2 sections, bullet points, 5 FAQs, and a final CTA."
+              className="w-full bg-card border border-border rounded-lg px-4 py-3 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500 resize-y"
+            />
+          </div>
+        )}
       </section>
 
       {/* Blog platforms */}

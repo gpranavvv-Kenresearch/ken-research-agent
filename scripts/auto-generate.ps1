@@ -215,6 +215,12 @@ function Invoke-BlogPass {
         $i++
         $label = if ($row.Title) { $row.Title } else { $row.targetUrl }
         $plats = if ($row.Platforms) { $row.Platforms } else { "linkedin-pulse" }
+        $blogFormat = if ($row.Format) { $row.Format } else { "linkedin" }
+        $tmpPromptFile = $null
+        if ($row.'Custom Prompt') {
+            $tmpPromptFile = [System.IO.Path]::GetTempFileName()
+            Set-Content -Path $tmpPromptFile -Value $row.'Custom Prompt' -Encoding UTF8
+        }
 
         Write-Host ""
         Write-Host ("    ({0}/{1}) BLOG ROW {2}: {3}" -f $i, $todo.Count, $row._dataRow, $label) -ForegroundColor Magenta
@@ -226,10 +232,13 @@ function Invoke-BlogPass {
             '--name',      $Name,
             '--row',       "$($row._dataRow)",
             '--platforms', $plats,
+            '--format',    $blogFormat,
             '--output-json'
         )
         if ($row.Title) { $blogArgs += @('--title', $row.Title) }
+        if ($tmpPromptFile) { $blogArgs += @('--custom-prompt-file', $tmpPromptFile) }
         $all = & python @blogArgs 2>&1
+        if ($tmpPromptFile -and (Test-Path $tmpPromptFile)) { Remove-Item -LiteralPath $tmpPromptFile -Force -ErrorAction SilentlyContinue }
 
         if ($LASTEXITCODE -eq 0) {
             $jsonLine = $all | Where-Object { "$_" -match '"blog_title"\s*:' } | Select-Object -Last 1

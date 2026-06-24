@@ -99,10 +99,10 @@ def dispatch_social_post(job, platform: str):
         queue=f'social.{job.user.nickname}',
     )
 
-def dispatch_blog_generation(job):
+def dispatch_blog_generation(job, blog_format: str = 'linkedin', custom_prompt: str = ''):
     """Queue a blog generation task to the person's dedicated blog worker."""
     execute_blog_generation.apply_async(
-        args=[job.id],
+        args=[job.id, blog_format, custom_prompt],
         queue=f'blog.{job.user.nickname}',
     )
 
@@ -225,7 +225,7 @@ def _update_job_status(job):
 # ── Blog generation ────────────────────────────────────────────────────────────
 
 @shared_task(bind=True, max_retries=1, default_retry_delay=120, queue='blog')
-def execute_blog_generation(self, blog_job_id: int):
+def execute_blog_generation(self, blog_job_id: int, blog_format: str = 'linkedin', custom_prompt: str = ''):
     from jobs.models import BlogJob
 
     try:
@@ -235,20 +235,36 @@ def execute_blog_generation(self, blog_job_id: int):
 
     job.status = 'running'
     job.save(update_fields=['status'])
+    tmp_prompt_path = ''
 
     try:
         # Delegate to existing generate-blog logic via Python subprocess
         gen_script = os.path.join(REPO_ROOT, 'scripts', 'generate_blog.py')
+        cmd = [
+            'python', gen_script,
+            '--url',       job.target_url,
+            '--title',     job.title or '',
+            '--name',      job.user.nickname,
+            '--row',       str(job.sheet_row or 0),
+            '--platforms', job.platforms or 'linkedin-pulse',
+            '--format',    blog_format or 'linkedin',
+        ]
+        if custom_prompt:
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
+                f.write(custom_prompt)
+                tmp_prompt_path = f.name
+            cmd += ['--custom-prompt-file', tmp_prompt_path]
+        cmd += ['--output-json']
+
         result = subprocess.run(
-            ['python', gen_script,
-             '--url',       job.target_url,
-             '--title',     job.title or '',
-             '--name',      job.user.nickname,
-             '--row',       str(job.sheet_row or 0),
-             '--platforms', job.platforms or 'linkedin-pulse',
-             '--output-json'],
+            cmd,
             capture_output=True, text=True, cwd=REPO_ROOT, timeout=900
         )
+        if tmp_prompt_path and os.path.exists(tmp_prompt_path):
+            os.unlink(tmp_prompt_path)
+            tmp_prompt_path = ''
+
         if result.returncode != 0:
             raise RuntimeError(result.stderr[-1000:])
 
@@ -270,6 +286,11 @@ def execute_blog_generation(self, blog_job_id: int):
                 dispatch_blog_publish(job, platform)
 
     except Exception as exc:
+        if tmp_prompt_path and os.path.exists(tmp_prompt_path):
+            try:
+                os.unlink(tmp_prompt_path)
+            except OSError:
+                pass
         job.status        = 'failed'
         job.error_message = str(exc)[:500]
         job.save(update_fields=['status', 'error_message'])
@@ -589,7 +610,7 @@ def sync_and_generate_for_me():
             job.save(update_fields=['status', 'error_message'])
 
         print(f'[sync_me] Blog row {sheet_row}: {url[:60]}', flush=True)
-        dispatch_blog_generation(job)
+        dispatch_blog_generation(job, row.get('Format', 'linkedin'), row.get('Custom Prompt', ''))
 
     print(f'[sync_me] === Sync complete for {nickname} ===', flush=True)
 
@@ -694,7 +715,7 @@ def sync_and_generate_all():
                 job.save(update_fields=['status', 'error_message'])
 
             print(f'[sync] [{nickname}] Blog row {sheet_row}: {url[:60]}', flush=True)
-            dispatch_blog_generation(job)
+            dispatch_blog_generation(job, row.get('Format', 'linkedin'), row.get('Custom Prompt', ''))
 
     print('[sync] === Sync complete ===', flush=True)
 
