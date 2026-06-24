@@ -38,9 +38,9 @@ const cagr       = get('--cagr', '');
 const forecast   = get('--forecast', '');
 
 // ── Cloudinary ────────────────────────────────────────────────────────────────
-const CLOUD_NAME = 'dutg2rtvr';
-const API_KEY    = '226785248494346';
-const API_SECRET = '6pX9f6a_QAFQmPriZDTCTgwtj0w';
+const CLOUD_NAME = 'z5sav7gt';
+const API_KEY    = '368617866733243';
+const API_SECRET = '1nAPl0cGCX18WZqUMNEjov5GrRs';
 const FOLDER     = 'microblogs';
 
 // ── Paths ─────────────────────────────────────────────────────────────────────
@@ -131,8 +131,8 @@ STRICT RULES:
 OUTPUT: Finished premium consulting-grade market intelligence cover. Cinematic + analytical + editorial typography.`;
 }
 
-// ── Multi-selector image finder (polls every 2s) ──────────────────────────────
-async function findGeneratedImage(page: any, timeoutMs = 180000) {
+// ── Multi-selector image finder (checks every 60s, up to 6 times = 6 min) ────
+async function findGeneratedImage(page: any) {
   const selectors = [
     '[data-message-author-role="assistant"] img',
     'img[src*="oaidalleapiprodscus"]',
@@ -144,8 +144,11 @@ async function findGeneratedImage(page: any, timeoutMs = 180000) {
     'main img',
   ];
 
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
+  const MAX_CHECKS = 6;
+  const INTERVAL_MS = 60000; // 1 minute per check
+
+  for (let attempt = 1; attempt <= MAX_CHECKS; attempt++) {
+    console.error(`[generate_image] Image check ${attempt}/${MAX_CHECKS}...`);
     for (const selector of selectors) {
       try {
         const locator = page.locator(selector).last();
@@ -158,14 +161,13 @@ async function findGeneratedImage(page: any, timeoutMs = 180000) {
         }
       } catch {}
     }
-    const elapsed = Math.round((Date.now() - (deadline - timeoutMs)) / 1000);
-    if (elapsed > 0 && elapsed % 20 === 0) {
+    if (attempt < MAX_CHECKS) {
       const imgCount = await page.locator('img').count().catch(() => 0);
-      console.error(`[generate_image] Still waiting... (${elapsed}s, ${imgCount} imgs on page)`);
+      console.error(`[generate_image] Not ready yet (${imgCount} imgs on page) — waiting 60s...`);
+      await page.waitForTimeout(INTERVAL_MS);
     }
-    await page.waitForTimeout(2000);
   }
-  throw new Error('Generated image not found after 3 minutes');
+  throw new Error('Generated image not found after 6 checks (6 minutes)');
 }
 
 // ── Cloudinary upload ─────────────────────────────────────────────────────────
@@ -276,9 +278,9 @@ async function main() {
       console.error('[generate_image] Send via Enter key');
     }
 
-    // ── Wait for image (polls every 2s) ───────────────────────────────────────
-    console.error('[generate_image] Waiting for DALL-E image (up to 3 min)...');
-    const generatedImage = await findGeneratedImage(page, 3 * 60 * 1000);
+    // ── Wait for image (checks every 60s, up to 6 min) ───────────────────────
+    console.error('[generate_image] Waiting for DALL-E image (up to 6 min, checked every 60s)...');
+    const generatedImage = await findGeneratedImage(page);
 
     await generatedImage.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1000);
@@ -300,9 +302,8 @@ async function main() {
     });
     console.error(`[generate_image] Full image ready: ${dims?.w}x${dims?.h}px`);
 
-    // ── Stability buffer ──────────────────────────────────────────────────────
-    console.error('[generate_image] Stability wait 60s...');
-    await page.waitForTimeout(60000);
+    // Brief stability buffer — image is already fully loaded at this point
+    await page.waitForTimeout(3000);
 
     // ── Download via browser fetch (preserves auth cookies) ───────────────────
     const imgSrc = await generatedImage.getAttribute('src');

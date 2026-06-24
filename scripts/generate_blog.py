@@ -932,7 +932,7 @@ def main():
     related_urls = pick_related_urls(args.url, url_pool, n=12)
     print(f'[generate_blog] Found {len(related_urls)} related report URLs for interlinks', file=sys.stderr)
 
-    # Step 4: Launch image generation in background (non-blocking)
+    # Step 4: Generate cover image FIRST (blocking) — URL written to sheet immediately
     combined_text = research.get('market_data', '') + ' ' + page_text
     size_match     = re.search(r'(USD\s+\d+\.?\d*\s*(?:billion|million))', combined_text, re.IGNORECASE)
     cagr_match     = re.search(r'(\d+\.?\d*\s*%\s*(?:CAGR|growth))', combined_text, re.IGNORECASE)
@@ -949,31 +949,18 @@ def main():
     if cagr:        image_cmd += ['--cagr', cagr]
     if forecast:    image_cmd += ['--forecast', forecast]
 
-    print('[generate_blog] Launching image generation in background...', file=sys.stderr)
-    image_proc = subprocess.Popen(image_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                  cwd=repo_root, text=True)
-
-    # Step 5: Generate blog HTML content while image is being generated
-    data = generate_blog_content(
-        title=args.title or market_name,
-        target_url=args.url,
-        page_text=page_text,
-        research=research,
-        related_urls=related_urls,
-        platform_slug=platform_slug,
-        cover_image_url='',          # placeholder — injected after image finishes
-        market_name=market_name,
-        country=country,
-        name=args.name,
-    )
-
-    # Step 5b: Wait for image generation to finish, then inject URL
-    print('[generate_blog] Blog text done — waiting for image...', file=sys.stderr)
+    print('[generate_blog] Generating cover image (up to 6 min)...', file=sys.stderr)
+    cover_image_url = ''
     try:
-        img_stdout, img_stderr = image_proc.communicate(timeout=240)
-        print(img_stderr[-500:] if img_stderr else '', file=sys.stderr)
-        stdout_lines = [l.strip() for l in img_stdout.splitlines() if l.strip()]
-        cover_image_url = ''
+        result = subprocess.run(
+            image_cmd,
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            timeout=450,  # 7.5 min: 6 checks × 60s + buffer
+        )
+        print(result.stderr[-800:] if result.stderr else '', file=sys.stderr)
+        stdout_lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
         if stdout_lines:
             img_data = json.loads(stdout_lines[-1])
             if img_data.get('status') == 'success':
@@ -982,20 +969,28 @@ def main():
             else:
                 print(f'[generate_blog] Image error: {img_data.get("message")}', file=sys.stderr)
     except subprocess.TimeoutExpired:
-        image_proc.kill()
-        print('[generate_blog] Image generation timed out — blog will publish without image', file=sys.stderr)
-        cover_image_url = ''
+        print('[generate_blog] Image generation timed out after 7.5 min', file=sys.stderr)
     except Exception as e:
-        print(f'[generate_blog] Image wait error: {e}', file=sys.stderr)
-        cover_image_url = ''
+        print(f'[generate_blog] Image generation failed: {e}', file=sys.stderr)
 
-    # Inject image URL into blog HTML
-    if cover_image_url and data.get('html_content'):
-        data['html_content'] = data['html_content'].replace(
-            "<img src='' ", f"<img src='{cover_image_url}' "
-        ).replace(
-            '<img src="" ', f'<img src="{cover_image_url}" '
-        )
+    # Write Cover Image URL to sheet immediately so it's visible before HTML is generated
+    if cover_image_url and args.row > 0:
+        print(f'[generate_blog] Writing Cover Image URL to sheet row {args.row}...', file=sys.stderr)
+        write_to_sheet(args.name, args.row, {'Cover Image URL': cover_image_url}, repo_root)
+
+    # Step 5: Generate blog HTML — image URL is already known, passed in directly
+    data = generate_blog_content(
+        title=args.title or market_name,
+        target_url=args.url,
+        page_text=page_text,
+        research=research,
+        related_urls=related_urls,
+        platform_slug=platform_slug,
+        cover_image_url=cover_image_url,  # real URL, no placeholder injection needed
+        market_name=market_name,
+        country=country,
+        name=args.name,
+    )
 
     blog_title = data.get('blog_title', '')
     h1_title = data.get('h1_title', '')
@@ -1048,6 +1043,7 @@ def main():
             'Blog Title': blog_title,
             'Blog Description': blog_description,
             'Blog Content': html_content,
+            'Cover Image URL': cover_image_url,
             'blogBatch': batch_label,
             'Rating': str(rating),
         }

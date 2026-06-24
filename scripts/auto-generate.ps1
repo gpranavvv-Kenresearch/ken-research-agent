@@ -240,7 +240,7 @@ function Invoke-BlogPass {
                 try {
                     $blogData = "$jsonLine" | ConvertFrom-Json
                     $titleOut = $blogData.blog_title
-                    if ($blogData.html_content) { $wordCount = ($blogData.html_content -split '\s+').Count }
+                    if ($blogData.blog_content) { $wordCount = ($blogData.blog_content -split '\s+').Count }
                 } catch {}
             }
             Write-Host ("           [OK] '{0}'  (~{1} words)" -f $titleOut, $wordCount) -ForegroundColor Green
