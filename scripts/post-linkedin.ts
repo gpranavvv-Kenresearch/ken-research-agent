@@ -69,40 +69,76 @@ function writeSheet(updates: Record<string, string>) {
 (async () => {
   console.log(`[post-li] Posting as ${email} (${nickname}) — row ${row}`);
 
-  const hasJson = fs.existsSync(SESSION_JSON);
-  const hasDir  = fs.existsSync(SESSION_DIR);
-
-  if (!hasJson && !hasDir) {
-    const err = `No session found for ${nickname}. Expected ${SESSION_JSON} or ${SESSION_DIR}.`;
-    console.error(err);
-    writeSheet({ 'LinkedIn Status': 'error', 'LinkedIn Error': err });
-    writeResumeFile('post-linkedin.ts', 'open-browser', err, { nickname, email, row });
-    process.exit(1);
-  }
+  // Persistent profile is primary. Falls back to JSON session, then credential login.
+  // NOTE: chrome-li-{nickname}/ is shared with post-linkedin-pulse.ts
+  fs.mkdirSync(SESSION_DIR, { recursive: true });
+  const hasPersistentProfile = fs.readdirSync(SESSION_DIR).length > 0;
+  const hasJsonSession = fs.existsSync(SESSION_JSON);
 
   let ctx: BrowserContext;
   let closeBrowser: () => Promise<void>;
 
-  if (hasJson) {
-    console.log(`[post-li] Using cookie session: ${SESSION_JSON}`);
+  if (hasPersistentProfile) {
+    console.log(`[post-li] Using persistent profile: ${SESSION_DIR}`);
+    ctx = await chromium.launchPersistentContext(SESSION_DIR, {
+      headless: false,
+      channel: 'chrome',
+      args: ['--no-sandbox', '--disable-blink-features=AutomationControlled', '--disable-infobars'],
+      ignoreDefaultArgs: ['--enable-automation'],
+    });
+    closeBrowser = () => ctx.close();
+  } else if (hasJsonSession) {
+    console.log(`[post-li] Using JSON session: ${SESSION_JSON}`);
     const browserInst = await chromium.launch({
       headless: false,
+      channel: 'chrome',
       args: ['--no-sandbox', '--disable-blink-features=AutomationControlled'],
     });
     ctx = await browserInst.newContext({ storageState: SESSION_JSON });
     closeBrowser = () => browserInst.close();
   } else {
-    console.log(`[post-li] Using persistent profile: ${SESSION_DIR}`);
+    console.log(`[post-li] No session found — logging in with credentials to create profile`);
     ctx = await chromium.launchPersistentContext(SESSION_DIR, {
       headless: false,
-      args: ['--no-sandbox', '--disable-blink-features=AutomationControlled'],
+      channel: 'chrome',
+      args: ['--no-sandbox', '--disable-blink-features=AutomationControlled', '--disable-infobars'],
+      ignoreDefaultArgs: ['--enable-automation'],
     });
     closeBrowser = () => ctx.close();
   }
 
-  const page = await ctx.newPage();
+  const page = ctx.pages()[0] ?? await ctx.newPage();
 
   try {
+    // Check login state; do credential login if session expired or missing
+    await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(2000);
+    const liUrl = page.url();
+    const liLoggedIn = !liUrl.includes('/login') && !liUrl.includes('/checkpoint') && !liUrl.includes('/authwall');
+
+    if (!liLoggedIn) {
+      console.log('[post-li] Session invalid — logging in with credentials');
+      await page.goto('https://www.linkedin.com/login', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForTimeout(1500);
+      const emailField = page.locator('#username, input[name="session_key"]').first();
+      await emailField.waitFor({ timeout: 10000 });
+      await emailField.fill(email);
+      await page.locator('#password, input[name="session_password"]').first().fill(password);
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(5000);
+      const afterUrl = page.url();
+      if (afterUrl.includes('/login') || afterUrl.includes('/checkpoint')) {
+        const err = 'LinkedIn login failed — wrong credentials or verification required';
+        writeSheet({ 'LinkedIn Status': 'error', 'LinkedIn Error': err });
+        writeResumeFile('post-linkedin.ts', 'login', err, { nickname, email, row });
+        await closeBrowser();
+        process.exit(1);
+      }
+      console.log('[post-li] Login successful — profile saved');
+    } else {
+      console.log('[post-li] Session valid');
+    }
+
     const result = await postToLinkedIn(page, postText);
     const postedUrl = result.postUrl || '';
     console.log(`POSTED_URL=${postedUrl}`);

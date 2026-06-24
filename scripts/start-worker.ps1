@@ -1,9 +1,12 @@
 <#
 .SYNOPSIS
-  Start the local Celery workers for this team member.
+  Start the local Celery POSTING workers for this team member.
   Launches TWO workers:
-    - Social worker  → listens on social.{name}  (X, Facebook, LinkedIn posting)
-    - Blog worker    → listens on blog.{name}     (blog generation + publishing)
+    - Social worker  → listens on social.{name}  (X, Facebook, LinkedIn, Instagram, Threads posting)
+    - Blog worker    → listens on blog.{name}     (blog publishing only — LinkedIn Pulse, Medium, etc.)
+
+  DOES NOT generate content. Run auto-generate.ps1 separately for generation.
+  Starts FRESH every time — all pending backlog is flushed before workers start.
 
 .USAGE
   cd "full team agent"
@@ -15,7 +18,8 @@
 .NOTES
   - Each worker runs with -c 1 so only one browser window opens at a time.
   - Keep this window OPEN. Close it to stop both workers.
-  - Beat scheduler (on Render) dispatches tasks to the right per-person queue.
+  - Triggered by cron schedule on Render or via "Post Now" button in dashboard.
+  - Beat scheduler is NOT started here — generation is handled by auto-generate.ps1.
 #>
 
 param(
@@ -77,12 +81,13 @@ Write-Host ""
 
 Set-Location (Join-Path (Get-Location).Path "ken_backend")
 
-# ── Kill orphan workers + flush queues ────────────────────────────────────────
+# ── Kill orphan workers (no Beat — generation is auto-generate.ps1's job) ──────
 Write-Host "  Killing any leftover Celery processes..." -ForegroundColor Gray
 Get-Process -Name "celery" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
 
-Write-Host "  Flushing this person's queues in Redis..." -ForegroundColor Gray
+# ── Flush ALL queues for this person so we start with zero backlog ─────────────
+Write-Host "  Flushing queues for $Name (clean slate)..." -ForegroundColor Gray
 python -c "
 import os, sys
 sys.path.insert(0, '.')
@@ -92,31 +97,25 @@ from django.conf import settings
 import redis
 r = redis.from_url(settings.CELERY_BROKER_URL, ssl_cert_reqs=None)
 name = os.environ.get('WORKER_NAME', '')
-for q in [f'social.{name}', f'blog.{name}']:
+queues = [f'social.{name}', f'blog.{name}', f'beat.{name}']
+for q in queues:
     deleted = r.delete(q)
-    print(f'  Cleared queue: {q} ({deleted} keys)')
+    print(f'  Cleared: {q} ({deleted} keys deleted)')
 "
 Write-Host ""
 
-# ── Start per-person Beat (fires sync_and_generate_for_me every 5 min) ────────
-Write-Host "  Starting local Beat scheduler (every 5 min, scoped to $Name)..." -ForegroundColor Gray
-$beatArgs = "-A ken_backend beat --loglevel=warning " +
-            "--scheduler django_celery_beat.schedulers:DatabaseScheduler"
-$beatJob = Start-Process -FilePath "celery" `
-    -ArgumentList $beatArgs `
-    -PassThru -WindowStyle Minimized
-Write-Host "  Beat PID: $($beatJob.Id)" -ForegroundColor Gray
-
 # ── Start Social worker in background window ───────────────────────────────────
+# Listens ONLY on social.{name} — posting tasks for X, Facebook, LinkedIn, Instagram, Threads
 Write-Host "  Starting social worker ($socialQueue)..." -ForegroundColor Gray
 $socialJob = Start-Process -FilePath "celery" `
-    -ArgumentList "-A ken_backend worker -Q $socialQueue,beat.$Name -c 1 --loglevel=info --pool=solo -n `"social-$Name@%h`"" `
+    -ArgumentList "-A ken_backend worker -Q $socialQueue -c 1 --loglevel=info --pool=solo -n `"social-$Name@%h`"" `
     -PassThru -WindowStyle Normal
 Write-Host "  Social worker PID: $($socialJob.Id)" -ForegroundColor Gray
 
 Start-Sleep -Seconds 3
 
 # ── Start Blog worker in foreground (this window) ─────────────────────────────
+# Listens ONLY on blog.{name} — blog publishing tasks (LinkedIn Pulse, Medium, etc.)
 Write-Host "  Starting blog worker ($blogQueue) in this window..." -ForegroundColor Gray
 Write-Host ""
 

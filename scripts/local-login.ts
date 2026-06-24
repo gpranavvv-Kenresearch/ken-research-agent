@@ -7,11 +7,12 @@
  * Social platforms:
  *   npx tsx scripts/local-login.ts --name aniket --platform x
  *   npx tsx scripts/local-login.ts --name aniket --platform fb
- *   npx tsx scripts/local-login.ts --name aniket --platform li
+ *   npx tsx scripts/local-login.ts --name aniket --platform li        ← also used by LinkedIn Pulse
  *   npx tsx scripts/local-login.ts --name aniket --platform threads
  *   npx tsx scripts/local-login.ts --name aniket --platform instagram
  *
- * Blog platforms (LinkedIn Pulse reuses --platform li):
+ * Blog platforms:
+ *   npx tsx scripts/local-login.ts --name aniket --platform li        ← LinkedIn Pulse reuses this same session
  *   npx tsx scripts/local-login.ts --name aniket --platform medium
  *   npx tsx scripts/local-login.ts --name aniket --platform notion
  *   npx tsx scripts/local-login.ts --name aniket --platform devto
@@ -19,6 +20,9 @@
  *   npx tsx scripts/local-login.ts --name aniket --platform hackmd
  *   npx tsx scripts/local-login.ts --name aniket --platform wordpress
  *   npx tsx scripts/local-login.ts --name aniket --platform blogger
+ *
+ * All sessions are stored as persistent Chrome profiles in scripts/sessions/chrome-{platform}-{name}/
+ * They never expire. Run once per account per platform.
  *
  * Cover image generation (ChatGPT DALL-E 3) — one shared session for the whole machine:
  *   npx tsx scripts/local-login.ts --name shared --platform chatgpt
@@ -62,6 +66,8 @@ const PLATFORMS: Record<string, { url: string; label: string; filePrefix: string
   blogger:   { url: 'https://www.blogger.com/',                  label: 'Blogger',         filePrefix: 'blogger'   },
   // Cover image generation — uses persistent Chrome profile (better than cookies for ChatGPT)
   chatgpt:   { url: 'https://chatgpt.com',                       label: 'ChatGPT',         filePrefix: 'chatgpt'   },
+  // LinkedIn Pulse (persistent Chrome profile — never expires, stored in scripts/sessions/)
+  'li-pulse': { url: 'https://www.linkedin.com/login',           label: 'LinkedIn Pulse',  filePrefix: 'li'      },
 };
 
 if (!PLATFORMS[platform]) {
@@ -70,8 +76,6 @@ if (!PLATFORMS[platform]) {
 }
 
 const OUT_DIR = '.sessions-cookies';
-
-const { url: loginUrl, label: platformLabel, filePrefix } = PLATFORMS[platform];
 
 async function waitForEnter(prompt: string) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -118,48 +122,48 @@ async function mainChatGPT() {
 }
 
 async function main() {
-  // Route ChatGPT to persistent-profile flow
   if (platform === 'chatgpt') {
     await mainChatGPT();
     return;
   }
 
-  const saveDir = PLATFORMS[platform].outDir ?? OUT_DIR;
-  fs.mkdirSync(saveDir, { recursive: true });
-  fs.mkdirSync(OUT_DIR, { recursive: true });
-  // threads/instagram use underscore (threads_pranav.json) to match posting scripts
-  const sep = PLATFORMS[platform].outDir ? '_' : '-';
-  const outFile = path.join(saveDir, `${filePrefix}${sep}${name}.json`);
+  // li and li-pulse share the same Chrome profile (same LinkedIn account, different scripts)
+  const profileSlug = PLATFORMS[platform!].filePrefix;
+  const profileDir  = path.join('scripts', 'sessions', `chrome-${profileSlug}-${name}`);
+  fs.mkdirSync(profileDir, { recursive: true });
 
-  console.log(`\n  Logging into ${platformLabel} as "${name}"`);
-  console.log(`    Output: ${outFile}\n`);
+  const { url: loginUrl, label: platformLabel } = PLATFORMS[platform!];
 
-  const browser = await chromium.launch({
+  console.log(`\n  Setting up ${platformLabel} session`);
+  console.log(`    Profile: ${profileDir}`);
+  console.log('    Stored as a real Chrome user profile — never expires.\n');
+
+  const context = await chromium.launchPersistentContext(profileDir, {
     headless: false,
-    args: ['--start-maximized', '--disable-blink-features=AutomationControlled'],
-  });
-
-  const context = await browser.newContext({
-    viewport: null,
+    channel: 'chrome',
+    viewport: { width: 1280, height: 900 },
+    args: [
+      '--start-maximized',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-infobars',
+    ],
+    ignoreDefaultArgs: ['--enable-automation'],
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   });
 
-  const page = await context.newPage();
+  const page = context.pages()[0] ?? await context.newPage();
   await page.goto(loginUrl, { waitUntil: 'domcontentloaded' });
 
-  console.log(`    Browser opened. Log in to ${platformLabel} now.`);
-  console.log(`    When you are fully logged in (home page visible), come back here and press Enter.\n`);
+  console.log(`    Browser opened → ${loginUrl}`);
+  console.log(`    Log in to ${platformLabel} now.`);
+  console.log('    When fully logged in (home page visible), press Enter here.\n');
 
   await waitForEnter('    Press Enter once you are logged in → ');
 
-  // Save full storage state (cookies + localStorage)
-  const state = await context.storageState();
-  fs.writeFileSync(outFile, JSON.stringify(state));
+  await context.close();
 
-  console.log(`\n    ✅ Session saved → ${outFile}`);
-  console.log(`    You won't need to log in again unless cookies expire.\n`);
-
-  await browser.close();
+  console.log(`\n    ✅ Session saved → ${profileDir}`);
+  console.log('    Posting scripts load this profile automatically on every run.\n');
   process.exit(0);
 }
 

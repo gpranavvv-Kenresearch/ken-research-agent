@@ -69,40 +69,73 @@ function writeSheet(updates: Record<string, string>) {
 (async () => {
   console.log(`[post-fb] Posting as ${email} (${nickname}) — row ${row}`);
 
-  const hasJson = fs.existsSync(SESSION_JSON);
-  const hasDir  = fs.existsSync(SESSION_DIR);
-
-  if (!hasJson && !hasDir) {
-    const err = `No session found for ${nickname}. Expected ${SESSION_JSON} or ${SESSION_DIR}.`;
-    console.error(err);
-    writeSheet({ 'FB Status': 'error', 'FB Error': err });
-    writeResumeFile('post-facebook.ts', 'open-browser', err, { nickname, email, row });
-    process.exit(1);
-  }
+  // Persistent profile is primary. Falls back to JSON session, then credential login.
+  fs.mkdirSync(SESSION_DIR, { recursive: true });
+  const hasPersistentProfile = fs.readdirSync(SESSION_DIR).length > 0;
+  const hasJsonSession = fs.existsSync(SESSION_JSON);
 
   let ctx: BrowserContext;
   let closeBrowser: () => Promise<void>;
 
-  if (hasJson) {
-    console.log(`[post-fb] Using cookie session: ${SESSION_JSON}`);
+  if (hasPersistentProfile) {
+    console.log(`[post-fb] Using persistent profile: ${SESSION_DIR}`);
+    ctx = await chromium.launchPersistentContext(SESSION_DIR, {
+      headless: false,
+      channel: 'chrome',
+      args: ['--no-sandbox', '--disable-blink-features=AutomationControlled', '--disable-infobars'],
+      ignoreDefaultArgs: ['--enable-automation'],
+    });
+    closeBrowser = () => ctx.close();
+  } else if (hasJsonSession) {
+    console.log(`[post-fb] Using JSON session: ${SESSION_JSON}`);
     const browserInst = await chromium.launch({
       headless: false,
+      channel: 'chrome',
       args: ['--no-sandbox', '--disable-blink-features=AutomationControlled'],
     });
     ctx = await browserInst.newContext({ storageState: SESSION_JSON });
     closeBrowser = () => browserInst.close();
   } else {
-    console.log(`[post-fb] Using persistent profile: ${SESSION_DIR}`);
+    console.log(`[post-fb] No session found — logging in with credentials to create profile`);
     ctx = await chromium.launchPersistentContext(SESSION_DIR, {
       headless: false,
-      args: ['--no-sandbox', '--disable-blink-features=AutomationControlled'],
+      channel: 'chrome',
+      args: ['--no-sandbox', '--disable-blink-features=AutomationControlled', '--disable-infobars'],
+      ignoreDefaultArgs: ['--enable-automation'],
     });
     closeBrowser = () => ctx.close();
   }
 
-  const page = await ctx.newPage();
+  const page = ctx.pages()[0] ?? await ctx.newPage();
 
   try {
+    // Check login state; do credential login if session expired or missing
+    await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(2000);
+    const fbUrl = page.url();
+    const fbLoggedIn = !fbUrl.includes('/login') && !fbUrl.includes('checkpoint');
+
+    if (!fbLoggedIn) {
+      console.log('[post-fb] Session invalid — logging in with credentials');
+      await page.goto('https://www.facebook.com/login', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForTimeout(1500);
+      await page.locator('#email, input[name="email"]').first().fill(email);
+      await page.locator('#pass, input[name="pass"]').first().fill(password);
+      await page.locator('button[name="login"], button[type="submit"]').first().click();
+      await page.waitForTimeout(4000);
+      const afterUrl = page.url();
+      if (afterUrl.includes('/login') || afterUrl.includes('checkpoint')) {
+        const err = 'Facebook login failed — wrong credentials or verification required';
+        writeSheet({ 'FB Status': 'error', 'FB Error': err });
+        writeResumeFile('post-facebook.ts', 'login', err, { nickname, email, row });
+        await closeBrowser();
+        process.exit(1);
+      }
+      console.log('[post-fb] Login successful — profile saved');
+    } else {
+      console.log('[post-fb] Session valid');
+    }
+
     const result = await postToFacebook(page, postText);
     const postedUrl = result.postUrl || '';
     console.log(`POSTED_URL=${postedUrl}`);
