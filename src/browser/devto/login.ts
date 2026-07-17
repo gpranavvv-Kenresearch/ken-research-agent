@@ -146,6 +146,7 @@ export async function loginToDevto(options?: {
 
   browserContext = await chromium.launchPersistentContext(sessionDir, {
     headless: process.env.HEADLESS !== 'false',
+    permissions: ['clipboard-read', 'clipboard-write'],
     executablePath: fs.existsSync(chromePath) ? chromePath : undefined,
     channel: fs.existsSync(chromePath) ? undefined : 'chrome',
     viewport: { width: 1366, height: 900 },

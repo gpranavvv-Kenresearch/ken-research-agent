@@ -69,8 +69,8 @@ export async function loginToFacebook(options?: {
     browserContext = await headlessBrowser.newContext({
       storageState: cookiesFile,
       viewport: { width: 1280, height: 800 },
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     });
+    await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);
     const page = await browserContext.newPage();
     await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForTimeout(3000);
@@ -111,7 +111,6 @@ export async function loginToFacebook(options?: {
       '--disable-infobars',
     ],
     viewport: { width: 1280, height: 800 },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   });
 
   await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);

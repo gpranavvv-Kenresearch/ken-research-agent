@@ -106,6 +106,7 @@ function writeSheet(updates: Record<string, string>) {
     closeBrowser = () => ctx.close();
   }
 
+  await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
   const page = ctx.pages()[0] ?? await ctx.newPage();
 
   try {

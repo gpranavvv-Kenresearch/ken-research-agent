@@ -424,7 +424,6 @@ async function main() {
         '--no-first-run', '--no-default-browser-check',
         '--disable-session-crashed-bubble', '--disable-infobars',
       ],
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
     });
     await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
     await ctx.addInitScript(() => {
@@ -495,7 +494,6 @@ async function main() {
         '--no-first-run', '--no-default-browser-check',
         '--disable-session-crashed-bubble', '--disable-infobars',
       ],
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     });
     await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
     await ctx.addInitScript(() => {
@@ -550,7 +548,6 @@ async function main() {
         '--no-first-run', '--no-default-browser-check',
         '--disable-session-crashed-bubble', '--disable-infobars',
       ],
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     });
     await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
     await ctx.addInitScript(() => {
@@ -598,7 +595,6 @@ async function main() {
         '--no-first-run', '--no-default-browser-check',
         '--disable-session-crashed-bubble', '--disable-infobars',
       ],
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     });
     await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
     await ctx.addInitScript(() => {
@@ -694,6 +690,84 @@ async function main() {
     ], { detached: true, stdio: 'ignore' });
     chrome.unref();
     process.stdout.write('✅ Browser open. Login complete? Press Enter to finish: ');
+    await new Promise<void>(resolve => {
+      process.stdin.resume();
+      process.stdin.setEncoding('utf8');
+      process.stdin.once('data', () => { process.stdin.pause(); resolve(); });
+    });
+    console.log(`\n✅ Session saved for ${nickname}!`);
+    return;
+  }
+
+  if (mode === 'manual-login') {
+    // One shared Chrome profile per person, reused across every platform
+    // (X, FB, LI, and all blog platforms) — cookies are domain-scoped so
+    // this is safe. Opens straight to the platform's own landing page (same
+    // URL the real login/poster code checks), so if you're already logged
+    // in from a prior run you'll just see the logged-in page and can press
+    // Enter immediately; if not, log in by hand then press Enter.
+    const PLATFORM_URLS: Record<string, string> = {
+      google: 'https://accounts.google.com/',
+      x: 'https://x.com/home',
+      fb: 'https://www.facebook.com/',
+      li: 'https://www.linkedin.com/feed/',
+      medium: 'https://medium.com/',
+      wordpress: 'https://wordpress.com/',
+      blogger: 'https://www.blogger.com/',
+      notion: 'https://app.notion.com/',
+      patreon: 'https://www.patreon.com/login',
+      paragraph: 'https://paragraph.com/home',
+      substack: 'https://substack.com/',
+      hackmd: 'https://hackmd.io/?nav=overview',
+      devto: 'https://dev.to/dashboard',
+      googlesite: 'https://sites.google.com/',
+      calisthenics: 'https://calisthenics.mn.co/',
+      linkmate: 'https://linkmate.mn.co/',
+      note: 'https://note.com/',
+      ameba: 'https://www.ameba.jp/home',
+      articlescad: 'https://articlescad.com/dashboard',
+    };
+
+    const nickname = process.argv[3];
+    const platformArg = process.argv[4]; // optional: shortcut key above, or a raw URL
+    if (!nickname) {
+      console.error('❌ Usage: npm run dev -- manual-login <nickname> [platform|url]');
+      console.error(`   Platforms: ${Object.keys(PLATFORM_URLS).join(', ')}`);
+      process.exit(1);
+    }
+    let startUrl: string | undefined;
+    if (platformArg) {
+      const isUrl = /^https?:\/\//i.test(platformArg);
+      const known = PLATFORM_URLS[platformArg.toLowerCase()];
+      if (known) {
+        startUrl = known;
+      } else if (isUrl) {
+        startUrl = platformArg;
+      } else {
+        console.error(`❌ "${platformArg}" isn't a recognized platform or a URL (did you mean to pass a platform name here, not a person's name?)`);
+        console.error(`   Platforms: ${Object.keys(PLATFORM_URLS).join(', ')}`);
+        console.error(`   Usage: npm run dev -- manual-login <nickname> <platform>`);
+        process.exit(1);
+      }
+    }
+
+    const { spawn } = await import('child_process');
+    const path = await import('path');
+    const fs = await import('fs');
+
+    const resolvedSessionDir = path.default.resolve(`.sessions/chrome-${nickname.toLowerCase()}`);
+    fs.default.mkdirSync(resolvedSessionDir, { recursive: true });
+    const chromePath = process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : undefined);
+    console.log(`\n🔐 Opening shared Chrome profile for ${nickname}${platformArg ? ` — ${platformArg}` : ''}`);
+    console.log(`   Session dir: ${resolvedSessionDir}`);
+    if (startUrl) console.log(`   Opening: ${startUrl}`);
+    console.log('   Already logged in from a prior session? Great, just press Enter.');
+    console.log('   Not logged in? Log in by hand — nothing is auto-filled — then press Enter.\n');
+    const chromeArgs = [`--user-data-dir=${resolvedSessionDir}`, '--new-window'];
+    if (startUrl) chromeArgs.push(startUrl);
+    const chrome = spawn(chromePath as string, chromeArgs, { detached: true, stdio: 'ignore' });
+    chrome.unref();
+    process.stdout.write('✅ Browser open. Done? Press Enter to finish: ');
     await new Promise<void>(resolve => {
       process.stdin.resume();
       process.stdin.setEncoding('utf8');

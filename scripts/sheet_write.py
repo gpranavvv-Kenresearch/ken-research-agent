@@ -74,7 +74,7 @@ BASE_URL = "https://sheets.googleapis.com/v4/spreadsheets"
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache")
 TOKEN_CACHE = os.path.join(CACHE_DIR, "gsheet_token.json")
 HEADERS_CACHE = os.path.join(CACHE_DIR, "gsheet_headers.json")
-HEADERS_TTL = 3600  # re-fetch headers after 1 hour
+HEADERS_TTL = 120  # re-fetch headers after 2 min (so column-layout changes self-heal fast)
 
 
 def _ensure_cache_dir():

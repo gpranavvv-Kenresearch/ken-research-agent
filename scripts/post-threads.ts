@@ -207,6 +207,7 @@ async function composeAndPost(page: Page, text: string): Promise<string> {
     closeBrowser = () => ctx.close();
   }
 
+  await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
   const page = await ctx.newPage();
 
   try {

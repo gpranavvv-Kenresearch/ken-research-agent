@@ -18,10 +18,10 @@ async function attemptPost(page: Page, params: CalisthenicsPostParams): Promise<
   // ── Step 1: Navigate to home and wait for Create button ───────────────────
   console.log('  1️⃣ Navigating to home...');
   await page.goto('https://calisthenics.mn.co/', { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForSelector('a[title="Create"]', { timeout: 30000 });
+  await page.waitForSelector('button[aria-label="Create content"], a[title="Create"]', { timeout: 30000 });
 
   console.log('  2️⃣ Clicking Create...');
-  await page.click('a[title="Create"]');
+  await page.click('button[aria-label="Create content"], a[title="Create"]');
   await sleep(800);
 
   // ── Step 2: Select space ───────────────────────────────────────────────────

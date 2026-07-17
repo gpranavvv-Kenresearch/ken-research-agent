@@ -49,6 +49,7 @@ export async function loginToInstagram(account: InstagramAccount): Promise<Page>
 
   browserContext = await chromium.launchPersistentContext(sessionDir, {
     headless: process.env.HEADLESS !== 'false',
+    permissions: ['clipboard-read', 'clipboard-write'],
     executablePath: chromePath,
     slowMo: 50,
     ignoreDefaultArgs: ['--enable-automation'],
@@ -64,7 +65,6 @@ export async function loginToInstagram(account: InstagramAccount): Promise<Page>
       '--disable-infobars',
     ],
     viewport: { width: 1366, height: 768 },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   });
 
   const existingPages = browserContext.pages();

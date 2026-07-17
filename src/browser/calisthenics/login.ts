@@ -23,8 +23,10 @@ let currentNickname: string | null = null;
 
 export function getCalisthenicsAccounts(): CalisthenicsAccount[] {
   if (!fs.existsSync(ACCOUNTS_FILE)) return [];
+  // Registry file is a plain array (same format every other platform's account
+  // registry uses, and what registerFleetAccount() writes) — not { accounts: [...] }.
   const data = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8'));
-  return data.accounts || [];
+  return Array.isArray(data) ? data : (data.accounts || []);
 }
 
 export function getCalisthenicsAccountByNickname(nickname: string): CalisthenicsAccount | null {
@@ -58,7 +60,13 @@ export async function loginCalisthenics(nickname: string, manualLogin = false): 
   console.log('   Launching Calisthenics browser...');
 
   browserContext = await chromium.launchPersistentContext(sessionDir, {
-    headless: process.env.HEADLESS !== 'false',
+    // Calisthenics (Mighty Networks) sits behind Cloudflare, which blocks headless
+    // Chrome outright (shows a "Just a moment..." challenge instead of the real
+    // site) regardless of stealth flags — confirmed by testing the same session
+    // headless vs headed. So this always runs headed, ignoring the HEADLESS toggle.
+    headless: false,
+    env: { ...process.env, DISPLAY: process.env.DISPLAY || ':99' },
+    permissions: ['clipboard-read', 'clipboard-write'],
     executablePath: CHROME_PATH,
     viewport: { width: 1366, height: 900 },
     slowMo: 50,
@@ -77,7 +85,6 @@ export async function loginCalisthenics(nickname: string, manualLogin = false): 
       '--simulate-outdated-no-au=Tue, 31 Dec 2099 00:00:00 GMT',
       '--disable-component-update',
     ],
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
   });
 
   await browserContext.addInitScript(() => {
@@ -108,7 +115,7 @@ export async function loginCalisthenics(nickname: string, manualLogin = false): 
   console.log('   Navigating to Calisthenics...');
   await page.goto('https://calisthenics.mn.co/', { waitUntil: 'domcontentloaded', timeout: 30000 });
   // Wait for either the Create button (logged in) or sign-in link (not logged in)
-  await page.waitForSelector('a[title="Create"], a[href*="/sign_in"]', { timeout: 30000 }).catch(() => {});
+  await page.waitForSelector('button[aria-label="Create content"], a[title="Create"], a[href*="/sign_in"]', { timeout: 30000 }).catch(() => {});
 
   // Check if already logged in
   const loggedIn = !page.url().includes('/sign_in') && !page.url().includes('/login');

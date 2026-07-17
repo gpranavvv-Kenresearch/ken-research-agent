@@ -19,7 +19,7 @@ Outputs JSON to stdout:
     "blog_description": "SEO desc, caption- LinkedIn caption",
     "blog_seo_title": "...",
     "blog_seo_desc": "...",
-    "cover_image_url": "https://res.cloudinary.com/...",
+    "cover_image_url": "https://ik.imagekit.io/...",
     "rating": 8
   }
 
@@ -102,41 +102,83 @@ def tavily_search(query: str) -> str:
         return ''
 
 
-def search_market_data(market_name: str, country: str) -> dict:
+def search_market_data(market_name: str, country: str, include_tech_trends: bool = False) -> dict:
     print(f'[generate_blog] Searching market data for: {market_name}', file=sys.stderr)
     q1 = tavily_search(f'{market_name} market size CAGR {country} 2024 2025 2030 forecast billion')
     q2 = tavily_search(f'{market_name} key players companies market share 2025')
     q3 = tavily_search(f'{market_name} government policy regulation {country} 2024 2025')
-    return {
-        'market_data': q1,
-        'key_players': q2,
-        'policies': q3,
-    }
+    result = {'market_data': q1, 'key_players': q2, 'policies': q3}
+    if include_tech_trends:
+        result['tech_trends'] = tavily_search(
+            f'{market_name} technology adoption AI digital trends {country} 2025 specific examples'
+        )
+    return result
 
 
 # ── AI helpers ────────────────────────────────────────────────────────────────
 
-def call_openrouter(prompt: str, max_tokens: int = 8000) -> str:
-    key = _pick_key('OPENROUTER_API_KEY', 15)
-    if not key:
+def _all_openrouter_keys() -> list:
+    import random as _r
+    keys = []
+    base = os.environ.get('OPENROUTER_API_KEY')
+    if base:
+        keys.append(base)
+    for i in range(1, 20):
+        k = os.environ.get(f'OPENROUTER_API_KEY_{i}')
+        if k:
+            keys.append(k)
+    _r.shuffle(keys)
+    return keys
+
+
+# Ordered by ability to hold up under the long, rule-heavy blog prompt.
+# gpt-oss-120b:free is kept last — it's the one that was refusing / degenerating.
+FREE_MODELS = [
+    'deepseek/deepseek-chat-v3.1:free',
+    'qwen/qwen3-235b-a22b:free',
+    'openai/gpt-oss-120b:free',
+]
+
+
+def call_openrouter(prompt: str, max_tokens: int = 8000, model: str = FREE_MODELS[0]) -> str:
+    keys = _all_openrouter_keys()
+    if not keys:
         raise RuntimeError('No OPENROUTER_API_KEY')
-    resp = requests.post(
-        'https://openrouter.ai/api/v1/chat/completions',
-        headers={
-            'Authorization': f'Bearer {key}',
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://kenresearch.com',
-        },
-        json={
-            'model': 'openai/gpt-oss-120b:free',
-            'messages': [{'role': 'user', 'content': prompt}],
-            'max_tokens': max_tokens,
-            'temperature': 0.7,
-        },
-        timeout=180,
-    )
-    resp.raise_for_status()
-    return resp.json()['choices'][0]['message']['content'].strip()
+    last_err = None
+    for key in keys:
+        try:
+            resp = requests.post(
+                'https://openrouter.ai/api/v1/chat/completions',
+                headers={
+                    'Authorization': f'Bearer {key}',
+                    'Content-Type': 'application/json',
+                    'HTTP-Referer': 'https://kenresearch.com',
+                },
+                json={
+                    'model': model,
+                    'messages': [{'role': 'user', 'content': prompt}],
+                    'max_tokens': max_tokens,
+                    'temperature': 0.7,
+                },
+                timeout=300,
+            )
+            if resp.status_code in (429, 402):
+                last_err = f'{resp.status_code} on key ...{key[-6:]}'
+                print(f'[generate_blog] {last_err}, trying next key', file=sys.stderr)
+                continue
+            resp.raise_for_status()
+            return resp.json()['choices'][0]['message']['content'].strip()
+        except requests.exceptions.Timeout:
+            last_err = f'Timeout on key ...{key[-6:]}'
+            print(f'[generate_blog] {last_err}, trying next key', file=sys.stderr)
+            continue
+        except Exception as e:
+            last_err = str(e)
+            if '429' in str(e) or '402' in str(e):
+                print(f'[generate_blog] {e}, trying next key', file=sys.stderr)
+                continue
+            raise
+    raise RuntimeError(f'All OpenRouter keys failed for {model}. Last: {last_err}')
 
 
 def call_nvidia(prompt: str, max_tokens: int = 8000) -> str:
@@ -147,23 +189,24 @@ def call_nvidia(prompt: str, max_tokens: int = 8000) -> str:
         'https://integrate.api.nvidia.com/v1/chat/completions',
         headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'},
         json={
-            'model': 'meta/llama-3.1-70b-instruct',
+            'model': 'meta/llama-3.3-70b-instruct',
             'messages': [{'role': 'user', 'content': prompt}],
             'max_tokens': max_tokens,
             'temperature': 0.7,
             'stream': False,
         },
-        timeout=180,
+        timeout=480,
     )
     resp.raise_for_status()
     return resp.json()['choices'][0]['message']['content'].strip()
 
 
-def call_ai(prompt: str, max_tokens: int = 8000) -> str:
+def call_ai(prompt: str, max_tokens: int = 8000, attempt: int = 0) -> str:
+    model = FREE_MODELS[attempt % len(FREE_MODELS)]
     try:
-        return call_openrouter(prompt, max_tokens)
+        return call_openrouter(prompt, max_tokens, model=model)
     except Exception as e:
-        print(f'[generate_blog] OpenRouter failed ({e}), trying NVIDIA...', file=sys.stderr)
+        print(f'[generate_blog] OpenRouter ({model}) failed ({e}), trying NVIDIA...', file=sys.stderr)
         return call_nvidia(prompt, max_tokens)
 
 
@@ -224,6 +267,17 @@ def _sanitise(text: str) -> str:
     return _re.sub(r'  +', ' ', text).strip()
 
 
+def _inject_cover_image(html: str, cover_image_url: str, market_name: str) -> str:
+    """Force the real cover image URL into the article. Models sometimes ignore the
+    URL handed to them and hallucinate a placeholder src (e.g. 'header.jpg')."""
+    if not cover_image_url:
+        return html
+    img_tag = f"<img src='{cover_image_url}' alt='{market_name} market research'>"
+    if re.search(r'<img\b[^>]*>', html, re.IGNORECASE):
+        return re.sub(r'<img\b[^>]*>', img_tag, html, count=1, flags=re.IGNORECASE)
+    return f'{img_tag}\n{html}'
+
+
 def url_to_anchor(url: str) -> str:
     """Convert a report URL to anchor text: truncate at first trigger word."""
     path = urlparse(url).path.rstrip('/')
@@ -254,15 +308,16 @@ def extract_market_name(url: str, title: str) -> str:
 
 def extract_country(url: str, title: str) -> str:
     countries = [
-        'India', 'China', 'USA', 'US', 'UK', 'Indonesia', 'Vietnam', 'Thailand',
-        'Saudi Arabia', 'UAE', 'Brazil', 'Mexico', 'Philippines', 'Malaysia',
-        'South Korea', 'Japan', 'Germany', 'France', 'Australia', 'Nigeria',
-        'Kenya', 'South Africa', 'Egypt', 'Turkey', 'Pakistan', 'Bangladesh',
-        'Colombia', 'Russia', 'Kuwait', 'Qatar', 'Oman', 'Bahrain',
+        'Saudi Arabia', 'South Korea', 'South Africa', 'UAE', 'UK', 'USA',
+        'India', 'China', 'Indonesia', 'Vietnam', 'Thailand', 'Brazil', 'Mexico',
+        'Philippines', 'Malaysia', 'Japan', 'Germany', 'France', 'Australia',
+        'Nigeria', 'Kenya', 'Egypt', 'Turkey', 'Pakistan', 'Bangladesh',
+        'Colombia', 'Russia', 'Kuwait', 'Qatar', 'Oman', 'Bahrain', 'US',
     ]
-    combined = f'{title} {url}'.lower()
+    combined = f'{title} {url}'.lower().replace('-', ' ')
     for country in countries:
-        if country.lower() in combined:
+        pattern = r'\b' + re.escape(country.lower()) + r'\b'
+        if re.search(pattern, combined):
             return country
     return 'Global'
 
@@ -270,14 +325,14 @@ def extract_country(url: str, title: str) -> str:
 # ── Cover image generation ────────────────────────────────────────────────────
 
 def generate_cover_image(market_name: str, market_size: str = '', cagr: str = '', forecast: str = '') -> str:
-    """Generate cover image via ChatGPT DALL-E 3 (Playwright) and upload to Cloudinary.
+    """Generate cover image via ChatGPT DALL-E 3 (Playwright) and upload to ImageKit.
 
     Calls scripts/generate_image.ts which:
       1. Opens an existing logged-in ChatGPT browser session
       2. Sends a detailed DALL-E 3 prompt (no Ken Research branding)
       3. Downloads the generated image
-      4. Uploads to Cloudinary
-      5. Returns {"status":"success","cloudinaryUrl":"..."}
+      4. Uploads to ImageKit
+      5. Returns {"status":"success","imageUrl":"..."}
     """
     print(f'[generate_blog] Generating DALL-E 3 cover image for: {market_name}', file=sys.stderr)
 
@@ -313,7 +368,7 @@ def generate_cover_image(market_name: str, market_size: str = '', cagr: str = ''
 
         data = json.loads(stdout_lines[-1])
         if data.get('status') == 'success':
-            url = data.get('cloudinaryUrl', '')
+            url = data.get('imageUrl', '')
             print(f'[generate_blog] Cover image ready: {url}', file=sys.stderr)
             return url
         else:
@@ -331,6 +386,39 @@ def generate_cover_image(market_name: str, market_size: str = '', cagr: str = ''
 
 
 # ── Blog HTML generation ──────────────────────────────────────────────────────
+
+def _looks_degenerate(text: str) -> bool:
+    """Catch the repetition-loop garbage weak models emit near their token limit
+    (e.g. '}}]}}]}}]...--- End ---]}' repeated thousands of times)."""
+    return bool(re.search(r'(.{1,20}?)\1{15,}', text))
+
+
+def _is_refusal(text: str) -> bool:
+    lowered = text.lower()
+    markers = [
+        'unable to comply', 'i cannot comply', 'conflicting instructions',
+        'must be html, not json', 'i cannot fulfill', "i can't fulfill",
+        'as an ai language model', 'i cannot generate', 'i cannot create',
+    ]
+    return any(m in lowered for m in markers)
+
+
+def _validate_generation(data: dict) -> str:
+    """Return '' if the parsed response looks like a real article, else a reason."""
+    html = data.get('html_content', '') or ''
+    title = data.get('blog_title', '') or ''
+    if not html or not title:
+        return f'missing blog_title or html_content (keys: {list(data.keys())})'
+    if _is_refusal(html) or _is_refusal(title):
+        return 'model returned a refusal instead of article content'
+    if _looks_degenerate(html):
+        return 'model output degenerated into repeated garbage'
+    if '<h1>' not in html.lower():
+        return 'html_content missing <h1>'
+    if count_words(html) < 800:
+        return f'html_content too short ({count_words(html)} words)'
+    return ''
+
 
 def build_generation_prompt(
     title: str,
@@ -403,6 +491,11 @@ Cover Image: {cover_image_url or '(none)'}
 11. Article MUST end with the Ken Research branding paragraph as the final element.
 12. Use 2026 as the present year. Use historical data only as context.
 13. DO NOT include a Research Methodology section, Analyst Perspective section, or any comparison table.
+14. CAGR MATH VALIDATION (CRITICAL): If you state a base value X (e.g. $5.2B in 2025), a forecast value Y (e.g. $7.0B by 2032), and a CAGR of Z% over N years, verify X * (1 + Z/100)^N is approximately equal to Y. If they do not match, ADJUST THE CAGR to fit X and Y. Never state all three unless mathematically consistent. Example: $5.2B to $7.0B over 7 years = 4.4% CAGR, NOT 7.1%.
+15. SEGMENT TOTALS: All segment percentages listed together MUST sum to exactly 100%. Cross-cutting delivery modalities (e-learning, online, blended) that span multiple segments must NOT be listed as a separate segment that would push the total above 100%. Either include them within a segment or note separately that they overlap.
+16. DATA SOURCING GUARDRAIL: Do NOT state a precise percentage or specific figure (e.g., "68% of institutions", "9% vacancy rate", "12% margin increase", "SR 30 billion") unless that exact figure appears in the scraped page content or web research provided above. For metrics not in the provided data, use softened language: "a significant share", "a notable vacancy rate", "improved margins", "substantial government incentives". Never invent a precise number.
+17. FAQ Q4 COUNTRY NAME: In Q4, copy the exact country/region name from the Market Data section above into the question text. NEVER substitute a different country. Use "and" not "or" between "digital initiatives" and "regulatory frameworks" in Q4.
+18. H1 CONCISENESS: Include ONE key data figure in the H1 (market size OR CAGR OR forecast value, not all three stacked together). A clean, focused H1 with one strong number outperforms an overloaded one.
 
 Link format for ALL anchors (copy exactly):
 <a href='URL' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>Anchor Text</strong></a>
@@ -540,7 +633,7 @@ DO NOT add: "Ken Research is a leading firm; visit our website". DO NOT add a li
 <h3>Q3: Which segment within the {market_name} is recording the fastest expansion, and what structural demand forces are behind this acceleration?</h3>
 <p>[90+ words. Name the segment, give share or growth rate. MUST include 1 related report interlink.]</p>
 
-<h3>Q4: How are government policies, digital initiatives, or regulatory frameworks in {country} shaping the trajectory of the {market_name}?</h3>
+<h3>Q4: How are government policies, digital initiatives, and regulatory frameworks in {country} shaping the {market_name}?</h3>
 <p>[90+ words. Name the specific policy or initiative, year enacted, and measurable impact. No interlink.]</p>
 
 <h3>Q5: Where can business leaders, investors, and procurement teams access the full forecast data, competitive benchmarks, and segment-level analysis for the {market_name}?</h3>
@@ -593,6 +686,350 @@ HASHTAGS: 4-5 hashtags. Always include #KenResearch.
 RULES for caption: no em dashes, no en dashes, no placeholder numbers, no "In today's", no "Thrilled to share"
 """
 
+
+# ── Format 2 prompt ───────────────────────────────────────────────────────────
+
+def build_generation_prompt_v2(
+    title: str,
+    target_url: str,
+    page_text: str,
+    research: dict,
+    related_urls: list,
+    platform_slug: str,
+    target_utm: str,
+    sample_url: str,
+    cover_image_url: str,
+    market_name: str,
+    country: str,
+    name: str = '',
+) -> str:
+
+    sample_utm = make_utm_url(sample_url, platform_slug, name)
+    kr_home_utm = make_utm_url('https://www.kenresearch.com/', platform_slug, name)
+
+    interlinks_block = '\n'.join(
+        f'  {i+1}. URL: {make_utm_url(url, platform_slug)}\n     Anchor: {url_to_anchor(url)}'
+        for i, url in enumerate(related_urls)
+    )
+
+    return f"""You are a senior B2B market intelligence writer for Ken Research. Write a complete HTML article for LinkedIn Pulse optimised for Google E-E-A-T, AIO (AI search engines), and GEO (ChatGPT/Gemini/Perplexity citations).
+
+== MARKET DATA ==
+Report Title: {title}
+Report URL: {target_url}
+Market Name: {market_name}
+Country/Region: {country}
+
+Page Content (from Ken Research report page):
+{page_text[:3000]}
+
+Web Research - Market Size / CAGR / Forecast:
+{research.get('market_data', '')[:800]}
+
+Web Research - Key Companies / Market Share / Positioning:
+{research.get('key_players', '')[:600]}
+
+Web Research - Policy / Regulation / Named Government Programs:
+{research.get('policies', '')[:600]}
+
+Web Research - Technology Trends / Specific Tools / Digital Initiatives:
+{research.get('tech_trends', '')[:500]}
+
+== LINKS TO EMBED ==
+Target Report (main CTA): {target_utm}
+Sample Report (secondary CTA): {sample_utm}
+
+Related Reports - pick exactly 8 from this list, one per H2 body section:
+{interlinks_block}
+
+Cover Image: {cover_image_url or '(none)'}
+
+== WRITING STYLE: MARKET INTELLIGENCE STANDARD ==
+Every sentence must carry analytical weight. Apply this test to every sentence before writing it:
+"Does this sentence tell the reader something they could not have guessed without data?"
+
+FORMULA: [Specific force] is [doing X] because [mechanism], which means [market implication].
+
+BEFORE (weak): "The market is growing due to urbanization."
+AFTER (strong): "Accelerating urbanization is concentrating demand for private K-12 institutions
+in Riyadh and Jeddah, where household incomes exceed SAR 15,000/month and education spending
+accounts for a rising share of discretionary budgets."
+
+BEFORE (weak): "AI is revolutionizing education."
+AFTER (strong): "AI tutoring platforms such as Khanmigo and Alef Education now serve over
+2 million students in the GCC, compressing private tutoring costs by up to 40% and enabling
+schools to offer personalized learning paths without proportional increases in headcount."
+
+BEFORE (weak): "Government Initiatives are driving growth."
+AFTER (strong): "Saudi Arabia's Vision 2030 mandate to raise private-sector education spending
+to SAR 120 billion by 2030 is redirecting capex toward EdTech platforms and STEM campuses,
+with the Ministry of Education approving 340 new private school licenses in 2024 alone."
+
+Apply this market intelligence standard to ALL paragraphs, bullet points, FAQ answers, and the conclusion.
+Generic statements without a named subject, mechanism, or measurable figure will be rejected.
+
+== ABSOLUTE RULES - VIOLATION = REJECT ==
+1. NO em dashes or en dashes anywhere. Use comma or colon instead.
+2. ALL numbers, percentages, USD values wrapped in <strong> tags. Zero bare numbers allowed.
+3. Exactly 5 FAQ questions (H3). No more, no less.
+4. Exactly 10-12 <a href links total across the whole article.
+5. Word count: 1,500-1,800 words. Count every word including headings, lists, FAQs.
+6. Every H2 body paragraph MUST contain exactly 1 related report interlink (except the at-a-glance box).
+7. Use "as per Ken Research" or "as tracked by Ken Research" at least 3 times in body paragraphs.
+8. Exactly 2 CTA blocks: first uses "Download Sample Report", second uses "{market_name} Report".
+9. No "Ken Research" in any H2 heading text.
+10. Every <a> tag: SINGLE QUOTES for href. Include style and target attributes exactly as shown.
+11. Article MUST end with the Ken Research branding paragraph as the final element.
+12. Use 2026 as the present year. Use historical data only as context.
+13. DO NOT include a Research Methodology section, Analyst Perspective section, or any comparison table.
+14. CAGR MATH VALIDATION (CRITICAL): If you state a base value X, a forecast value Y, and a CAGR of Z% over N years,
+    verify X * (1 + Z/100)^N is approximately equal to Y. Adjust the CAGR to fit X and Y if needed.
+    Never state all three unless mathematically consistent.
+15. SEGMENT TOTALS: All segment percentages listed together MUST sum to exactly 100%.
+16. DATA SOURCING GUARDRAIL: Do NOT state a precise percentage or specific figure unless that exact figure
+    appears in the scraped page content or web research provided above. For metrics not in the provided data,
+    use softened language: "a significant share", "a notable vacancy rate", "improved margins".
+    Never invent a precise number.
+17. FAQ Q4 COUNTRY NAME AND POLICY SPECIFICITY: In Q4, copy the exact country/region name from the Market Data
+    section above into BOTH the question text AND the answer paragraph body. The answer paragraph must name
+    at least one specific named policy or program (with its year) that is active in {country}.
+    NEVER reference a different country's policies. If country is "Saudi Arabia", the answer MUST reference
+    Vision 2030, Ministry of Education reforms, or named Saudi regulatory bodies - not US, EU, or generic
+    global policies. If country is "India", reference PLI schemes, NEP 2020, ONDC, or relevant ministry
+    programs. Match the country precisely every time.
+18. H1 CONCISENESS: Include ONE key data figure in the H1 (market size OR CAGR OR forecast value, not all
+    three stacked together).
+19. SPECIFICITY MANDATE: Every growth driver, trend, challenge, and competitive point MUST name a specific
+    program, technology, company, regulation, or policy. Generic category labels alone are never acceptable.
+    WRONG: "Government Initiatives", "Technology Adoption", "Rising Population"
+    RIGHT: Name the actual initiative (e.g. "Vision 2030"), the actual technology (e.g. "LMS platforms
+    such as Blackboard and Moodle"), the actual demographic shift with a city-level or income-level detail.
+    This applies to EVERY bullet point, EVERY paragraph, and EVERY FAQ answer in the article.
+20. COMPETITIVE ANALYSIS DEPTH: Each competitor bullet must include: positioning tier (premium/mid/mass),
+    geography served, key product or service differentiator, and one recent strategic move or known
+    advantage. Listing company names without this context is a violation.
+21. TREND EVIDENCE REQUIREMENT: Every trend paragraph must name a specific technology, platform, or
+    initiative, explain the mechanism of impact, and include a forward implication for the market by
+    2027/2028. Broad claims like "AI is changing the industry" without named examples are a violation.
+22. CONCLUSION MUST NOT RESTATE THE INTRODUCTION: The conclusion must identify one irreversible structural
+    shift, one specific investment opportunity (segment/geography/customer type), and what to monitor in
+    the next 12-18 months. Summaries that merely echo the opening paragraph will be rejected.
+
+Link format for ALL anchors (copy exactly):
+<a href='URL' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>Anchor Text</strong></a>
+
+== BLOG TITLE RULES ==
+Blog Title (85-115 chars):
+- Ends with " | Ken Research"
+- Never starts with "Ken Research"
+- Must include a specific number: CAGR %, USD value, or forecast year
+- Use active power verbs: Surges, Races, Reshapes, Unlocks, Accelerates, Hits, Crosses
+- NOT a question
+- CORRECT: "India Cold Chain Market to Hit $22B by 2028 at 14.2% CAGR, Driven by Pharma | Ken Research"
+- WRONG: "Ken Research Report on..." or "The Growing Market for..."
+
+H1 Title (100-130 chars):
+- Never starts with "Ken Research"
+- Ken Research appears in the MIDDLE or END only
+- Must include one data figure
+- CORRECT: "India Cold Chain Logistics Market Set to Hit $22B by 2028 at 14.2% CAGR: Ken Research Analysis"
+
+== AIO H2 HEADING RULES ==
+H2 headings must match how users ask AI engines questions. Use natural language:
+- CORRECT: "Why Is the {market_name} Growing So Fast?" (AIO query format)
+- CORRECT: "Which Segment Is Driving Growth in the {market_name}?" (AIO query)
+- CORRECT: "Top Trends Shaping the {market_name}" (trend discovery query)
+- WRONG: "Market Overview" / "Key Growth Drivers" / "Market Analysis" (generic, not AI-query-friendly)
+
+== HTML STRUCTURE - FOLLOW EXACTLY IN THIS ORDER ==
+
+<img src='{cover_image_url or ""}' alt='{market_name} market research'>
+<h1>[H1 title 100-130 chars with ONE data figure, Ken Research in middle or end]</h1>
+
+<!-- EXECUTIVE SUMMARY -->
+<p>[5-6 sentence dense briefing note.
+S1: Current market size and forecast value (both bolded).
+S2: CAGR bolded. Name the single biggest growth driver with a named policy, company, or structural force.
+S3: Fastest-growing segment and its share or growth rate (bolded).
+S4: Dominant geography and its contribution (bolded).
+S5: One forward-looking structural change by 2028/2030.
+S6: "The complete <a href='{target_utm}' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>{market_name} report</strong></a> by Ken Research covers segment forecasts, competitive benchmarks, and regional breakdown."]</p>
+
+<p><em>This analysis draws on Ken Research market modelling, [sector] operator disclosures, government data, and third-party estimates.</em></p>
+
+<!-- AT A GLANCE BOX -->
+<h2>{market_name} at a Glance</h2>
+<ul>
+  <li><strong>Market Size (2025/2026):</strong> [USD value from data]</li>
+  <li><strong>Forecast Value:</strong> [USD value by forecast year]</li>
+  <li><strong>CAGR:</strong> <strong>[X.X]%</strong></li>
+  <li><strong>Fastest Growing Segment:</strong> [specific segment name]</li>
+  <li><strong>Dominant Region:</strong> [specific region or city tier]</li>
+  <li><strong>Major Growth Driver:</strong> [named policy, program, or structural force - not a generic label]</li>
+</ul>
+<p>[40-60 words contextualising the numbers strategically. No interlink here.]</p>
+
+<!-- SECTION 1: Market size -->
+<h2>[H2: AIO query e.g. "How Big Is the {market_name} and Where Is It Headed?"]</h2>
+<p>[100+ words. 3-4 bolded stats. "as per Ken Research". Name specific segments and geographies.
+   MUST include 1 related report interlink.]</p>
+<ul>
+  <li><strong style="color:#000000;">[Specific Segment]:</strong> [detail with bolded stat]</li>
+  <li><strong style="color:#000000;">[Specific Segment]:</strong> [detail with bolded stat]</li>
+  <li><strong style="color:#000000;">[Specific Segment]:</strong> [detail with bolded stat]</li>
+  <li><strong style="color:#000000;">[Specific Segment]:</strong> [detail with bolded stat]</li>
+</ul>
+
+<!-- SECTION 2: Growth drivers -->
+<h2>[H2: AIO query e.g. "Why Is the {market_name} Growing So Rapidly?"]</h2>
+<p>[100+ words. 3+ bolded stats. "as tracked by Ken Research". Named drivers only.
+   MUST include 1 related report interlink.]</p>
+<ul>
+  <li><strong style="color:#000000;">[Named Driver - e.g. "Vision 2030 Private School Licensing"]:</strong>
+      [Mechanism: what the program does, measurable target or budget, how it flows to market demand. Min 25 words. Bold key figure.]</li>
+  <li><strong style="color:#000000;">[Named Driver]:</strong> [Same format.]</li>
+  <li><strong style="color:#000000;">[Named Driver]:</strong> [Same format.]</li>
+  <li><strong style="color:#000000;">[Named Driver]:</strong> [Same format.]</li>
+</ul>
+
+<div class="cta-block">
+  <p>Need granular segment data and company benchmarks? <a href='{sample_utm}' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>Download Sample Report</strong></a> to preview the full methodology and data tables.</p>
+</div>
+
+<!-- SECTION 3: Top Trends -->
+<h2>Top Trends Shaping the {market_name}</h2>
+<p>[30-40 words scene-setting. MUST include 1 related report interlink.]</p>
+
+<h4>[Trend 1 - specific technology or initiative name, 4-6 words]</h4>
+<p>[70+ words. 4-sentence structure:
+   S1: Name the specific technology or initiative and what it does.
+   S2: Mechanism - why adoption is accelerating NOW (cost reduction, regulatory push, infrastructure).
+   S3: One bolded stat or named company/program validating scale.
+   S4: Forward implication for competitive dynamics by 2027/2028.
+   No interlink.]</p>
+
+<h4>[Trend 2 - specific name]</h4>
+<p>[70+ words. Same 4-sentence structure. Named examples. No interlink.]</p>
+
+<h4>[Trend 3 - specific name]</h4>
+<p>[70+ words. Same structure. Bold key stat. No interlink.]</p>
+
+<h4>[Trend 4 - specific name]</h4>
+<p>[70+ words. Same structure. No interlink.]</p>
+
+<h4>[Trend 5 - specific name]</h4>
+<p>[70+ words. Same structure. No interlink.]</p>
+
+<!-- SECTION 4: Competitive landscape -->
+<h2>[H2: AIO query e.g. "Who Are the Major Players in the {market_name} and How Do They Compete?"]</h2>
+<p>[60-80 words. Frame competitive dynamic first: consolidated/fragmented? public/private? premium/mass?
+   Bold key structural insight. MUST include 1 related report interlink.]</p>
+<ul>
+  <li><strong style="color:#000000;">[Company 1]:</strong> [Positioning tier + geography + key differentiator + one recent strategic move. Min 25 words.]</li>
+  <li><strong style="color:#000000;">[Company 2]:</strong> [Same format. Note contrast with Company 1 where relevant.]</li>
+  <li><strong style="color:#000000;">[Company 3]:</strong> [Same format.]</li>
+  <li><strong style="color:#000000;">[Company 4]:</strong> [Same format.]</li>
+  <li><strong style="color:#000000;">[Company 5]:</strong> [Same format.]</li>
+  <li><strong style="color:#000000;">[Company 6]:</strong> [Same format.]</li>
+</ul>
+<p>[60+ words. Identify ONE specific white space or competitive gap - underserved segment, geography,
+   price tier, or delivery model. "as per Ken Research". Frame as investment or market entry signal.]</p>
+
+<!-- SECTION 5: Challenges -->
+<h2>[H2: AIO query e.g. "What Challenges Does the {market_name} Face?"]</h2>
+<ul>
+  <li><strong>[Challenge Label e.g. "Talent Shortage"]</strong> - [One sentence: the specific constraint, regulatory body, or structural barrier and its measurable impact.]</li>
+  <li><strong>[Challenge Label e.g. "Regulatory Lag"]</strong> - [One sentence explanation.]</li>
+  <li><strong>[Challenge Label e.g. "Funding Gaps"]</strong> - [One sentence explanation.]</li>
+  <li><strong>[Challenge Label e.g. "Infrastructure Variability"]</strong> - [One sentence explanation.]</li>
+  <li><strong>[Challenge Label e.g. "Market Saturation"]</strong> - [One sentence explanation.]</li>
+</ul>
+<p>[60+ words. How specific market participants are responding - name companies, consortia, or policy responses.
+   MUST include 1 related report interlink.]</p>
+
+<div class="cta-block">
+  <p>For the complete competitive landscape and segment-level forecasts, access the <a href='{target_utm}' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>{market_name} Report</strong></a> from Ken Research.</p>
+</div>
+
+<!-- CONCLUSION - must NOT restate the introduction -->
+<h2>Conclusion</h2>
+<p>[100+ words. Required structure:
+   S1-2: ONE irreversible structural shift (demographic, regulatory, or technological). Bold key figure. Explain why it cannot reverse.
+   S3: The single most actionable investment opportunity - specific segment, geography, or customer type. Do NOT say "the market offers opportunities."
+   S4: What to monitor in the next 12-18 months: specific policy milestones, funding rounds, regulatory rulings, or product launch cycles.
+   S5: Closing with target report interlink framed as "to track these developments and access segment-level forecasts..."
+   "as per Ken Research". MUST include 1 related report interlink.]</p>
+
+<!-- FAQ - 5 questions - SHORT GOOGLE-SEARCH STYLE for AIO pickup -->
+<!-- Questions must sound like what a real user types into Google: short, natural, conversational -->
+<!-- Answers: 40-60 words max. One bolded stat. Direct and scannable. No jargon. -->
+<h2>Frequently Asked Questions</h2>
+
+<h3>Q1: How big is the {market_name}?</h3>
+<p>[40-60 words. State current market size and forecast value with year. Both bolded. Name the biggest growth driver in one sentence.
+   MUST include 1 related report interlink.]</p>
+
+<h3>Q2: What is the CAGR of the {market_name}?</h3>
+<p>[40-60 words. Bold the CAGR %. Give the forecast period. Name ONE specific reason the growth rate is sustained - a policy, segment, or structural driver. No interlink.]</p>
+
+<h3>Q3: Which segment is growing fastest in the {market_name}?</h3>
+<p>[40-60 words. Name the segment. Give its share or growth rate (bolded). One sentence on WHY it leads - the specific demand force behind it.
+   MUST include 1 related report interlink.]</p>
+
+<h3>Q4: How is the government in {country} supporting the {market_name}?</h3>
+<p>[40-60 words. Name ONE specific policy or program with year. One sentence on what it does and its measurable target or budget.
+   NEVER reference a different country. No interlink.]</p>
+
+<h3>Q5: Where can I find the full {market_name} report?</h3>
+<p>[30-50 words. Direct answer: Ken Research publishes the full report covering [2-3 specific deliverables].
+   MUST include link to target report.]</p>
+
+<p>For the full competitive benchmarking, segment-level forecasts, and regional breakdown, access the <a href='{target_utm}' style="color:#0645AD; font-weight:700; text-decoration:underline;" target="_blank" rel="noopener"><strong>{market_name} Report</strong></a> from Ken Research, a leading market intelligence firm covering [sector] across [region/country].</p>
+
+== OUTPUT FORMAT ==
+Return ONLY valid JSON - no markdown fences, no commentary:
+{{
+  "blog_title": "...",
+  "h1_title": "...",
+  "html_content": "...",
+  "seo_description": "...",
+  "linkedin_caption": "..."
+}}
+
+blog_title: 85-115 chars, ends with " | Ken Research", includes a number, never starts with "Ken Research"
+h1_title: 100-130 chars, Ken Research in middle or end, includes a data figure
+html_content: complete HTML from <img> to the final KR branding <p>, no markdown
+seo_description: 155-165 chars plain text, no HTML, no em dashes, no placeholder numbers, includes market name and a specific figure
+
+linkedin_caption: 200-260 words. Follow this structure EXACTLY:
+
+LINE 1 (hook - one question): "When [specific business pain], [direct question about their readiness for a specific year]?"
+
+BLANK LINE
+
+PARAGRAPH (2-3 sentences - market size, CAGR, geography angle. Use real numbers if known; write "multi-billion-dollar" if not):
+
+BLANK LINE
+
+BULLETS (3-4 labeled bullets):
+- [Label] - [specific insight with real number, company name, or policy name]
+- [Label] - [specific insight]
+- [Label] - [specific insight]
+
+BLANK LINE
+
+ACTION LINE: "Lock in [specific action] within [timeframe] to [specific benefit]."
+
+BLANK LINE
+
+CTA: "Read the full article: {target_utm}"
+
+BLANK LINE
+
+HASHTAGS: 4-5 hashtags. Always include #KenResearch.
+
+RULES for caption: no em dashes, no en dashes, no placeholder numbers, no "In today's", no "Thrilled to share"
+"""
 
 
 def build_custom_generation_prompt(
@@ -686,6 +1123,21 @@ def generate_blog_content(
             custom_prompt=custom_prompt,
             name=name,
         )
+    elif blog_format == 'format2':
+        prompt = build_generation_prompt_v2(
+            title=title,
+            target_url=target_url,
+            page_text=page_text,
+            research=research,
+            related_urls=related_urls,
+            platform_slug=platform_slug,
+            target_utm=target_utm,
+            sample_url=sample_url,
+            cover_image_url=cover_image_url,
+            market_name=market_name,
+            country=country,
+            name=name,
+        )
     else:
         prompt = build_generation_prompt(
             title=title,
@@ -702,24 +1154,42 @@ def generate_blog_content(
             name=name,
         )
 
-    raw = call_ai(prompt, max_tokens=10000)
+    last_reason = ''
+    data = None
+    for attempt in range(3):
+        raw = call_ai(prompt, max_tokens=10000, attempt=attempt)
 
-    # Extract JSON from response (handle wrapped in markdown)
-    json_match = re.search(r'\{[\s\S]*\}', raw)
-    if not json_match:
-        raise ValueError(f'AI did not return valid JSON. Response: {raw[:500]}')
+        json_match = re.search(r'\{[\s\S]*\}', raw)
+        if not json_match:
+            last_reason = f'no JSON found: {raw[:300]}'
+            print(f'[generate_blog] Attempt {attempt+1}/3 failed - {last_reason}', file=sys.stderr)
+            continue
 
-    try:
-        data = json.loads(json_match.group(0))
-    except json.JSONDecodeError as e:
-        # AI sometimes emits invalid JSON escapes (e.g. \' or \_ in HTML strings).
-        # Replace lone backslashes that aren't followed by valid JSON escape chars.
-        import re as _re
-        fixed = _re.sub(r'\\([^"\\/bfnrtu])', r'\1', json_match.group(0))
         try:
-            data = json.loads(fixed)
-        except json.JSONDecodeError:
-            raise ValueError(f'JSON parse error: {e}. Raw: {raw[:500]}')
+            candidate = json.loads(json_match.group(0))
+        except json.JSONDecodeError as e:
+            # AI sometimes emits invalid JSON escapes (e.g. \' or \_ in HTML strings).
+            # Replace lone backslashes that aren't followed by valid JSON escape chars.
+            import re as _re
+            fixed = _re.sub(r'\\([^"\\/bfnrtu])', r'\1', json_match.group(0))
+            try:
+                candidate = json.loads(fixed)
+            except json.JSONDecodeError:
+                last_reason = f'JSON parse error: {e}. Raw: {raw[:300]}'
+                print(f'[generate_blog] Attempt {attempt+1}/3 failed - {last_reason}', file=sys.stderr)
+                continue
+
+        reason = _validate_generation(candidate)
+        if reason:
+            last_reason = reason
+            print(f'[generate_blog] Attempt {attempt+1}/3 rejected - {last_reason}', file=sys.stderr)
+            continue
+
+        data = candidate
+        break
+
+    if data is None:
+        raise ValueError(f'AI failed to produce a valid article after 3 attempts. Last reason: {last_reason}')
 
     return data
 
@@ -760,12 +1230,98 @@ def find_unbolded_stats(html: str) -> bool:
     return False
 
 
-def run_quality_checks(html: str, blog_title: str, blog_desc: str) -> dict:
+def check_specificity(html: str) -> bool:
+    """Detect generic driver labels that violate Format 2 Rule 19."""
+    generic_phrases = [
+        'government initiatives', 'technology adoption', 'rising population',
+        'increasing demand', 'growing awareness', 'rapid urbanization',
+        'digital transformation', 'infrastructure development',
+    ]
+    text_lower = re.sub(r'<[^>]+>', ' ', html).lower()
+    violations = [p for p in generic_phrases if re.search(rf'\b{re.escape(p)}\b', text_lower)]
+    if violations:
+        print(f'[generate_blog] Specificity violations: {violations}', file=sys.stderr)
+    return len(violations) == 0
+
+
+def _html_text(html: str) -> str:
+    return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', html)).strip()
+
+
+def _money_to_millions(value: str, unit: str) -> float:
+    amount = float(value.replace(',', ''))
+    return amount * 1000 if unit.lower().startswith('b') else amount
+
+
+def check_market_unit_consistency(html: str) -> bool:
+    """Catch impossible total-vs-segment unit mismatches, e.g. total in millions and segments in billions."""
+    text = _html_text(html)
+    total_match = re.search(
+        r'Market Size \(2025/2026\):\s*\$?\s*([\d,.]+)\s*(Million|Billion)',
+        text,
+        re.IGNORECASE,
+    )
+    if not total_match:
+        total_match = re.search(
+            r'Market size in \d{4}\s+stands at\s+\$?\s*([\d,.]+)\s*(Million|Billion)',
+            text,
+            re.IGNORECASE,
+        )
+    if not total_match:
+        return True
+
+    total = _money_to_millions(total_match.group(1), total_match.group(2))
+    section_match = re.search(
+        r'How Big Is.*?(?:<ul>(.*?)</ul>)',
+        html,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if not section_match:
+        return True
+
+    segment_values = []
+    for item in re.findall(r'<li[^>]*>(.*?)</li>', section_match.group(1), re.IGNORECASE | re.DOTALL):
+        item_text = _html_text(item)
+        if re.search(r'Forecast Value|Market Size|CAGR', item_text, re.IGNORECASE):
+            continue
+        for value, unit in re.findall(r'\$\s*([\d,.]+)\s*(Million|Billion)', item_text, re.IGNORECASE):
+            segment_values.append(_money_to_millions(value, unit))
+
+    if len(segment_values) >= 2 and sum(segment_values) > total * 1.2:
+        print(
+            f'[generate_blog] Market unit inconsistency: segment sum ${sum(segment_values):.1f}M exceeds total ${total:.1f}M',
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def check_precision_load(html: str) -> bool:
+    """Flag articles overloaded with exact operational figures that need direct sourcing."""
+    text = _html_text(html)
+    patterns = [
+        r'\bSAR\s*[\d,.]+\s*(?:million|billion)?\b',
+        r'\b\d{2,3}\s+new\s+(?:schools|campuses|licenses|centers|centres)\b',
+        r'\b\d{2,3}\s+public\s+(?:schools|campuses|institutions)\b',
+        r'\b\d{1,3}(?:\.\d+)?%\b',
+        r'\b\d{1,3},\d{3}\s+(?:students|learners|schools|operators|providers)\b',
+        r'\b\d{1,3}\s+to\s+\d{1,3}\s+(?:weeks|months|days)\b',
+    ]
+    matches = []
+    for pattern in patterns:
+        matches.extend(re.findall(pattern, text, re.IGNORECASE))
+    unique_matches = sorted(set(matches), key=str.lower)
+    if len(unique_matches) > 7:
+        print(f'[generate_blog] Excessive exact figures: {len(unique_matches)} found', file=sys.stderr)
+        return False
+    return True
+
+def run_quality_checks(html: str, blog_title: str, blog_desc: str, format_v2: bool = False) -> dict:
     combined = html + blog_title + blog_desc
     wc = count_words(html)
     lc = count_links(html)
     fc = count_faqs(html)
-    return {
+    result = {
         'no_em_dashes': not has_em_dashes(combined),
         'word_count': wc,
         'link_count': lc,
@@ -778,6 +1334,11 @@ def run_quality_checks(html: str, blog_title: str, blog_desc: str) -> dict:
         'char_count_ok': len(html) < 20000,
         'has_glance_box': 'at a Glance' in html,
     }
+    if format_v2:
+        result['specificity_ok'] = check_specificity(html)
+        result['market_unit_consistency_ok'] = check_market_unit_consistency(html)
+        result['precision_load_ok'] = check_precision_load(html)
+    return result
 
 
 def rate_blog(checks: dict, html: str, blog_title: str) -> int:
@@ -846,6 +1407,65 @@ def rate_blog(checks: dict, html: str, blog_title: str) -> int:
 
 # ── Repair ─────────────────────────────────────────────────────────────────────
 
+def rate_blog_v2(checks: dict, html: str, blog_title: str) -> int:
+    """16-point rating system for Format 2, including credibility checks."""
+    points = 0
+
+    if checks['no_em_dashes']:
+        points += 2
+    if checks['word_count_ok']:
+        points += 1
+    if checks['link_count_ok']:
+        points += 1
+    if checks['faq_count_ok']:
+        points += 1
+    if checks['no_unbolded_stats']:
+        points += 1
+
+    para_count = len(re.findall(r'<p>', html))
+    strong_count = len(re.findall(r'<strong>', html))
+    if para_count > 0 and strong_count / para_count >= 2:
+        points += 1
+
+    h1_match = re.search(r'<h1>(.*?)</h1>', html, re.DOTALL)
+    h1_text = re.sub(r'<[^>]+>', '', h1_match.group(1)) if h1_match else ''
+    if 100 <= len(h1_text) <= 130 and 85 <= len(blog_title) <= 115:
+        points += 1
+
+    if 'Download Sample Report' in html and 'cta-block' in html:
+        points += 1
+
+    kr_count = html.lower().count('ken research')
+    if 4 <= kr_count <= 10:
+        points += 1
+
+    source_phrases = ['as per ken research', 'as tracked by ken research',
+                      'as recorded', 'according to ken']
+    if sum(1 for p in source_phrases if p in html.lower()) >= 2:
+        points += 1
+
+    h2_texts = re.findall(r'<h2>(.*?)</h2>', html, re.IGNORECASE | re.DOTALL)
+    if sum(1 for h in h2_texts if re.search(r'\b(why|how|what|which|who|where)\b', h, re.IGNORECASE)) >= 2:
+        points += 1
+
+    if checks.get('has_glance_box'):
+        points += 1
+
+    if checks.get('specificity_ok', True):
+        points += 1
+
+    if checks.get('market_unit_consistency_ok', True):
+        points += 1
+
+    if checks.get('precision_load_ok', True):
+        points += 1
+
+    normalized = round(points / 16 * 10)
+    if not checks.get('market_unit_consistency_ok', True):
+        normalized = min(normalized, 8)
+    return max(1, normalized)
+
+
 def repair_blog(html: str, blog_title: str, blog_desc: str, checks: dict, research: dict) -> str:
     """Ask AI to fix specific failed checks. Returns repaired HTML."""
     failed = []
@@ -888,6 +1508,10 @@ def repair_blog(html: str, blog_title: str, blog_desc: str, checks: dict, resear
         failed.append('- Wrap ALL bare numbers, percentages, and currency figures in <strong> tags.')
     if not checks['char_count_ok']:
         failed.append(f'- HTML is {checks["char_count"]} chars, must be under 14,000. Trim bullet lists first.')
+    if not checks.get('market_unit_consistency_ok', True):
+        failed.append('- CRITICAL: Fix market unit consistency. The total market size cannot be in millions while segment values are in billions. Correct the unit if it is clearly a typo, or remove/restate segment values so segment totals do not exceed the total market.')
+    if not checks.get('precision_load_ok', True):
+        failed.append('- Too many exact numbers. Keep only figures that are directly supported by the source/research. Round or soften unsupported operational figures such as school counts, SAR budgets, vacancy rates, latency cuts, student counts, and contract values.')
 
     if not failed:
         return html
@@ -968,7 +1592,8 @@ def main():
     parser.add_argument('--row', type=int, default=0)
     parser.add_argument('--platforms', default='linkedin-pulse')
     parser.add_argument('--title', default='')
-    parser.add_argument('--format', default='linkedin', choices=['seo-li', 'linkedin', 'testing-demo', 'custom'])
+    parser.add_argument('--format', default='linkedin', choices=['seo-li', 'linkedin', 'testing-demo', 'custom', 'format2'])
+    parser.add_argument('--sector', default='')
     parser.add_argument('--custom-prompt-file', default='')
     parser.add_argument('--output-json', action='store_true')
     args = parser.parse_args()
@@ -1006,8 +1631,8 @@ def main():
     market_name = extract_market_name(args.url, args.title)
     country = extract_country(args.url, args.title)
 
-    # Step 2: Research market data (3 Tavily searches)
-    research = search_market_data(market_name, country)
+    # Step 2: Research market data (4 searches for format2, 3 for others)
+    research = search_market_data(market_name, country, include_tech_trends=(args.format == 'format2'))
 
     # Step 3: Load sitemap for interlinks
     url_pool = load_sitemap_cache(repo_root)
@@ -1030,6 +1655,7 @@ def main():
     if market_size: image_cmd += ['--market-size', market_size]
     if cagr:        image_cmd += ['--cagr', cagr]
     if forecast:    image_cmd += ['--forecast', forecast]
+    if args.sector: image_cmd += ['--sector', args.sector]
 
     print('[generate_blog] Generating cover image (up to 6 min)...', file=sys.stderr)
     cover_image_url = ''
@@ -1046,7 +1672,7 @@ def main():
         if stdout_lines:
             img_data = json.loads(stdout_lines[-1])
             if img_data.get('status') == 'success':
-                cover_image_url = img_data.get('cloudinaryUrl', '')
+                cover_image_url = img_data.get('imageUrl', '')
                 print(f'[generate_blog] Cover image ready: {cover_image_url}', file=sys.stderr)
             else:
                 print(f'[generate_blog] Image error: {img_data.get("message")}', file=sys.stderr)
@@ -1094,14 +1720,16 @@ def main():
 
     # Step 6: Quality checks
     print('[generate_blog] Running quality checks...', file=sys.stderr)
-    checks = run_quality_checks(html_content, blog_title, blog_description)
-    rating = rate_blog(checks, html_content, blog_title)
-
+    is_v2 = (args.format == 'format2')
+    checks = run_quality_checks(html_content, blog_title, blog_description, format_v2=is_v2)
+    rating = rate_blog_v2(checks, html_content, blog_title) if is_v2 else rate_blog(checks, html_content, blog_title)
+    _em = checks.get('no_em_dashes')
+    _wc = checks.get('word_count')
+    _lc = checks.get('link_count')
+    _fc = checks.get('faq_count')
+    _cc = checks.get('char_count')
     print(
-        f'[generate_blog] Checks: em_dash={checks["no_em_dashes"]} '
-        f'words={checks["word_count"]} links={checks["link_count"]} '
-        f'faqs={checks["faq_count"]} chars={checks["char_count"]} '
-        f'rating={rating}/10',
+        f'[generate_blog] Checks: em_dash={_em} words={_wc} links={_lc} faqs={_fc} chars={_cc} rating={rating}/10',
         file=sys.stderr
     )
 
@@ -1110,13 +1738,18 @@ def main():
         if rating >= 8:
             break
         failed_checks = {k: v for k, v in checks.items() if not v and k.endswith('_ok')}
-        if not failed_checks and checks['no_em_dashes'] and checks['no_unbolded_stats']:
+        if not failed_checks and checks.get('no_em_dashes') and checks.get('no_unbolded_stats'):
             break
-        print(f'[generate_blog] Rating {rating}/10 — repair attempt {attempt+1}/2', file=sys.stderr)
+        print(f'[generate_blog] Rating {rating}/10 - repair attempt {attempt+1}/2', file=sys.stderr)
         html_content = repair_blog(html_content, blog_title, blog_description, checks, research)
-        checks = run_quality_checks(html_content, blog_title, blog_description)
-        rating = rate_blog(checks, html_content, blog_title)
-        print(f'[generate_blog] After repair: rating={rating}/10 words={checks["word_count"]} links={checks["link_count"]}', file=sys.stderr)
+        checks = run_quality_checks(html_content, blog_title, blog_description, format_v2=is_v2)
+        rating = rate_blog_v2(checks, html_content, blog_title) if is_v2 else rate_blog(checks, html_content, blog_title)
+        _rwc = checks.get('word_count')
+        _rlc = checks.get('link_count')
+        print(f'[generate_blog] After repair: rating={rating}/10 words={_rwc} links={_rlc}', file=sys.stderr)
+
+    # Force the real cover image URL into the article regardless of what the model wrote
+    html_content = _inject_cover_image(html_content, cover_image_url, market_name)
 
     # Step 8: Write to sheet
     today = time.strftime('%Y-%m-%d')
@@ -1168,3 +1801,9 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+
+
+
+

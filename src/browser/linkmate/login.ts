@@ -57,12 +57,15 @@ export async function loginToLinkmate(options?: {
   const email    = options?.email    || account?.email    || process.env.LINKMATE_EMAIL;
   const password = options?.password || account?.password || process.env.LINKMATE_PASSWORD;
 
-  if (!email) {
+  // Fleet accounts (from the login portal) are password-less and email-less by
+  // design — they only carry a sessionDir from a real browser login. Only error
+  // out if we have neither an email nor a session to fall back on.
+  if (!email && !account?.sessionDir) {
     throw new Error(`Linkmate email missing. Add account to .accounts/accounts-linkmate.json or set LINKMATE_EMAIL env var.`);
   }
 
   const chromePath = process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : undefined);
-  const sessionDir = account?.sessionDir ? path.resolve(account.sessionDir) : sessionDirFor(email);
+  const sessionDir = account?.sessionDir ? path.resolve(account.sessionDir) : sessionDirFor(email as string);
 
   // Don't create if it doesn't exist - use existing saved session
   if (!fs.existsSync(sessionDir)) {
@@ -73,7 +76,13 @@ export async function loginToLinkmate(options?: {
   console.log('   Launching Linkmate browser...');
 
   browserContext = await chromium.launchPersistentContext(sessionDir, {
-    headless: process.env.HEADLESS !== 'false',
+    // Linkmate (Mighty Networks) sits behind Cloudflare, which blocks headless
+    // Chrome outright (shows a "Just a moment..." challenge instead of the real
+    // site) regardless of stealth flags — confirmed by testing the same session
+    // headless vs headed. So this always runs headed, ignoring the HEADLESS toggle.
+    headless: false,
+    env: { ...process.env, DISPLAY: process.env.DISPLAY || ':99' },
+    permissions: ['clipboard-read', 'clipboard-write'],
     executablePath: chromePath,
     viewport: { width: 1366, height: 900 },
     slowMo: 50,
@@ -93,7 +102,6 @@ export async function loginToLinkmate(options?: {
       '--disable-component-update',
       '--disable-features=ChromeWhatsNewUI',
     ],
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
   });
 
   await browserContext.addInitScript(() => {
@@ -123,7 +131,7 @@ export async function loginToLinkmate(options?: {
   console.log('   Navigating to Linkmate...');
   await page.goto('https://linkmate.mn.co/', { waitUntil: 'domcontentloaded', timeout: 30000 });
   // Wait for either the Create button (logged in) or sign-in link (not logged in)
-  await page.waitForSelector('a[title="Create"], a[href*="/sign_in"]', { timeout: 30000 }).catch(() => {});
+  await page.waitForSelector('button[aria-label="Create content"], a[title="Create"], a[href*="/sign_in"]', { timeout: 30000 }).catch(() => {});
 
   const url = page.url();
   if (url.includes('/sign_in') || url.includes('/login')) {

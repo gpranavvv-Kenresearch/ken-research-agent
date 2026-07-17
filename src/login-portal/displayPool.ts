@@ -1,0 +1,244 @@
+/**
+ * displayPool.ts — ephemeral virtual-display manager for concurrent logins.
+ *
+ * Each active login gets an isolated Xvfb display + x11vnc (localhost) + a real
+ * Chrome pointed at the target platform login URL with the account's profile dir.
+ * A single shared websockify (started by server.ts) fronts every display's VNC
+ * port via the token-plugin; we write one token file per login so the noVNC URL
+ * routes to the right display. teardown() kills the process group and frees the slot.
+ *
+ * Proven end-to-end by the Phase 0 spike (spawn + render + clean teardown).
+ */
+
+import { spawn } from 'child_process';
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { DISPLAY_POOL, DisplaySlotDef, TOKEN_DIR, LOGIN_TTL_MS, CHROME_PATH } from './config.js';
+
+interface ActiveLogin {
+  token: string;
+  slot: DisplaySlotDef;
+  agent: string;
+  platform: string;
+  index: number;
+  sessionDir: string;
+  pids: number[];      // spawned process group leaders (Xvfb, x11vnc, chrome)
+  expiresAt: number;
+}
+
+// This browser is a plain, raw Chrome process (spawned directly, no CDP/Playwright
+// attached) — it was never automation-flagged (navigator.webdriver) in the first
+// place, so `--disable-blink-features=AutomationControlled` did nothing useful
+// here except trigger Chrome's own "unsupported command-line flag" warning bar.
+// Dropped so the login browser looks like a completely normal Chrome window.
+const CHROME_ARGS = [
+  '--no-first-run',
+  '--no-default-browser-check',
+  '--disable-gpu',
+  '--disable-dev-shm-usage',
+  '--start-maximized',
+  '--disable-infobars',
+];
+
+/** token -> active login */
+const active = new Map<string, ActiveLogin>();
+/** which display slots are currently in use */
+const busy = new Set<string>();
+
+function freeSlot(): DisplaySlotDef | null {
+  for (const slot of DISPLAY_POOL) {
+    if (!busy.has(slot.display)) return slot;
+  }
+  return null;
+}
+
+function spawnDetached(cmd: string, args: string[], env: NodeJS.ProcessEnv): number {
+  const child = spawn(cmd, args, { detached: true, stdio: 'ignore', env });
+  child.unref();
+  return child.pid as number;
+}
+
+function killGroup(pid: number): void {
+  try { process.kill(-pid, 'SIGKILL'); } catch { /* group gone */ }
+  try { process.kill(pid, 'SIGKILL'); } catch { /* proc gone */ }
+}
+
+function isAlive(pid: number): boolean {
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+/**
+ * Chrome batches cookie writes to its on-disk SQLite DB rather than flushing on
+ * every set — a bare SIGKILL right after login can throw away a just-completed
+ * login's cookies before they ever reach disk. Ask Chrome to exit cleanly
+ * (SIGTERM, which triggers its normal shutdown/flush path) and give it a real
+ * chance to do so; only SIGKILL as a last resort if it won't exit in time.
+ */
+async function killChromeGracefully(pid: number, timeoutMs = 3000): Promise<void> {
+  try { process.kill(-pid, 'SIGTERM'); } catch { /* group gone */ return; }
+  try { process.kill(pid, 'SIGTERM'); } catch { /* proc gone */ }
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!isAlive(pid)) return; // exited cleanly, cookies flushed
+    await sleep(150);
+  }
+  console.warn(`[login-api] Chrome pid ${pid} did not exit after SIGTERM — forcing SIGKILL`);
+  killGroup(pid);
+}
+
+function writeTokenFile(token: string, vncPort: number): void {
+  fs.mkdirSync(TOKEN_DIR, { recursive: true });
+  // websockify TokenFile plugin format: "identifier: host:port"
+  fs.writeFileSync(path.join(TOKEN_DIR, token), `${token}: localhost:${vncPort}\n`, 'utf-8');
+}
+
+function removeTokenFile(token: string): void {
+  try { fs.rmSync(path.join(TOKEN_DIR, token)); } catch { /* already gone */ }
+}
+
+export interface StartedLogin {
+  token: string;
+  display: string;
+  expiresAt: number;
+  reused?: boolean;
+}
+
+/** Find an already-active login for this exact account (same profile dir), if any. */
+function findActiveFor(agent: string, platform: string, index: number): ActiveLogin | null {
+  for (const login of active.values()) {
+    if (login.agent === agent && login.platform === platform && login.index === index) return login;
+  }
+  return null;
+}
+
+/**
+ * Allocate a display, spawn Xvfb + x11vnc + Chrome for this account's login,
+ * and register a websockify token routing to it. Returns the login token.
+ * Throws if the pool is exhausted (all 5 slots busy).
+ *
+ * If a login for this exact (agent, platform, index) is already running, reuses
+ * it instead of spawning a second Chrome on the same profile dir — a duplicate
+ * launch silently fails (Chrome's profile lock) and leaves a black VNC screen.
+ */
+export async function startLogin(params: {
+  agent: string;
+  platform: string;
+  index: number;
+  sessionDir: string;
+  loginUrl: string;
+}): Promise<StartedLogin> {
+  const existing = findActiveFor(params.agent, params.platform, params.index);
+  if (existing) {
+    existing.expiresAt = Date.now() + LOGIN_TTL_MS; // renew TTL on reuse
+    return { token: existing.token, display: existing.slot.display, expiresAt: existing.expiresAt, reused: true };
+  }
+
+  const slot = freeSlot();
+  if (!slot) throw new Error('POOL_EXHAUSTED');
+
+  busy.add(slot.display);
+  const token = crypto.randomBytes(24).toString('hex');
+  const expiresAt = Date.now() + LOGIN_TTL_MS;
+  const pids: number[] = [];
+
+  try {
+    fs.mkdirSync(params.sessionDir, { recursive: true });
+
+    // 1) virtual display — 1024x768 instead of 1280x900: ~32% fewer pixels for
+    // x11vnc to scan/encode/transmit each frame, meaningfully snappier over the
+    // tunnel on a 2-vCPU VPS, while still plenty readable for login flows.
+    pids.push(spawnDetached('Xvfb', [slot.display, '-screen', '0', '1024x768x24'], process.env));
+    await sleep(600);
+
+    // 2) VNC server bound to localhost only (Nginx/websockify terminate outward).
+    // -threads: use both vCPUs for scan/poll work instead of one.
+    // -defer 10: push updates every 10ms instead of x11vnc's slower default batching.
+    // -noshm: use plain X11 GetImage instead of the MIT-SHM extension. x11vnc's
+    // default SHM path draws from a small, fixed system-wide pool of SysV shared
+    // memory segments (shmmni) that isn't reliably freed when a display is
+    // SIGKILL'd — repeated logins exhausted it entirely (hit 4096/4096, every
+    // new x11vnc failed with "shmget: No space left on device", silently, since
+    // stdio is ignored). -noshm sidesteps that pool completely; slightly more
+    // CPU per frame, but immune to this failure mode.
+    pids.push(spawnDetached(
+      'x11vnc',
+      ['-display', slot.display, '-rfbport', String(slot.vncPort), '-localhost', '-nopw', '-forever', '-shared', '-quiet', '-threads', '-defer', '10', '-noshm'],
+      process.env,
+    ));
+    await sleep(500);
+
+    // 3) token routing for the shared websockify
+    writeTokenFile(token, slot.vncPort);
+
+    // 4) real Chrome pointed at the login URL, using this account's profile dir
+    pids.push(spawnDetached(
+      CHROME_PATH,
+      [...CHROME_ARGS, `--user-data-dir=${params.sessionDir}`, params.loginUrl],
+      { ...process.env, DISPLAY: slot.display },
+    ));
+
+    active.set(token, {
+      token, slot, agent: params.agent, platform: params.platform,
+      index: params.index, sessionDir: params.sessionDir, pids, expiresAt,
+    });
+
+    return { token, display: slot.display, expiresAt };
+  } catch (err) {
+    // best-effort cleanup on partial failure
+    for (const pid of pids) killGroup(pid);
+    removeTokenFile(token);
+    busy.delete(slot.display);
+    throw err;
+  }
+}
+
+/**
+ * Kill everything for a login token and free its slot. Idempotent.
+ *
+ * Order matters: Chrome (the last pid — see startLogin) is asked to exit
+ * gracefully FIRST so it flushes any just-set cookies to disk, and only after
+ * it's actually gone do we tear down the supporting Xvfb/x11vnc processes
+ * (which hold no state worth preserving, so those get killed immediately).
+ * Callers that need to read the session's cookies right after teardown
+ * (e.g. the finish route) must await this — reading before Chrome exits
+ * risks seeing a stale/incomplete Cookies DB.
+ */
+export async function teardown(token: string): Promise<boolean> {
+  const login = active.get(token);
+  if (!login) return false;
+
+  const chromePid = login.pids[login.pids.length - 1];
+  const supportPids = login.pids.slice(0, -1);
+
+  await killChromeGracefully(chromePid);
+  for (const pid of supportPids) killGroup(pid);
+
+  removeTokenFile(token);
+  busy.delete(login.slot.display);
+  active.delete(token);
+  return true;
+}
+
+export function getLogin(token: string): ActiveLogin | undefined {
+  return active.get(token);
+}
+
+/** Force-teardown any login past its TTL. Called on an interval by the server. */
+export function sweepExpired(): number {
+  const now = Date.now();
+  let n = 0;
+  for (const [token, login] of active) {
+    if (login.expiresAt <= now) { void teardown(token); n++; }
+  }
+  return n;
+}
+
+export function poolStatus() {
+  return { capacity: DISPLAY_POOL.length, inUse: busy.size, active: active.size };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

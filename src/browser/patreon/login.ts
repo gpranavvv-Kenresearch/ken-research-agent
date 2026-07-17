@@ -87,6 +87,7 @@ export async function loginToPatreon(options?: { nickname?: string }): Promise<P
 
   browserContext = await chromium.launchPersistentContext(sessionDir, {
     headless: process.env.HEADLESS !== 'false',
+    permissions: ['clipboard-read', 'clipboard-write'],
     executablePath: fs.existsSync(chromePath) ? chromePath : undefined,
     channel: fs.existsSync(chromePath) ? undefined : 'chrome',
     viewport: null,
@@ -103,7 +104,6 @@ export async function loginToPatreon(options?: { nickname?: string }): Promise<P
       '--disable-session-crashed-bubble',
       '--disable-infobars',
     ],
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
   });
 
   await browserContext.addInitScript(() => {

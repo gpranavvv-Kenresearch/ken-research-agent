@@ -48,3 +48,6 @@ graphify-out/
 .agents/
 .codex/
 pollinations-sample.png
+
+.vercel
+.env*

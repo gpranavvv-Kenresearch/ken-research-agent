@@ -57,13 +57,17 @@ export async function loginToBlogger(options?: {
 
   const email    = options?.email    || account?.email    || process.env.BLOGGER_EMAIL;
   const password = options?.password || account?.password || process.env.BLOGGER_PASSWORD;
+  // Fleet accounts (from the login portal) are password-less and email-less by
+  // design — they only carry a sessionDir from a real browser login. Only error
+  // out if we have neither an email nor a session to fall back on.
+  const label = email || account?.nickname || options?.nickname || 'unknown account';
 
-  if (!email) {
+  if (!email && !account?.sessionDir) {
     throw new Error(`Blogger email missing. Add account to .accounts/accounts-blogger.json or set BLOGGER_EMAIL env var.`);
   }
 
   const chromePath = process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : undefined);
-  const sessionDir = account?.sessionDir ? path.resolve(account.sessionDir) : sessionDirFor(email);
+  const sessionDir = account?.sessionDir ? path.resolve(account.sessionDir) : sessionDirFor(email as string);
 
   if (!fs.existsSync(sessionDir)) {
     fs.mkdirSync(sessionDir, { recursive: true });
@@ -88,7 +92,6 @@ export async function loginToBlogger(options?: {
       '--disable-session-crashed-bubble',
       '--disable-infobars',
     ],
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   });
 
   await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -168,7 +171,7 @@ export async function loginToBlogger(options?: {
   const finalUrl = await page.url();
   if (finalUrl.includes('accounts.google.com')) {
     await closeBloggerBrowser();
-    throw new Error(`Unable to log in to Blogger as ${email}.`);
+    throw new Error(`Unable to log in to Blogger as ${label}.`);
   }
 
   console.log(`   ✅ Login successful`);

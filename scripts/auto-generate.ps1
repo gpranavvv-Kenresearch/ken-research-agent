@@ -174,7 +174,7 @@ function Invoke-SocialPass {
                     try {
                         $resp = Invoke-RestMethod -Uri "$djangoUrl/api/v1/sheet/post-now/" `
                             -Method POST -ContentType "application/json" -Body $body -TimeoutSec 10
-                        Write-Host ("           [QUEUED] {0} → worker will post" -f $plat.ToUpper()) -ForegroundColor Green
+                        Write-Host ("           [QUEUED] {0} â†’ worker will post" -f $plat.ToUpper()) -ForegroundColor Green
                     } catch {
                         Write-Host ("           [QUEUE FAILED] {0}: {1}" -f $plat, $_) -ForegroundColor Yellow
                     }
@@ -195,7 +195,7 @@ function Invoke-BlogPass {
     Write-Host "  [BLOG]   Reading '$capName Blog' sheet..." -ForegroundColor Magenta
 
     try {
-        $raw  = & python scripts\sheet_read.py --sheet blog --name $Name --action unposted
+        $raw  = & python scripts\sheet_read.py --sheet blog --name $Name --action blog-unprocessed
         $data = ($raw | Out-String).Trim() | ConvertFrom-Json
     } catch {
         Write-Host "    Blog sheet read failed: $_" -ForegroundColor Yellow
@@ -236,6 +236,7 @@ function Invoke-BlogPass {
             '--output-json'
         )
         if ($row.Title) { $blogArgs += @('--title', $row.Title) }
+        if ($row.Sector) { $blogArgs += @('--sector', $row.Sector) }
         if ($tmpPromptFile) { $blogArgs += @('--custom-prompt-file', $tmpPromptFile) }
         $all = & python @blogArgs 2>&1
         if ($tmpPromptFile -and (Test-Path $tmpPromptFile)) { Remove-Item -LiteralPath $tmpPromptFile -Force -ErrorAction SilentlyContinue }
@@ -279,7 +280,7 @@ function Invoke-BlogPass {
                     try {
                         $resp = Invoke-RestMethod -Uri "$djangoUrl/api/v1/sheet/post-now/" `
                             -Method POST -ContentType "application/json" -Body $body -TimeoutSec 10
-                        Write-Host ("           [QUEUED] {0} → worker will publish" -f $plat.ToUpper()) -ForegroundColor Green
+                        Write-Host ("           [QUEUED] {0} â†’ worker will publish" -f $plat.ToUpper()) -ForegroundColor Green
                     } catch {
                         Write-Host ("           [QUEUE FAILED] {0}: {1}" -f $plat, $_) -ForegroundColor Yellow
                     }

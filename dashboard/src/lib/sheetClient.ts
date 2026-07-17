@@ -92,9 +92,13 @@ export async function appendBlogRow(payload: SubmitPayload): Promise<number> {
 
   const data: Record<string, string> = {
     'targetUrl':        payload.targetUrl,
-    'Blog Title':       payload.title,
+    'Report Title':     payload.title,   // the input report title (Blog Title is filled by the generator)
     'Name':             payload.name,
-    'Format':           payload.format,
+    // Custom (Format 4): the pasted sample blog goes INTO the Format column, so the
+    // generator auto-detects it (HTML in Format = custom sample). Otherwise the format id.
+    'Format':           (payload.format === 'custom' && (payload.customPrompt || '').trim())
+                          ? (payload.customPrompt as string)
+                          : payload.format,
     'Custom Prompt':    payload.customPrompt ?? '',
     'Submitted At':     timestamp,
     'Blog Description': payload.description ?? '',
@@ -133,6 +137,7 @@ export async function appendSocialRow(payload: SubmitPayload): Promise<number> {
 
   const data: Record<string, string> = {
     'targetUrl':    payload.targetUrl,
+    'Report Title': payload.title,
     'Title':        payload.title,
     'title':        payload.title,
     'Name':         payload.name,

@@ -55,13 +55,17 @@ export async function loginToAmeba(options?: {
 
   const email    = options?.email    || account?.email    || process.env.AMEBA_EMAIL;
   const password = options?.password || account?.password || process.env.AMEBA_PASSWORD;
+  // Fleet accounts (from the login portal) are password-less and email-less by
+  // design — they only carry a sessionDir from a real browser login. Only error
+  // out if we have neither an email nor a session to fall back on.
+  const label = email || account?.nickname || options?.nickname || 'unknown account';
 
-  if (!email) {
+  if (!email && !account?.sessionDir) {
     throw new Error(`Ameba email missing. Add account to .accounts/accounts-ameba.json or set AMEBA_EMAIL env var.`);
   }
 
   const chromePath = process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : undefined);
-  const sessionDir = account?.sessionDir ? path.resolve(account.sessionDir) : sessionDirFor(options?.nickname || email);
+  const sessionDir = account?.sessionDir ? path.resolve(account.sessionDir) : sessionDirFor(options?.nickname || (email as string));
 
   if (!fs.existsSync(sessionDir)) {
     fs.mkdirSync(sessionDir, { recursive: true });
@@ -88,7 +92,6 @@ export async function loginToAmeba(options?: {
       '--disable-session-crashed-bubble',
       '--disable-infobars',
     ],
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   });
 
   await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -153,7 +156,7 @@ export async function loginToAmeba(options?: {
   const finalUrl = page.url();
   if (finalUrl.includes('login') || finalUrl.includes('signin')) {
     await closeAmebaBrowser();
-    throw new Error(`Unable to log in to Ameba as ${email}.`);
+    throw new Error(`Unable to log in to Ameba as ${label}.`);
   }
 
   console.log(`   ✅ Login successful`);

@@ -37,6 +37,7 @@ async function launchPersistentChrome(profileDir: string): Promise<{ context: Br
 
   const context = await chromium.launchPersistentContext(profileDir, {
     headless: process.env.HEADLESS !== 'false',
+    permissions: ['clipboard-read', 'clipboard-write'],
     executablePath: fs.existsSync(chromePath) ? chromePath : undefined,
     channel: fs.existsSync(chromePath) ? undefined : 'chrome',
     slowMo: 50,
@@ -118,6 +119,7 @@ async function launchSavedSessionChrome(account: Account | undefined, handle: st
       storageState: cookiesFile,
       viewport: { width: 1280, height: 900 },
     });
+    await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
     await ctx.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', { get: () => false });
       (window as any).chrome = (window as any).chrome || { runtime: {} };

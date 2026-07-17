@@ -36,7 +36,7 @@ export default function SubmitForm() {
     const lines = bulkText.split('\n').map((l) => l.trim()).filter(Boolean);
     if (!lines.length) { setError('Paste at least one line.'); return; }
     if (form.format === 'custom' && !form.customPrompt.trim()) {
-      setError('Custom prompt is required for Format 4.');
+      setError('Please paste a sample blog for Custom.');
       return;
     }
     setLoading(true); setError(''); setBulkResults([]);
@@ -73,7 +73,7 @@ export default function SubmitForm() {
     e.preventDefault();
     if (!user) { setError('No user selected — please refresh and choose your name.'); return; }
     if (form.format === 'custom' && !form.customPrompt.trim()) {
-      setError('Custom prompt is required for Format 4.');
+      setError('Please paste a sample blog for Custom.');
       return;
     }
     setLoading(true); setError(''); setSuccess('');
@@ -190,13 +190,13 @@ export default function SubmitForm() {
             {form.format === 'custom' && (
               <div className="space-y-2">
                 <p className="text-xs text-slate-400">
-                  Describe the audience, tone, length, section structure, focus areas, CTA style, and any special instructions. Ken Research data, Tavily research, and quality rules still apply.
+                  Paste a <span className="text-white font-medium">sample blog (HTML)</span>. ChatGPT writes a new blog in the same style for each URL. Lands in the Format column, picked up automatically.
                 </p>
                 <textarea
                   rows={7}
                   value={form.customPrompt}
                   onChange={(e) => setForm({ ...form, customPrompt: e.target.value })}
-                  placeholder="Example: Write a 1200-word B2B blog for CXOs and investors. Use a data-heavy tone. Include an executive summary, 4 H2 sections, bullet points, 5 FAQs, and a final CTA."
+                  placeholder="Paste the full HTML of a sample blog here…  e.g. <h1>…</h1><p>…</p>"
                   className="w-full bg-card border border-border rounded-lg px-4 py-3 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500 resize-y"
                 />
               </div>
@@ -350,13 +350,13 @@ export default function SubmitForm() {
         {form.format === 'custom' && (
           <div className="space-y-2">
             <p className="text-xs text-slate-400">
-              Describe the audience, tone, length, section structure, focus areas, CTA style, and any special instructions. Ken Research data, Tavily research, and quality rules still apply.
+              Paste a <span className="text-white font-medium">sample blog (HTML)</span>. ChatGPT will write a new blog in the same style/structure for your URL + title. This lands in the sheet&apos;s Format column and is picked up automatically.
             </p>
             <textarea
               rows={7}
               value={form.customPrompt}
               onChange={(e) => setForm({ ...form, customPrompt: e.target.value })}
-              placeholder="Example: Write a 1200-word B2B blog for CXOs and investors. Use a data-heavy tone. Include an executive summary, 4 H2 sections, bullet points, 5 FAQs, and a final CTA."
+              placeholder="Paste the full HTML of a sample blog here…  e.g. <h1>…</h1><p>…</p>"
               className="w-full bg-card border border-border rounded-lg px-4 py-3 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500 resize-y"
             />
           </div>

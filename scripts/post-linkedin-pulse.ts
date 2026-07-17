@@ -77,6 +77,7 @@ async function main() {
       console.log(`[pulse] Loading persistent Chrome profile: ${SESSION_DIR}`);
       context = await chromium.launchPersistentContext(SESSION_DIR, {
         headless: false,
+        permissions: ['clipboard-read', 'clipboard-write'],
         channel: 'chrome',
         viewport: { width: 1280, height: 900 },
         args: ['--no-sandbox', '--disable-blink-features=AutomationControlled', '--disable-infobars'],
@@ -94,6 +95,7 @@ async function main() {
       context = await browser.newContext({
         storageState: SESSION_JSON,
         viewport: { width: 1280, height: 900 },
+        permissions: ['clipboard-read', 'clipboard-write'],
       }) as any;
       closeBrowser = () => browser.close();
     }
@@ -101,6 +103,7 @@ async function main() {
     console.log('[pulse] No session found — will login and create persistent profile');
     context = await chromium.launchPersistentContext(SESSION_DIR, {
       headless: false,
+      permissions: ['clipboard-read', 'clipboard-write'],
       channel: 'chrome',
       viewport: { width: 1280, height: 900 },
       args: ['--no-sandbox', '--disable-blink-features=AutomationControlled', '--disable-infobars'],

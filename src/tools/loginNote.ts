@@ -43,7 +43,6 @@ function sessionDirFor(email: string): string {
     slowMo: 80,
     ignoreDefaultArgs: ['--enable-automation'],
     args: ['--start-minimized', '--disable-blink-features=AutomationControlled', '--no-first-run', '--disable-infobars'],
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   });
 
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);

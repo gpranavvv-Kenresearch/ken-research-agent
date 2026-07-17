@@ -62,7 +62,7 @@ async function isLoggedIn(page: Page): Promise<boolean> {
       if (await page.locator(sel).first().isVisible({ timeout: 1000 }).catch(() => false)) return true;
     }
     const loginForm = await page.locator('input[placeholder*="email" i]').first().isVisible({ timeout: 800 }).catch(() => false);
-    if (!loginForm && url.includes('notion.so') && !url.includes('login')) return true;
+    if (!loginForm && (url.includes('notion.so') || url.includes('notion.com')) && !url.includes('login')) return true;
     return false;
   } catch {
     return false;
@@ -86,6 +86,7 @@ export async function loginToNotion(options?: { nickname?: string }): Promise<Pa
 
   browserContext = await chromium.launchPersistentContext(sessionDir, {
     headless: process.env.HEADLESS !== 'false',
+    permissions: ['clipboard-read', 'clipboard-write'],
     executablePath: fs.existsSync(chromePath) ? chromePath : undefined,
     channel: fs.existsSync(chromePath) ? undefined : 'chrome',
     viewport: null,
@@ -102,7 +103,6 @@ export async function loginToNotion(options?: { nickname?: string }): Promise<Pa
       '--disable-session-crashed-bubble',
       '--disable-infobars',
     ],
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
   });
 
   await browserContext.addInitScript(() => {
@@ -127,9 +127,11 @@ export async function loginToNotion(options?: { nickname?: string }): Promise<Pa
     page = await browserContext.newPage();
   }
 
-  // Check saved session
+  // Check saved session — go straight to app.notion.com (same domain the poster
+  // uses) instead of www.notion.so, which just redirects there anyway and adds
+  // an unreliable extra hop.
   console.log('   Checking Notion session...');
-  await page.goto('https://www.notion.so/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.goto('https://app.notion.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
   await sleep(4000);
 
   if (await isLoggedIn(page)) {
@@ -139,7 +141,7 @@ export async function loginToNotion(options?: { nickname?: string }): Promise<Pa
 
   // Login flow
   console.log('   Not logged in — starting Notion login...');
-  await page.goto('https://www.notion.so/login', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.goto('https://app.notion.com/login', { waitUntil: 'domcontentloaded', timeout: 30000 });
   await sleep(2000);
 
   // Enter email

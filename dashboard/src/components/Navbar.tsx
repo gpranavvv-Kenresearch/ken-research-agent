@@ -39,6 +39,7 @@ export default function Navbar() {
           <div className="flex gap-1">
             <NavLink href="/track"  active={path.startsWith('/track')}>📊 Track</NavLink>
             <NavLink href="/submit" active={path.startsWith('/submit')}>➕ Submit URL</NavLink>
+            <NavLink href={`/agent/${user.id}`} active={path.startsWith('/agent')}>🔑 Logins</NavLink>
           </div>
         )}
 

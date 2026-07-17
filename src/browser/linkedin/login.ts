@@ -173,8 +173,8 @@ export async function loginToLinkedIn(options?: {
     browserContext = await headlessBrowser.newContext({
       storageState: cookiesFile,
       viewport: { width: 1366, height: 900 },
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     });
+    await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);
     const page = await browserContext.newPage();
     await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForTimeout(3000);
@@ -213,7 +213,6 @@ export async function loginToLinkedIn(options?: {
       '--disable-session-crashed-bubble',
       '--disable-infobars',
     ],
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   });
 
   await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);

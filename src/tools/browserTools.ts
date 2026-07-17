@@ -542,6 +542,7 @@ async function loginXTool(accountHandle: string): Promise<any> {
     xPage = await loginToX(account);
     return { success: true, message: `Logged in to @${account.handle}` };
   } catch (err: any) {
+    try { await closeBrowser(); } catch { /* ignore */ }
     xPage = null;
     return { error: err.message, success: false };
   }
@@ -594,6 +595,7 @@ async function loginFbTool(nickname: string): Promise<any> {
     fbPage = await loginToFacebook({ nickname });
     return { success: true, message: `Logged in to Facebook (${nickname})` };
   } catch (err: any) {
+    try { await closeFacebookBrowser(); } catch { /* ignore */ }
     fbPage = null;
     return { error: err.message, success: false };
   }
@@ -629,6 +631,7 @@ async function loginLiTool(nickname: string): Promise<any> {
     liPage = await loginToLinkedIn({ nickname });
     return { success: true, message: `Logged in to LinkedIn (${nickname})` };
   } catch (err: any) {
+    try { await closeLinkedInBrowser(); } catch { /* ignore */ }
     liPage = null;
     return { error: err.message, success: false };
   }
@@ -667,6 +670,7 @@ async function loginHackmdTool(nickname: string): Promise<any> {
     return { success: true, message: `Logged in to HackMD (${nickname})` };
   } catch (err: any) {
     console.log(`   [login_hackmd] ❌ Failed:`, err.message);
+    try { await closeHackMDBrowser(); } catch { /* ignore */ }
     hackmdPage = null;
     return { error: err.message, success: false };
   }
@@ -757,6 +761,7 @@ async function loginMediumTool(nickname: string): Promise<any> {
     return { success: true, message: `Logged in to Medium (${nickname})` };
   } catch (err: any) {
     console.log(`   [login_medium] ❌ Failed:`, err.message);
+    try { await closeMediumBrowser(); } catch { /* ignore */ }
     mediumPage = null;
     return { error: err.message, success: false };
   }
@@ -799,6 +804,7 @@ async function loginGoogleSiteTool(nickname: string): Promise<any> {
     return { success: true, message: `Logged in to Google Sites (${nickname})` };
   } catch (err: any) {
     console.log(`   [login_googlesite] ❌ Failed:`, err.message);
+    try { await closeGoogleSiteBrowser(); } catch { /* ignore */ }
     googleSitePage = null;
     return { error: err.message, success: false };
   }
@@ -842,6 +848,7 @@ async function loginLinkedInPulseTool(nickname: string): Promise<any> {
     return { success: true, message: `Logged in to LinkedIn Pulse (${nickname})` };
   } catch (err: any) {
     console.log(`   [login_linkedin_pulse] ❌ Failed:`, err.message);
+    try { await closeLinkedInPulseBrowser(); } catch { /* ignore */ }
     linkedInPulsePage = null;
     return { error: err.message, success: false };
   }
@@ -884,6 +891,7 @@ async function loginDevtoTool(nickname: string): Promise<any> {
     return { success: true, message: `Logged in to Dev.to (${nickname})` };
   } catch (err: any) {
     console.log(`   [login_devto] ❌ Failed:`, err.message);
+    try { await closeDevtoBrowser(); } catch { /* ignore */ }
     devtoPage = null;
     return { error: err.message, success: false };
   }
@@ -923,6 +931,7 @@ async function loginLinkmateTool(nickname: string): Promise<any> {
     return { success: true, error: undefined };
   } catch (err: any) {
     console.log(`   [login_linkmate] ❌ Failed:`, err.message);
+    try { await closeLinkmeateBrowser(); } catch { /* ignore */ }
     linkmatePage = null;
     return { error: err.message, success: false };
   }
@@ -1073,6 +1082,7 @@ async function loginWordpressTool(nickname: string): Promise<any> {
     return { success: true, message: `Logged in to WordPress (${nickname})` };
   } catch (err: any) {
     console.log(`   [login_wordpress] ❌ Failed:`, err.message);
+    try { await closeWordpressBrowser(); } catch { /* ignore */ }
     wordpressPage = null;
     wordpressNickname = null;
     return { error: err.message, success: false };
@@ -1113,6 +1123,7 @@ async function loginBloggerTool(nickname: string): Promise<any> {
     return { success: true, message: `Logged in to Blogger (${nickname})` };
   } catch (err: any) {
     console.log(`   [login_blogger] ❌ Failed:`, err.message);
+    try { await closeBloggerBrowser(); } catch { /* ignore */ }
     bloggerPage = null;
     bloggerNickname = null;
     return { error: err.message, success: false };
@@ -1148,6 +1159,7 @@ async function loginPatreonTool(nickname: string): Promise<any> {
     patreonNickname = nickname;
     return { success: true, message: `Logged in to Patreon (${nickname})` };
   } catch (err: any) {
+    try { await closePatreonBrowser(); } catch { /* ignore */ }
     patreonPage = null;
     patreonNickname = null;
     return { error: err.message, success: false };
@@ -1183,6 +1195,7 @@ async function loginNotionTool(nickname: string): Promise<any> {
     notionNickname = nickname;
     return { success: true, message: `Logged in to Notion (${nickname})` };
   } catch (err: any) {
+    try { await closeNotionBrowser(); } catch { /* ignore */ }
     notionPage = null;
     notionNickname = null;
     return { error: err.message, success: false };
@@ -1216,6 +1229,7 @@ async function loginNoteTool(nickname: string): Promise<any> {
     noteNickname = nickname;
     return { success: true, message: `Logged in to Note (${nickname})` };
   } catch (err: any) {
+    try { await closeNoteBrowser(); } catch { /* ignore */ }
     notePage = null;
     noteNickname = null;
     return { error: err.message, success: false };
@@ -1249,6 +1263,7 @@ async function loginParagraphTool(nickname: string): Promise<any> {
     paragraphNickname = nickname;
     return { success: true, message: `Logged in to Paragraph (${nickname})` };
   } catch (err: any) {
+    try { await closeParagraphBrowser(); } catch { /* ignore */ }
     paragraphPage = null;
     paragraphNickname = null;
     return { error: err.message, success: false };

@@ -253,6 +253,7 @@ async function postImageWithCaption(page: Page, imagePath: string, caption: stri
     closeBrowser = () => ctx.close();
   }
 
+  await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
   const page = await ctx.newPage();
 
   try {

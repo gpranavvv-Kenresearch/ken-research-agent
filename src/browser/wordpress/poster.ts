@@ -193,18 +193,28 @@ export async function postToWordpress(
   await sleep(7000);
 
   let postUrl = '';
+  // A candidate only counts if it actually looks like a URL — not just
+  // "non-empty and not about:blank". The clipboard-based fallback below can
+  // return whatever text was last copied (e.g. the full article HTML/text
+  // from an earlier content-paste step, if the "Copy [URL]" button click
+  // didn't actually re-copy anything) — that's still "non-empty", so without
+  // this check it would get accepted as the postUrl and returned as-is.
+  const looksLikeUrl = (s: string): boolean => /^https?:\/\/\S+$/.test(s.trim()) && s.trim().length < 500;
 
   // Primary: grab href from "View Post" link in post-publish panel
   try {
     const viewPostLink = await page.$('a.post-publish-panel__postpublish-buttons-link, a[href*="wordpress.com"]:has-text("View Post"), a.components-button[href*="://"]:has-text("View Post")');
     if (viewPostLink) {
-      postUrl = (await viewPostLink.getAttribute('href')) || '';
-      console.log(`   ✅ Post URL from View Post link: ${postUrl}`);
+      const href = (await viewPostLink.getAttribute('href')) || '';
+      if (looksLikeUrl(href)) {
+        postUrl = href;
+        console.log(`   ✅ Post URL from View Post link: ${postUrl}`);
+      }
     }
   } catch { /* try next method */ }
 
   // Secondary: Copy button + clipboard
-  if (!postUrl || postUrl === 'about:blank') {
+  if (!looksLikeUrl(postUrl)) {
     console.log('   Clicking Copy button...');
     const copyClicked = await page.evaluate(() => {
       const btns = Array.from(document.querySelectorAll('button.components-button'));
@@ -216,29 +226,33 @@ export async function postToWordpress(
       await jsClick(page, 'button.components-button.is-next-40px-default-size.is-secondary');
     }
     await sleep(1000);
+    let clipboardText = '';
     try {
-      postUrl = await page.evaluate(() => navigator.clipboard.readText());
+      clipboardText = await page.evaluate(() => navigator.clipboard.readText());
     } catch {
       try {
         const { execSync } = await import('child_process');
-        postUrl = execSync('powershell -command Get-Clipboard').toString().trim();
+        clipboardText = execSync('powershell -command Get-Clipboard').toString().trim();
       } catch { /* will fall through to DOM search */ }
     }
+    if (looksLikeUrl(clipboardText)) postUrl = clipboardText;
   }
 
   // Tertiary: search all links in page for a wordpress.com post URL
-  if (!postUrl || postUrl === 'about:blank') {
+  if (!looksLikeUrl(postUrl)) {
     try {
-      postUrl = await page.evaluate(() => {
+      const found = await page.evaluate(() => {
         const links = Array.from(document.querySelectorAll('a[href]')) as HTMLAnchorElement[];
         const match = links.find(a => /wordpress\.com\/.+\/\d{4}\//.test(a.href) || /wordpress\.com\/p=/.test(a.href));
         return match?.href || '';
       });
+      if (looksLikeUrl(found)) postUrl = found;
     } catch { /* ignore */ }
   }
 
-  // Final fallback
-  if (!postUrl || postUrl === 'about:blank') postUrl = page.url();
+  // Final fallback — the current page URL (the header/editor URL), never the
+  // raw article text.
+  if (!looksLikeUrl(postUrl)) postUrl = page.url();
   console.log(`   ✅ Post URL: ${postUrl}`);
 
   return {

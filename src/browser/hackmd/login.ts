@@ -92,8 +92,12 @@ export async function loginToHackMD(options?: {
 
   const email    = options?.email    || account?.email    || process.env.HACKMD_EMAIL!;
   const password = options?.password || account?.password || process.env.HACKMD_PASSWORD!;
+  // Fleet accounts (from the login portal) are password-less and email-less by
+  // design — they only carry a sessionDir from a real browser login. Only error
+  // out if we have neither credentials nor a session to fall back on.
+  const label = email || account?.nickname || options?.nickname || 'unknown account';
 
-  if (!email || !password) {
+  if ((!email || !password) && !account?.sessionDir) {
     throw new Error('HackMD credentials missing. Set HACKMD_EMAIL and HACKMD_PASSWORD env vars or add to accounts-hackmd.json.');
   }
 
@@ -109,6 +113,7 @@ export async function loginToHackMD(options?: {
 
   browserContext = await chromium.launchPersistentContext(sessionDir, {
     headless: process.env.HEADLESS !== 'false',
+    permissions: ['clipboard-read', 'clipboard-write'],
     executablePath: chromePath,
     viewport: { width: 1280, height: 800 },
     slowMo: 120,
@@ -125,7 +130,6 @@ export async function loginToHackMD(options?: {
       '--disable-session-crashed-bubble',
       '--disable-infobars',
     ],
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   });
 
   await browserContext.addInitScript(() => {
@@ -211,7 +215,7 @@ export async function loginToHackMD(options?: {
   const finalCheck = await isAlreadyLoggedIn(page);
   if (!finalCheck) {
     await closeHackMDBrowser();
-    throw new Error(`Unable to log in to HackMD as ${email}. Please complete login manually.`);
+    throw new Error(`Unable to log in to HackMD as ${label}. Please complete login manually.`);
   }
 
   console.log('   ✅ Login successful');

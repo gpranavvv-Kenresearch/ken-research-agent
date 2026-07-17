@@ -43,7 +43,16 @@ export async function postToBlogger(
       for (const b of btns.slice(0, 20)) console.log(`     ${b.tag} aria="${b.aria}" text="${b.text}"`);
     }
     try {
-      await page.getByRole('button', { name: 'Create new post' }).click();
+      // The button is often a <div aria-label="Create new post"> without an
+      // explicit role="button" — getByRole('button', ...) silently never
+      // matches that (needs a real ARIA button role, not just aria-label), so
+      // it must never be the only strategy tried.
+      const target = page.locator('[aria-label="Create new post"]').first();
+      if (await target.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await target.click();
+      } else {
+        await page.getByRole('button', { name: 'Create new post' }).click();
+      }
     } catch { /* try other selectors */ }
     try {
       await page.waitForURL(/\/(post\/edit|post\/create|post\/g)/, { timeout: 8000 });

@@ -1,4 +1,4 @@
-export interface RawRow {
+﻿export interface RawRow {
   _dataRow: number;
   _sheetRow: number;
   [key: string]: unknown;
@@ -175,33 +175,35 @@ export const ACCOUNT_NICKNAMES = [
 export const FORMATS = [
   {
     id: 'seo-li',
-    label: 'Format 1',
-    subLabel: 'SEO-Li Article',
-    desc: 'SEO-optimised LinkedIn article (800–1100 words, 17 quality flags, AEO/GEO signals)',
+    label: 'Sample 1',
+    subLabel: '',
+    desc: 'Write a blog in the Sample 1 style.',
     sampleRoute: '/samples/format-1.html',
     color: 'blue',
   },
   {
-    id: 'linkedin',
-    label: 'Format 2',
-    subLabel: 'LinkedIn Pulse',
-    desc: 'Standard LinkedIn Pulse blog (1000–1300 words, 8–9 interlinks, automated publishing)',
+    id: 'format2',
+    label: 'Sample 2',
+    subLabel: '',
+    desc: 'Write a blog in the Sample 2 style.',
     sampleRoute: '/samples/format-2.html',
     color: 'indigo',
   },
   {
     id: 'testing-demo',
-    label: 'Format 3',
-    subLabel: 'Testing Demo',
-    desc: 'Sandbox run with full HTML output — no live writes, safe to preview format',
+    label: 'Sample 3',
+    subLabel: '',
+    desc: 'Write a blog in the Sample 3 style.',
     sampleRoute: '/samples/format-3.html',
     color: 'teal',
   },
   {
     id: 'custom',
-    label: 'Format 4',
-    subLabel: 'Custom Prompt',
-    desc: 'Use your own blog instructions while keeping Ken Research data, Tavily research, and system quality rules.',
+    label: 'Custom',
+    subLabel: '',
+    desc: 'Paste your own sample blog to use as the template.',
     color: 'amber',
   }
 ];
+
+

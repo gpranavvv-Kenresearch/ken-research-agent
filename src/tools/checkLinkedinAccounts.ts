@@ -26,7 +26,6 @@ const CHROME_PATH = process.env.CHROME_PATH || (process.platform === 'win32' ? '
         executablePath: CHROME_PATH,
         ignoreDefaultArgs: ['--enable-automation'],
         args: ['--disable-blink-features=AutomationControlled'],
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
       });
       const page = ctx.pages()[0] || await ctx.newPage();
       await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'domcontentloaded', timeout: 20000 });

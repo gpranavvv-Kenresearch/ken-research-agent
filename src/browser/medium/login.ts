@@ -56,13 +56,17 @@ export async function loginToMedium(options?: {
 
   const email    = options?.email    || account?.email    || process.env.MEDIUM_EMAIL;
   const password = options?.password || account?.password || process.env.MEDIUM_PASSWORD;
+  // Fleet accounts (from the login portal) are password-less and email-less by
+  // design — they only carry a sessionDir from a real browser login. Only error
+  // out if we have neither an email nor a session to fall back on.
+  const label = email || account?.nickname || options?.nickname || 'unknown account';
 
-  if (!email) {
+  if (!email && !account?.sessionDir) {
     throw new Error(`Medium email missing. Add account to .accounts/accounts-medium.json or set MEDIUM_EMAIL env var.`);
   }
 
   const chromePath = process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : undefined);
-  const sessionDir = account?.sessionDir ? path.resolve(account.sessionDir) : sessionDirFor(email);
+  const sessionDir = account?.sessionDir ? path.resolve(account.sessionDir) : sessionDirFor(email as string);
 
   // Don't create if it doesn't exist - use existing saved session
   if (!fs.existsSync(sessionDir)) {
@@ -73,7 +77,13 @@ export async function loginToMedium(options?: {
   console.log('   Launching Medium browser...');
 
   browserContext = await chromium.launchPersistentContext(sessionDir, {
-    headless: process.env.HEADLESS !== 'false',
+    // Medium sits behind Cloudflare, which blocks headless Chrome outright (shows
+    // a "Just a moment..." challenge instead of the real site) regardless of any
+    // stealth flags below — confirmed by testing the same session headless vs
+    // headed. So this always runs headed, on the VPS's persistent virtual
+    // display (:99) when no real DISPLAY is set, ignoring the global HEADLESS toggle.
+    headless: false,
+    env: { ...process.env, DISPLAY: process.env.DISPLAY || ':99' },
     executablePath: chromePath,
     viewport: { width: 1366, height: 900 },
     slowMo: 50,
@@ -90,7 +100,6 @@ export async function loginToMedium(options?: {
       '--disable-session-crashed-bubble',
       '--disable-infobars',
     ],
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   });
 
   await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -140,7 +149,7 @@ export async function loginToMedium(options?: {
   const finalCheck = !(await page.url()).includes('signin');
   if (!finalCheck) {
     await closeMediumBrowser();
-    throw new Error(`Unable to log in to Medium as ${email}. Session expired or login failed. Please log in manually or update session.`);
+    throw new Error(`Unable to log in to Medium as ${label}. Session expired or login failed. Please log in manually or update session.`);
   }
 
   console.log(`   ✅ Login successful`);

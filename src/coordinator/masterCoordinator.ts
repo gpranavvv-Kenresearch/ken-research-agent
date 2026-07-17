@@ -61,6 +61,8 @@ function extractSocialPost(rawContent: string | undefined): string | null {
 }
 
 import { ensureTargetUrl } from '../utils/utm.js';
+import { retryOnSelectorTimeout } from '../utils/retry.js';
+import { addFailure, printDiagnostics, type FailureEntry } from '../utils/diagnostics.js';
 import { recordError } from '../errorInterceptor.js';
 import { applyFix } from '../autoFix.js';
 import { runSeoAnalysis } from '../agents/seoAgentNew.js';
@@ -251,7 +253,7 @@ async function diagnoseError(
  * SERP check disabled — re-enable by uncommenting runSeoAnalysis calls
  */
 export async function runXBatch(batchNum: number = 1): Promise<void> {
-  const batchUrls = await getRowsForContinuousXPosting(15);
+  const batchUrls = await getRowsForContinuousXPosting(12);
 
   if (batchUrls.length === 0) {
     console.log('[X BATCH] No rows available');
@@ -263,6 +265,7 @@ export async function runXBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[X BATCH] Starting ${batchLabel}...`);
   console.log(`  Found ${batchUrls.length} rows ready for X posting`);
   let posted = 0;
+  const failures: FailureEntry[] = [];
 
   // Pick 7-8 random indices from the batch to post as threads
   const threadCount = Math.floor(Math.random() * 2) + 7; // 7 or 8
@@ -290,7 +293,7 @@ export async function runXBatch(batchNum: number = 1): Promise<void> {
         }
         if (!tweet?.trim()) { console.log(`    ⏭ Skipping — generated content empty`); continue; }
       }
-      const xResult = await runXAgent({ tweetText: tweet, accountHandle: row.name });
+      const xResult = await retryOnSelectorTimeout(() => runXAgent({ tweetText: tweet, accountHandle: row.name }), { label: 'X post' });
 
       // 3. Save result
       if (xResult.success) {
@@ -312,11 +315,13 @@ export async function runXBatch(batchNum: number = 1): Promise<void> {
           xBatch: batchLabel,
         });
         console.log(`    ❌ Failed: ${xResult.error}`);
+        addFailure(failures, row.name, xResult.error);
       }
     } catch (err: any) {
       const kbEntry = recordError({ rawError: err.message, platform: 'x', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
       await applyFix(kbEntry, { platform: 'x', accountName: row.name, rowIndex: row.rowIndex });
       console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      addFailure(failures, row.name, err.message);
       try {
         await savePostingResult(row, {
           xPost: '',
@@ -331,6 +336,7 @@ export async function runXBatch(batchNum: number = 1): Promise<void> {
     }
   }
 
+  printDiagnostics('X', failures, posted, batchUrls.length);
   console.log(`[X BATCH] ${batchLabel} complete: ${posted}/${batchUrls.length} posted`);
 }
 
@@ -340,7 +346,7 @@ export async function runXBatch(batchNum: number = 1): Promise<void> {
  * Run FB batch: pick rows → SEO check → generate FB post → post → save all
  */
 export async function runFbBatch(batchNum: number = 1): Promise<void> {
-  const rows = await getRowsForContinuousFbPosting(15);
+  const rows = await getRowsForContinuousFbPosting(12);
 
   if (rows.length === 0) {
     console.log('[FB BATCH] No rows available');
@@ -354,6 +360,7 @@ export async function runFbBatch(batchNum: number = 1): Promise<void> {
 
   let posted = 0;
   let failed = 0;
+  const failures: FailureEntry[] = [];
 
   for (const row of rows) {
     try {
@@ -375,7 +382,7 @@ export async function runFbBatch(batchNum: number = 1): Promise<void> {
 
       // 3. Post to FB
       console.log(`    Posting to FB (account: ${row.name})...`);
-      const postResult = await postToFbAccount(row.name, fbPost);
+      const postResult = await retryOnSelectorTimeout(() => postToFbAccount(row.name, fbPost), { label: 'FB post' });
 
       if (postResult.success) {
         fbPost = postResult.postText || fbPost;
@@ -398,6 +405,7 @@ export async function runFbBatch(batchNum: number = 1): Promise<void> {
         });
         console.log(`    ❌ Failed: ${postResult.error}`);
         failed++;
+        addFailure(failures, row.name, postResult.error);
       }
 
       await new Promise(r => setTimeout(r, 1000));
@@ -405,6 +413,7 @@ export async function runFbBatch(batchNum: number = 1): Promise<void> {
       const kbEntry = recordError({ rawError: err.message, platform: 'facebook', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
       await applyFix(kbEntry, { platform: 'facebook', accountName: row.name, rowIndex: row.rowIndex });
       console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      addFailure(failures, row.name, err.message);
       try {
         await saveFbBatchResult(row, {
           fbPost: row.fbPost || '',
@@ -420,6 +429,7 @@ export async function runFbBatch(batchNum: number = 1): Promise<void> {
     }
   }
 
+  printDiagnostics('FB', failures, posted, rows.length);
   console.log(`\n[FB BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
@@ -454,7 +464,7 @@ async function postToFbAccount(accountName: string, postText: string): Promise<{
  * Run LI batch: pick rows → SEO check → generate LI post → post → save all
  */
 export async function runLiBatch(options?: { manual?: boolean }, batchNum: number = 1): Promise<void> {
-  const rows = await getRowsForContinuousLiPosting(15);
+  const rows = await getRowsForContinuousLiPosting(12);
 
   if (rows.length === 0) {
     console.log('[LI BATCH] No rows available');
@@ -468,6 +478,7 @@ export async function runLiBatch(options?: { manual?: boolean }, batchNum: numbe
 
   let posted = 0;
   let failed = 0;
+  const failures: FailureEntry[] = [];
 
   for (const row of rows) {
     try {
@@ -489,7 +500,7 @@ export async function runLiBatch(options?: { manual?: boolean }, batchNum: numbe
 
       // 3. Post to LI
       console.log(`    Posting to LI (account: ${row.name})...`);
-      const postResult = await postToLiAccount(row.name, liPost);
+      const postResult = await retryOnSelectorTimeout(() => postToLiAccount(row.name, liPost), { label: 'LI post' });
 
       if (postResult.success) {
         liPost = postResult.postText || liPost;
@@ -512,6 +523,7 @@ export async function runLiBatch(options?: { manual?: boolean }, batchNum: numbe
         });
         console.log(`    ❌ Failed: ${postResult.error}`);
         failed++;
+        addFailure(failures, row.name, postResult.error);
       }
 
       await new Promise(r => setTimeout(r, 1000));
@@ -519,6 +531,7 @@ export async function runLiBatch(options?: { manual?: boolean }, batchNum: numbe
       const kbEntry = recordError({ rawError: err.message, platform: 'linkedin', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
       await applyFix(kbEntry, { platform: 'linkedin', accountName: row.name, rowIndex: row.rowIndex });
       console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      addFailure(failures, row.name, err.message);
       try {
         await saveLiBatchResult(row, {
           liPost: row.linkedinPost || '',
@@ -534,6 +547,7 @@ export async function runLiBatch(options?: { manual?: boolean }, batchNum: numbe
     }
   }
 
+  printDiagnostics('LinkedIn', failures, posted, rows.length);
   console.log(`\n[LI BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
@@ -571,7 +585,7 @@ export async function runMediumBatch(batchNum: number = 1): Promise<void> {
   // Medium uses BLOG sheet
   console.log(`\n[MEDIUM BATCH] Checking for rows ready to post...`);
 
-  const rows = await getRowsForContinuousMediumPosting(25);
+  const rows = await getRowsForContinuousMediumPosting(12);
 
   if (rows.length === 0) {
     console.log('[MEDIUM BATCH] No rows available (all posted recently, no new rows)');
@@ -584,6 +598,7 @@ export async function runMediumBatch(batchNum: number = 1): Promise<void> {
   console.log(`  Found ${rows.length} rows ready for Medium posting`);
   let posted = 0;
   let failed = 0;
+  const failures: FailureEntry[] = [];
 
   for (const row of rows) {
     try {
@@ -604,7 +619,7 @@ export async function runMediumBatch(batchNum: number = 1): Promise<void> {
         throw new Error(`Row ${row.rowIndex}: "New Name" column is empty — cannot post to Medium`);
       }
       console.log(`    Posting to Medium (account: ${mediumNickname})...`);
-      const postResult = await postToMediumAccount(mediumNickname, row.title || '', mediumPost);
+      const postResult = await retryOnSelectorTimeout(() => postToMediumAccount(mediumNickname, row.title || '', mediumPost), { label: 'Medium post' });
 
       if (postResult.success) {
 
@@ -626,6 +641,7 @@ export async function runMediumBatch(batchNum: number = 1): Promise<void> {
         });
         console.log(`    ❌ Failed: ${postResult.error}`);
         failed++;
+        addFailure(failures, mediumNickname, postResult.error);
       }
 
       await new Promise(r => setTimeout(r, 1000));
@@ -633,6 +649,7 @@ export async function runMediumBatch(batchNum: number = 1): Promise<void> {
       const kbEntry = recordError({ rawError: err.message, platform: 'medium', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
       await applyFix(kbEntry, { platform: 'medium', accountName: row.name, rowIndex: row.rowIndex });
       console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      addFailure(failures, row.newName || row.name, err.message);
       try {
         await saveMediumBatchResult(row, {
           mediumPost: row.mediumPost || '',
@@ -648,6 +665,7 @@ export async function runMediumBatch(batchNum: number = 1): Promise<void> {
     }
   }
 
+  printDiagnostics('Medium', failures, posted, rows.length);
   if (posted > 0) {
     console.log(`\n[MEDIUM BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
   } else {
@@ -692,7 +710,7 @@ async function postToMediumAccount(accountName: string, title: string, htmlConte
 export async function runLinkmateBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[LINKMATE BATCH] Starting...`);
 
-  const rows = await getRowsForContinuousLinkmatePosting(15);
+  const rows = await getRowsForContinuousLinkmatePosting(12);
 
   if (rows.length === 0) {
     console.log('[LINKMATE BATCH] No rows available (all posted recently, no new rows)');
@@ -705,6 +723,7 @@ export async function runLinkmateBatch(batchNum: number = 1): Promise<void> {
 
   let posted = 0;
   let failed = 0;
+  const failures: FailureEntry[] = [];
 
   for (const row of rows) {
     try {
@@ -716,12 +735,13 @@ export async function runLinkmateBatch(batchNum: number = 1): Promise<void> {
       if (!linkMateContent) {
         console.warn(`    ⚠️  No Content (HTML) found — skipping`);
         failed++;
+        addFailure(failures, row.name, 'no content generated');
         continue;
       }
 
       // Post to Linkmate
       console.log(`    Posting to Linkmate (account: ${row.name})...`);
-      const postResult = await postToLinkmateAccount(row.name, row.title || '', linkMateContent, row.seedKeyword);
+      const postResult = await retryOnSelectorTimeout(() => postToLinkmateAccount(row.name, row.title || '', linkMateContent, row.seedKeyword), { label: 'Linkmate post' });
 
       if (postResult.success) {
         await saveLinkmateBatchResult(row, {
@@ -742,6 +762,7 @@ export async function runLinkmateBatch(batchNum: number = 1): Promise<void> {
         });
         console.log(`    ❌ Failed: ${postResult.error}`);
         failed++;
+        addFailure(failures, row.name, postResult.error);
       }
 
       await new Promise(r => setTimeout(r, 1000));
@@ -749,6 +770,7 @@ export async function runLinkmateBatch(batchNum: number = 1): Promise<void> {
       const kbEntry = recordError({ rawError: err.message, platform: 'linkmate', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
       await applyFix(kbEntry, { platform: 'linkmate', accountName: row.name, rowIndex: row.rowIndex });
       console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      addFailure(failures, row.name, err.message);
       try {
         await saveLinkmateBatchResult(row, {
           linkMateContent: row.linkMateContent || '',
@@ -764,6 +786,7 @@ export async function runLinkmateBatch(batchNum: number = 1): Promise<void> {
     }
   }
 
+  printDiagnostics('Linkmate', failures, posted, rows.length);
   console.log(`\n[LINKMATE BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
@@ -802,7 +825,7 @@ async function postToLinkmateAccount(accountName: string, title: string, htmlCon
 export async function runGoogleSiteBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[GOOGLE SITES BATCH] Starting...`);
 
-  const rows = await getRowsForContinuousGoogleSitePosting(25);
+  const rows = await getRowsForContinuousGoogleSitePosting(12);
 
   if (rows.length === 0) {
     console.log('[GOOGLE SITES BATCH] No rows available (all posted recently, no new rows)');
@@ -815,6 +838,7 @@ export async function runGoogleSiteBatch(batchNum: number = 1): Promise<void> {
 
   let posted = 0;
   let failed = 0;
+  const failures: FailureEntry[] = [];
 
   for (const row of rows) {
     try {
@@ -836,7 +860,7 @@ export async function runGoogleSiteBatch(batchNum: number = 1): Promise<void> {
         throw new Error(`Row ${row.rowIndex}: "New Name" column is empty — cannot post to Google Sites`);
       }
       console.log(`    Posting to Google Sites (account: ${googleSiteNickname})...`);
-      const postResult = await postToGoogleSiteAccount(googleSiteNickname, row.title || '', googleSitePost, row.seedKeyword);
+      const postResult = await retryOnSelectorTimeout(() => postToGoogleSiteAccount(googleSiteNickname, row.title || '', googleSitePost, row.seedKeyword), { label: 'Google Sites post' });
 
       if (postResult.success) {
         await saveGoogleSiteBatchResult(row, {
@@ -857,6 +881,7 @@ export async function runGoogleSiteBatch(batchNum: number = 1): Promise<void> {
         });
         console.log(`    ❌ Failed: ${postResult.error}`);
         failed++;
+        addFailure(failures, googleSiteNickname, postResult.error);
       }
 
       await new Promise(r => setTimeout(r, 1000));
@@ -864,6 +889,7 @@ export async function runGoogleSiteBatch(batchNum: number = 1): Promise<void> {
       const kbEntry = recordError({ rawError: err.message, platform: 'googlesite', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
       await applyFix(kbEntry, { platform: 'googlesite', accountName: row.newName || row.name, rowIndex: row.rowIndex });
       console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      addFailure(failures, row.newName || row.name, err.message);
       try {
         await saveGoogleSiteBatchResult(row, {
           googleSitePost: row.googleSitePost || '',
@@ -879,6 +905,7 @@ export async function runGoogleSiteBatch(batchNum: number = 1): Promise<void> {
     }
   }
 
+  printDiagnostics('Google Sites', failures, posted, rows.length);
   console.log(`\n[GOOGLE SITES BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
@@ -917,7 +944,7 @@ async function postToGoogleSiteAccount(accountName: string, title: string, htmlC
 export async function runDevtoBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[DEV.TO BATCH] Starting...`);
 
-  const rows = await getRowsForContinuousDevtoPosting(15);
+  const rows = await getRowsForContinuousDevtoPosting(12);
 
   if (rows.length === 0) {
     console.log('[DEV.TO BATCH] No rows available (all posted recently, no new rows)');
@@ -930,6 +957,7 @@ export async function runDevtoBatch(batchNum: number = 1): Promise<void> {
 
   let posted = 0;
   let failed = 0;
+  const failures: FailureEntry[] = [];
 
   for (const row of rows) {
     try {
@@ -945,7 +973,7 @@ export async function runDevtoBatch(batchNum: number = 1): Promise<void> {
 
       // 3. Post to Dev.to
       console.log(`    Posting to Dev.to (account: ${row.name})...`);
-      const postResult = await postToDevtoAccount(row.name, row.title || '', devtoPost);
+      const postResult = await retryOnSelectorTimeout(() => postToDevtoAccount(row.name, row.title || '', devtoPost), { label: 'Dev.to post' });
 
       if (postResult.success) {
         await saveDevtoBatchResult(row, {
@@ -962,11 +990,13 @@ export async function runDevtoBatch(batchNum: number = 1): Promise<void> {
           devtoError: postResult.error || 'Unknown error',
         });
         failed++;
+        addFailure(failures, row.name, postResult.error);
       }
     } catch (err: any) {
       const kbEntry = recordError({ rawError: err.message, platform: 'devto', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
       await applyFix(kbEntry, { platform: 'devto', accountName: row.name, rowIndex: row.rowIndex });
       console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      addFailure(failures, row.name, err.message);
       try {
         await saveDevtoBatchResult(row, {
           devtoPostUrl: '',
@@ -981,6 +1011,7 @@ export async function runDevtoBatch(batchNum: number = 1): Promise<void> {
     }
   }
 
+  printDiagnostics('Dev.to', failures, posted, rows.length);
   console.log(`\n[DEV.TO BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
@@ -1020,7 +1051,7 @@ async function postToDevtoAccount(accountName: string, title: string, htmlConten
 export async function runLinkedinPulseBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[LINKEDIN PULSE BATCH] Starting...`);
 
-  const rows = await getRowsForContinuousLinkedinPulsePosting(15);
+  const rows = await getRowsForContinuousLinkedinPulsePosting(12);
 
   if (rows.length === 0) {
     console.log('[LINKEDIN PULSE BATCH] No rows available (all posted recently, no new rows)');
@@ -1043,6 +1074,7 @@ export async function runLinkedinPulseBatch(batchNum: number = 1): Promise<void>
 
   let totalPosted = 0;
   let totalFailed = 0;
+  const failures: FailureEntry[] = [];
 
   // Process each account's batch separately
   for (const [accountName, accountRows] of rowsByAccount) {
@@ -1068,14 +1100,14 @@ export async function runLinkedinPulseBatch(batchNum: number = 1): Promise<void>
 
         // 3. Post to LinkedIn Pulse
         console.log(`      Posting to LinkedIn Pulse...`);
-        const postResult = await postToPulseAccount(
+        const postResult = await retryOnSelectorTimeout(() => postToPulseAccount(
           accountName,
           pulseTitle,
           pulseContent.html,
           pulseTitle,
           pulseContent.seoDescription,
           pulseCaption
-        );
+        ), { label: 'LinkedIn Pulse post' });
 
         if (postResult.success) {
           await saveLinkedinPulseBatchResult(row, {
@@ -1094,6 +1126,7 @@ export async function runLinkedinPulseBatch(batchNum: number = 1): Promise<void>
           });
           console.log(`      ❌ Failed: ${postResult.error}`);
           failed++;
+          addFailure(failures, accountName, postResult.error);
         }
 
         await new Promise(r => setTimeout(r, 1000));
@@ -1101,6 +1134,7 @@ export async function runLinkedinPulseBatch(batchNum: number = 1): Promise<void>
         const kbEntry = recordError({ rawError: err.message, platform: 'linkedin', stage: 'pulse-post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
         await applyFix(kbEntry, { platform: 'linkedin', accountName: row.name, rowIndex: row.rowIndex });
         console.error(`      ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+        addFailure(failures, accountName, err.message);
         try {
           await saveLinkedinPulseBatchResult(row, {
             linkedinPulsePostUrl: '',
@@ -1120,6 +1154,7 @@ export async function runLinkedinPulseBatch(batchNum: number = 1): Promise<void>
     totalFailed += failed;
   }
 
+  printDiagnostics('LinkedIn Pulse', failures, totalPosted, rows.length);
   console.log(`\n[LINKEDIN PULSE BATCH] ${batchLabel} complete: ${totalPosted}/${rows.length} posted, ${totalFailed} failed`);
 }
 
@@ -1171,7 +1206,7 @@ async function postToPulseAccount(
 export async function runCalisthenicsNBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[CALISTHENICS BATCH] Starting...`);
 
-  const rows = await getRowsForContinuousCalisthenicsPosting(15);
+  const rows = await getRowsForContinuousCalisthenicsPosting(12);
 
   if (rows.length === 0) {
     console.log('[CALISTHENICS BATCH] No rows available');
@@ -1184,6 +1219,7 @@ export async function runCalisthenicsNBatch(batchNum: number = 1): Promise<void>
   console.log(`  Found ${rows.length} rows ready for Calisthenics posting`);
   let posted = 0;
   let failed = 0;
+  const failures: FailureEntry[] = [];
 
   for (const row of rows) {
     try {
@@ -1199,7 +1235,7 @@ export async function runCalisthenicsNBatch(batchNum: number = 1): Promise<void>
 
       // 3. Post to Calisthenics
       console.log(`    Posting to Calisthenics (account: ${row.name})...`);
-      const postResult = await postToCalisthenicsAccount(row.name, row.title || '', calisthenicsContent, row.seedKeyword);
+      const postResult = await retryOnSelectorTimeout(() => postToCalisthenicsAccount(row.name, row.title || '', calisthenicsContent, row.seedKeyword), { label: 'Calisthenics post' });
 
       if (postResult.success) {
         await saveCalisthenicsResultBatch(row, {
@@ -1218,6 +1254,7 @@ export async function runCalisthenicsNBatch(batchNum: number = 1): Promise<void>
         });
         console.log(`    ❌ Failed: ${postResult.error}`);
         failed++;
+        addFailure(failures, row.name, postResult.error);
       }
 
       await new Promise(r => setTimeout(r, 1000));
@@ -1225,6 +1262,7 @@ export async function runCalisthenicsNBatch(batchNum: number = 1): Promise<void>
       const kbEntry = recordError({ rawError: err.message, platform: 'calisthenics', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
       await applyFix(kbEntry, { platform: 'calisthenics', accountName: row.name, rowIndex: row.rowIndex });
       console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      addFailure(failures, row.name, err.message);
       try {
         await saveCalisthenicsResultBatch(row, {
           calisthenicsPostUrl: '',
@@ -1239,6 +1277,7 @@ export async function runCalisthenicsNBatch(batchNum: number = 1): Promise<void>
     }
   }
 
+  printDiagnostics('Calisthenics', failures, posted, rows.length);
   if (posted > 0) {
     console.log(`\n[CALISTHENICS BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
   } else {
@@ -1250,7 +1289,7 @@ export async function runCalisthenicsNBatch(batchNum: number = 1): Promise<void>
 export async function runSubstackBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[SUBSTACK BATCH] Starting...`);
 
-  const rows = await getRowsForContinuousSubstackPosting(15);
+  const rows = await getRowsForContinuousSubstackPosting(12);
 
   if (rows.length === 0) {
     console.log('[SUBSTACK BATCH] No rows available');
@@ -1263,6 +1302,7 @@ export async function runSubstackBatch(batchNum: number = 1): Promise<void> {
   console.log(`  Found ${rows.length} rows ready for Substack posting`);
   let posted = 0;
   let failed = 0;
+  const failures: FailureEntry[] = [];
 
   for (const row of rows) {
     try {
@@ -1272,7 +1312,7 @@ export async function runSubstackBatch(batchNum: number = 1): Promise<void> {
       let substackContent = await generateSubstackPost(row);
       substackContent = ensureTargetUrl(substackContent, row.targetUrl);
       console.log(`    Posting to Substack (account: ${row.name})...`);
-      const postResult = await postToSubstackAccount(row.name, row.title || '', substackContent);
+      const postResult = await retryOnSelectorTimeout(() => postToSubstackAccount(row.name, row.title || '', substackContent), { label: 'Substack post' });
 
       if (postResult.success) {
         await saveSubstackBatchResult(row, {
@@ -1291,6 +1331,7 @@ export async function runSubstackBatch(batchNum: number = 1): Promise<void> {
         });
         console.log(`    ❌ Failed: ${postResult.error}`);
         failed++;
+        addFailure(failures, row.name, postResult.error);
       }
 
       await new Promise(r => setTimeout(r, 1000));
@@ -1298,6 +1339,7 @@ export async function runSubstackBatch(batchNum: number = 1): Promise<void> {
       const kbEntry = recordError({ rawError: err.message, platform: 'substack', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
       await applyFix(kbEntry, { platform: 'substack', accountName: row.name, rowIndex: row.rowIndex });
       console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      addFailure(failures, row.name, err.message);
       try {
         await saveSubstackBatchResult(row, {
           substackPostUrl: '',
@@ -1312,6 +1354,7 @@ export async function runSubstackBatch(batchNum: number = 1): Promise<void> {
     }
   }
 
+  printDiagnostics('Substack', failures, posted, rows.length);
   if (posted > 0) {
     console.log(`\n[SUBSTACK BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
   } else {
@@ -1324,18 +1367,19 @@ export async function runWordpressBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[WORDPRESS BATCH] Starting...`);
   const progress = getBlogRowProgress();
   console.log(`  [WordPress] Last posted row index: ${progress.wordpress}`);
-  const rows = await getRowsForContinuousWordpressPosting(15, progress.wordpress);
+  const rows = await getRowsForContinuousWordpressPosting(12, progress.wordpress);
   if (rows.length === 0) { console.log('[WORDPRESS BATCH] No rows available'); return; }
   const batchLabel = `Batch ${batchNum}`;
   console.log(`  Found ${rows.length} rows ready for WordPress posting (${batchLabel})`);
   let posted = 0, failed = 0;
+  const failures: FailureEntry[] = [];
   for (const row of rows) {
     try {
       console.log(`\n  Processing [row ${row.rowIndex}]: ${row.title.slice(0, 60)}`);
       let content = row.blogContent || await generateHackmdPost(row);
       content = ensureTargetUrl(content, row.targetUrl);
       const title = row.title;
-      const r = await postToWordpressAccount(row.name, title, content);
+      const r = await retryOnSelectorTimeout(() => postToWordpressAccount(row.name, title, content), { label: 'WordPress post' });
       if (r.success) {
         await saveUnifiedWordpressResult(row, { postUrl: r.postUrl || '', status: 'Posted', batch: batchLabel });
         console.log(`    ✅ Posted → ${r.postUrl}`);
@@ -1343,9 +1387,11 @@ export async function runWordpressBatch(batchNum: number = 1): Promise<void> {
       } else {
         await saveUnifiedWordpressResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: r.error });
         failed++;
+        addFailure(failures, row.name, r.error);
       }
     } catch (err: any) {
       console.error(`  ❌ Row ${row.rowIndex}: ${err.message}`);
+      addFailure(failures, row.name, err.message);
       try { await saveUnifiedWordpressResult(row, { postUrl: '', status: 'Error', batch: batchLabel, error: err.message }); } catch {}
       failed++;
     }
@@ -1359,6 +1405,7 @@ export async function runWordpressBatch(batchNum: number = 1): Promise<void> {
       console.error(`   ❌ Progress save error: ${progErr.message}`);
     }
   }
+  printDiagnostics('WordPress', failures, posted, rows.length);
   console.log(`\n[WORDPRESS BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
@@ -1367,11 +1414,12 @@ export async function runBloggerBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[BLOGGER BATCH] Starting...`);
   const progress = getBlogRowProgress();
   console.log(`  [Blogger] Last posted row index: ${progress.blogger}`);
-  const rows = await getRowsForContinuousBloggerPosting(15, progress.blogger);
+  const rows = await getRowsForContinuousBloggerPosting(12, progress.blogger);
   if (rows.length === 0) { console.log('[BLOGGER BATCH] No rows available'); return; }
   const batchLabel = `Batch ${batchNum}`;
   console.log(`  Found ${rows.length} rows ready for Blogger posting (${batchLabel})`);
   let posted = 0, failed = 0;
+  const failures: FailureEntry[] = [];
   for (const row of rows) {
     try {
       console.log(`\n  Processing [row ${row.rowIndex}]: ${row.title.slice(0, 60)}`);
@@ -1380,7 +1428,7 @@ export async function runBloggerBatch(batchNum: number = 1): Promise<void> {
       if (row.targetUrl && !content.includes(row.targetUrl)) {
         content += `\n\n<p><a href="${row.targetUrl}">Read the full report on Ken Research</a></p>`;
       }
-      const r = await postToBloggerAccount(row.name, title, content);
+      const r = await retryOnSelectorTimeout(() => postToBloggerAccount(row.name, title, content), { label: 'Blogger post' });
       if (r.success) {
         await saveUnifiedBloggerResult(row, { postUrl: r.postUrl || '', status: 'Posted', batch: batchLabel });
         console.log(`    ✅ Posted → ${r.postUrl}`);
@@ -1388,9 +1436,11 @@ export async function runBloggerBatch(batchNum: number = 1): Promise<void> {
       } else {
         await saveUnifiedBloggerResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: r.error });
         failed++;
+        addFailure(failures, row.name, r.error);
       }
     } catch (err: any) {
       console.error(`  ❌ Row ${row.rowIndex}: ${err.message}`);
+      addFailure(failures, row.name, err.message);
       try { await saveUnifiedBloggerResult(row, { postUrl: '', status: 'Error', batch: batchLabel, error: err.message }); } catch {}
       failed++;
     }
@@ -1404,6 +1454,7 @@ export async function runBloggerBatch(batchNum: number = 1): Promise<void> {
       console.error(`   ❌ Progress save error: ${progErr.message}`);
     }
   }
+  printDiagnostics('Blogger', failures, posted, rows.length);
   console.log(`\n[BLOGGER BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
@@ -1411,7 +1462,7 @@ export async function runBloggerBatch(batchNum: number = 1): Promise<void> {
 export async function runHackmdBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[HACKMD BATCH] Starting...`);
 
-  const rows = await getRowsForContinuousHackmdPosting(15);
+  const rows = await getRowsForContinuousHackmdPosting(12);
 
   if (rows.length === 0) {
     console.log('[HACKMD BATCH] No rows available');
@@ -1424,6 +1475,7 @@ export async function runHackmdBatch(batchNum: number = 1): Promise<void> {
   console.log(`  Found ${rows.length} rows ready for HackMD posting`);
   let posted = 0;
   let failed = 0;
+  const failures: FailureEntry[] = [];
 
   for (const row of rows) {
     try {
@@ -1433,7 +1485,7 @@ export async function runHackmdBatch(batchNum: number = 1): Promise<void> {
       let hackmdContent = await generateHackmdPost(row);
       hackmdContent = ensureTargetUrl(hackmdContent, row.targetUrl);
       console.log(`    Posting to HackMD (account: ${row.name})...`);
-      const postResult = await postToHackmdAccount(row.title || '', hackmdContent, row.name, row.description || '');
+      const postResult = await retryOnSelectorTimeout(() => postToHackmdAccount(row.title || '', hackmdContent, row.name, row.description || ''), { label: 'HackMD post' });
 
       if (postResult.success) {
         await saveHackmdBatchResult(row, {
@@ -1452,6 +1504,7 @@ export async function runHackmdBatch(batchNum: number = 1): Promise<void> {
         });
         console.log(`    ❌ Failed: ${postResult.error}`);
         failed++;
+        addFailure(failures, row.name, postResult.error);
       }
 
       await new Promise(r => setTimeout(r, 1000));
@@ -1459,6 +1512,7 @@ export async function runHackmdBatch(batchNum: number = 1): Promise<void> {
       const kbEntry = recordError({ rawError: err.message, platform: 'hackmd', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
       await applyFix(kbEntry, { platform: 'hackmd', accountName: row.name, rowIndex: row.rowIndex });
       console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      addFailure(failures, row.name, err.message);
       try {
         await saveHackmdBatchResult(row, {
           hackmdPostUrl: '',
@@ -1473,6 +1527,7 @@ export async function runHackmdBatch(batchNum: number = 1): Promise<void> {
     }
   }
 
+  printDiagnostics('HackMD', failures, posted, rows.length);
   if (posted > 0) {
     console.log(`\n[HACKMD BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
   } else {
@@ -1531,14 +1586,97 @@ async function postToSubstackAccount(
 }
 
 // Helper: Post to HackMD (no account needed)
+// ── HackMD: HTML → Markdown (regex-based, no library — used by the API path) ────
+function htmlToMarkdownSimple(html: string): string {
+  let md = html;
+  md = md.replace(/<h1[^>]*>(.*?)<\/h1>/gis, '\n# $1\n');
+  md = md.replace(/<h2[^>]*>(.*?)<\/h2>/gis, '\n## $1\n');
+  md = md.replace(/<h3[^>]*>(.*?)<\/h3>/gis, '\n### $1\n');
+  md = md.replace(/<h4[^>]*>(.*?)<\/h4>/gis, '\n#### $1\n');
+  md = md.replace(/<h5[^>]*>(.*?)<\/h5>/gis, '\n##### $1\n');
+  md = md.replace(/<h6[^>]*>(.*?)<\/h6>/gis, '\n###### $1\n');
+  md = md.replace(/<(strong|b)[^>]*>(.*?)<\/\1>/gis, '**$2**');
+  md = md.replace(/<(em|i)[^>]*>(.*?)<\/\1>/gis, '*$2*');
+  md = md.replace(/<a[^>]*href=["']([^"']*)["'][^>]*>(.*?)<\/a>/gis, '[$2]($1)');
+  md = md.replace(/<li[^>]*>(.*?)<\/li>/gis, '- $1\n');
+  md = md.replace(/<\/?(ul|ol)[^>]*>/gis, '\n');
+  md = md.replace(/<p[^>]*>(.*?)<\/p>/gis, '\n$1\n');
+  md = md.replace(/<br\s*\/?>/gi, '\n');
+  md = md.replace(/<[^>]+>/g, ''); // strip any remaining tags
+  md = md.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+  md = md.replace(/\n{3,}/g, '\n\n').trim();
+  return md;
+}
+
+// ── HackMD: look up a person's API key from .accounts/accounts-hackmd.json ──────
+function getHackmdApiKey(accountName: string): string | undefined {
+  try {
+    const accounts = JSON.parse(fs.readFileSync('.accounts/accounts-hackmd.json', 'utf8'));
+    const q = accountName.toLowerCase();
+    const account = accounts.find((a: any) =>
+      a.nickname?.toLowerCase() === q || a.username?.toLowerCase() === q || a.email?.toLowerCase() === q
+    );
+    return account?.apiKey || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// ── HackMD: REST API posting (primary path when an API key exists) ──────────────
+async function postToHackmdViaApi(
+  title: string,
+  htmlContent: string,
+  apiKey: string
+): Promise<{ success: boolean; postUrl?: string; error?: string }> {
+  try {
+    const markdown = `# ${title}\n\n${htmlToMarkdownSimple(htmlContent)}`;
+    const res = await fetch('https://api.hackmd.io/v1/notes', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title,
+        content: markdown,
+        readPermission: 'guest',
+        writePermission: 'owner',
+        commentPermission: 'everyone',
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => res.statusText);
+      return { success: false, error: `HackMD API ${res.status}: ${errText.slice(0, 200)}` };
+    }
+
+    const data: any = await res.json();
+    const postUrl = data.publishLink || (data.id ? `https://hackmd.io/${data.id}` : undefined);
+    if (!postUrl) return { success: false, error: 'HackMD API returned no note URL' };
+    return { success: true, postUrl };
+  } catch (err: any) {
+    return { success: false, error: `HackMD API request failed: ${err.message}` };
+  }
+}
+
 async function postToHackmdAccount(
   title: string,
   htmlContent: string,
   accountName?: string,
   description?: string
 ): Promise<{ success: boolean; postUrl?: string; error?: string }> {
+  // Primary path: REST API, if this account has a HackMD API key on file.
+  if (accountName) {
+    const apiKey = getHackmdApiKey(accountName);
+    if (apiKey) {
+      const apiResult = await postToHackmdViaApi(title, htmlContent, apiKey);
+      if (apiResult.success) return apiResult;
+      console.log(`    ⚠️ HackMD API failed for ${accountName} (${apiResult.error}) — falling back to browser`);
+    }
+  }
+
+  // Fallback path: browser automation (unchanged).
   try {
-    // Login to HackMD first
     if (accountName) {
       const loginResult = await executeBrowserTool('login_hackmd', { nickname: accountName });
       if (!loginResult.success) {
@@ -1755,11 +1893,12 @@ async function saveWordpressBatchResult(
 
 export async function runPatreonBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[PATREON BATCH] Starting...`);
-  const rows = await getRowsForContinuousPatreonPosting(15);
+  const rows = await getRowsForContinuousPatreonPosting(12);
   if (rows.length === 0) { console.log('[PATREON BATCH] No rows available'); return; }
   const batchLabel = `Batch ${batchNum}`;
   console.log(`  Found ${rows.length} rows ready for Patreon (${batchLabel})`);
   let posted = 0, failed = 0;
+  const failures: FailureEntry[] = [];
   for (const row of rows) {
     try {
       console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
@@ -1768,12 +1907,15 @@ export async function runPatreonBatch(batchNum: number = 1): Promise<void> {
       if (!content) {
         await saveUnifiedPatreonResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: 'No blog content' });
         failed++;
+        addFailure(failures, row.name, 'no blog content');
         continue;
       }
       content = ensureTargetUrl(content, row.targetUrl);
-      const loginResult = await executeBrowserTool('login_patreon', { nickname: row.name });
-      if (!loginResult.success) throw new Error(loginResult.error || 'Login failed');
-      const postResult = await executeBrowserTool('post_patreon', { title, htmlContent: content });
+      const postResult = await retryOnSelectorTimeout(async () => {
+        const loginResult = await executeBrowserTool('login_patreon', { nickname: row.name });
+        if (!loginResult.success) throw new Error(loginResult.error || 'Login failed');
+        return executeBrowserTool('post_patreon', { title, htmlContent: content });
+      }, { label: 'Patreon post' });
       if (postResult.success) {
         await saveUnifiedPatreonResult(row, { postUrl: postResult.postUrl || '', status: 'Posted', batch: batchLabel });
         console.log(`    ✅ Posted → ${postResult.postUrl}`);
@@ -1781,14 +1923,17 @@ export async function runPatreonBatch(batchNum: number = 1): Promise<void> {
       } else {
         await saveUnifiedPatreonResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: postResult.error });
         failed++;
+        addFailure(failures, row.name, postResult.error);
       }
     } catch (err: any) {
       console.error(`  ❌ Row ${row.rowIndex}: ${err.message}`);
+      addFailure(failures, row.name, err.message);
       try { await saveUnifiedPatreonResult(row, { postUrl: '', status: 'Error', batch: batchLabel, error: err.message }); } catch {}
       failed++;
     }
     await new Promise(r => setTimeout(r, 1000));
   }
+  printDiagnostics('Patreon', failures, posted, rows.length);
   console.log(`\n[PATREON BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
@@ -1796,11 +1941,12 @@ export async function runPatreonBatch(batchNum: number = 1): Promise<void> {
 
 export async function runNotionBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[NOTION BATCH] Starting...`);
-  const rows = await getRowsForContinuousNotionPosting(15);
+  const rows = await getRowsForContinuousNotionPosting(12);
   if (rows.length === 0) { console.log('[NOTION BATCH] No rows available'); return; }
   const batchLabel = `Batch ${batchNum}`;
   console.log(`  Found ${rows.length} rows ready for Notion (${batchLabel})`);
   let posted = 0, failed = 0;
+  const failures: FailureEntry[] = [];
   for (const row of rows) {
     try {
       console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
@@ -1809,12 +1955,15 @@ export async function runNotionBatch(batchNum: number = 1): Promise<void> {
       if (!content) {
         await saveUnifiedNotionResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: 'No blog content' });
         failed++;
+        addFailure(failures, row.name, 'no blog content');
         continue;
       }
       content = ensureTargetUrl(content, row.targetUrl);
-      const loginResult = await executeBrowserTool('login_notion', { nickname: row.name });
-      if (!loginResult.success) throw new Error(loginResult.error || 'Login failed');
-      const postResult = await executeBrowserTool('post_notion', { title, htmlContent: content });
+      const postResult = await retryOnSelectorTimeout(async () => {
+        const loginResult = await executeBrowserTool('login_notion', { nickname: row.name });
+        if (!loginResult.success) throw new Error(loginResult.error || 'Login failed');
+        return executeBrowserTool('post_notion', { title, htmlContent: content });
+      }, { label: 'Notion post' });
       if (postResult.success) {
         await saveUnifiedNotionResult(row, { postUrl: postResult.postUrl || '', status: 'Posted', batch: batchLabel });
         console.log(`    ✅ Posted → ${postResult.postUrl}`);
@@ -1822,14 +1971,17 @@ export async function runNotionBatch(batchNum: number = 1): Promise<void> {
       } else {
         await saveUnifiedNotionResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: postResult.error });
         failed++;
+        addFailure(failures, row.name, postResult.error);
       }
     } catch (err: any) {
       console.error(`  ❌ Row ${row.rowIndex}: ${err.message}`);
+      addFailure(failures, row.name, err.message);
       try { await saveUnifiedNotionResult(row, { postUrl: '', status: 'Error', batch: batchLabel, error: err.message }); } catch {}
       failed++;
     }
     await new Promise(r => setTimeout(r, 1000));
   }
+  printDiagnostics('Notion', failures, posted, rows.length);
   console.log(`\n[NOTION BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
@@ -1837,11 +1989,12 @@ export async function runNotionBatch(batchNum: number = 1): Promise<void> {
 
 export async function runNoteBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[NOTE BATCH] Starting...`);
-  const rows = await getRowsForContinuousNotePosting(15);
+  const rows = await getRowsForContinuousNotePosting(12);
   if (rows.length === 0) { console.log('[NOTE BATCH] No rows available'); return; }
   const batchLabel = `Batch ${batchNum}`;
   console.log(`  Found ${rows.length} rows ready for Note (${batchLabel})`);
   let posted = 0, failed = 0;
+  const failures: FailureEntry[] = [];
   for (const row of rows) {
     try {
       console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
@@ -1850,12 +2003,15 @@ export async function runNoteBatch(batchNum: number = 1): Promise<void> {
       if (!content) {
         await saveUnifiedNoteResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: 'No blog content' });
         failed++;
+        addFailure(failures, row.name, 'no blog content');
         continue;
       }
       content = ensureTargetUrl(content, row.targetUrl);
-      const loginResult = await executeBrowserTool('login_note', { nickname: row.name });
-      if (!loginResult.success) throw new Error(loginResult.error || 'Login failed');
-      const postResult = await executeBrowserTool('post_note', { title, htmlContent: content });
+      const postResult = await retryOnSelectorTimeout(async () => {
+        const loginResult = await executeBrowserTool('login_note', { nickname: row.name });
+        if (!loginResult.success) throw new Error(loginResult.error || 'Login failed');
+        return executeBrowserTool('post_note', { title, htmlContent: content });
+      }, { label: 'Note post' });
       if (postResult.success) {
         await saveUnifiedNoteResult(row, { postUrl: postResult.postUrl || '', status: 'Posted', batch: batchLabel });
         console.log(`    ✅ Posted → ${postResult.postUrl}`);
@@ -1863,14 +2019,17 @@ export async function runNoteBatch(batchNum: number = 1): Promise<void> {
       } else {
         await saveUnifiedNoteResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: postResult.error });
         failed++;
+        addFailure(failures, row.name, postResult.error);
       }
     } catch (err: any) {
       console.error(`  ❌ Row ${row.rowIndex}: ${err.message}`);
+      addFailure(failures, row.name, err.message);
       try { await saveUnifiedNoteResult(row, { postUrl: '', status: 'Error', batch: batchLabel, error: err.message }); } catch {}
       failed++;
     }
     await new Promise(r => setTimeout(r, 1000));
   }
+  printDiagnostics('Note', failures, posted, rows.length);
   console.log(`\n[NOTE BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
@@ -1881,13 +2040,14 @@ export async function runAmebaBatch(batchNum: number = 1): Promise<void> {
   const { loginToAmeba, closeAmebaBrowser } = await import('../browser/ameba/login.js');
   const { postToAmeba } = await import('../browser/ameba/poster.js');
 
-  const rows = await getRowsForContinuousAmebaPosting(15);
+  const rows = await getRowsForContinuousAmebaPosting(12);
   if (rows.length === 0) { console.log('[AMEBA BATCH] No rows available'); return; }
 
   const batchLabel = `Batch ${batchNum}`;
   console.log(`\n[AMEBA BATCH] Starting ${batchLabel}...`);
   console.log(`  Found ${rows.length} rows ready for Ameba posting`);
   let posted = 0, failed = 0;
+  const failures: FailureEntry[] = [];
 
   for (const row of rows) {
     try {
@@ -1896,9 +2056,16 @@ export async function runAmebaBatch(batchNum: number = 1): Promise<void> {
       content = ensureTargetUrl(content, row.targetUrl);
       const title = row.title || row.descriptionTitle || '';
 
-      const page = await loginToAmeba({ nickname: row.name });
-      const r = await postToAmeba(page, title, content);
-      await closeAmebaBrowser();
+      const r = await retryOnSelectorTimeout(async () => {
+        const page = await loginToAmeba({ nickname: row.name });
+        try {
+          return await postToAmeba(page, title, content);
+        } finally {
+          // Always close, even on failure — otherwise a retry's fresh login hits
+          // the same profile's SingletonLock from this attempt's still-open browser.
+          await closeAmebaBrowser();
+        }
+      }, { label: 'Ameba post' });
 
       if (r.success) {
         await saveUnifiedAmebaResult(row, { postUrl: r.postUrl || '', status: 'Posted', batch: batchLabel });
@@ -1907,14 +2074,17 @@ export async function runAmebaBatch(batchNum: number = 1): Promise<void> {
       } else {
         await saveUnifiedAmebaResult(row, { postUrl: '', status: 'Failed', batch: batchLabel });
         failed++;
+        addFailure(failures, row.name, (r as any).error);
       }
     } catch (err: any) {
       console.error(`  ❌ Row ${row.rowIndex}: ${err.message}`);
+      addFailure(failures, row.name, err.message);
       try { await (await import('../sheets/sheets.js')).saveUnifiedAmebaResult(row, { postUrl: '', status: 'Error', batch: batchLabel, error: err.message }); } catch {}
       failed++;
     }
     await new Promise(r => setTimeout(r, 1000));
   }
+  printDiagnostics('Ameba', failures, posted, rows.length);
   console.log(`\n[AMEBA BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
@@ -2269,11 +2439,12 @@ export async function saveNoteSession(nickname: string): Promise<void> {
 
 export async function runParagraphBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[PARAGRAPH BATCH] Starting...`);
-  const rows = await getRowsForContinuousParagraphPosting(15);
+  const rows = await getRowsForContinuousParagraphPosting(12);
   if (rows.length === 0) { console.log('[PARAGRAPH BATCH] No rows available'); return; }
   const batchLabel = `Batch ${batchNum}`;
   console.log(`  Found ${rows.length} rows ready for Paragraph (${batchLabel})`);
   let posted = 0, failed = 0;
+  const failures: FailureEntry[] = [];
   for (const row of rows) {
     try {
       console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
@@ -2282,12 +2453,15 @@ export async function runParagraphBatch(batchNum: number = 1): Promise<void> {
       if (!content) {
         await saveUnifiedParagraphResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: 'No blog content' });
         failed++;
+        addFailure(failures, row.name, 'no blog content');
         continue;
       }
       content = ensureTargetUrl(content, row.targetUrl);
-      const loginResult = await executeBrowserTool('login_paragraph', { nickname: row.name });
-      if (!loginResult.success) throw new Error(loginResult.error || 'Login failed');
-      const postResult = await executeBrowserTool('post_paragraph', { title, htmlContent: content });
+      const postResult = await retryOnSelectorTimeout(async () => {
+        const loginResult = await executeBrowserTool('login_paragraph', { nickname: row.name });
+        if (!loginResult.success) throw new Error(loginResult.error || 'Login failed');
+        return executeBrowserTool('post_paragraph', { title, htmlContent: content });
+      }, { label: 'Paragraph post' });
       if (postResult.success) {
         await saveUnifiedParagraphResult(row, { postUrl: postResult.postUrl || '', status: 'Posted', batch: batchLabel });
         console.log(`    ✅ Posted → ${postResult.postUrl}`);
@@ -2295,14 +2469,17 @@ export async function runParagraphBatch(batchNum: number = 1): Promise<void> {
       } else {
         await saveUnifiedParagraphResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: postResult.error });
         failed++;
+        addFailure(failures, row.name, postResult.error);
       }
     } catch (err: any) {
       console.error(`  ❌ Row ${row.rowIndex}: ${err.message}`);
+      addFailure(failures, row.name, err.message);
       try { await saveUnifiedParagraphResult(row, { postUrl: '', status: 'Error', batch: batchLabel, error: err.message }); } catch {}
       failed++;
     }
     await new Promise(r => setTimeout(r, 1000));
   }
+  printDiagnostics('Paragraph', failures, posted, rows.length);
   console.log(`\n[PARAGRAPH BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 

@@ -18,108 +18,42 @@ export async function postToNotion(
     await cdp.detach().catch(() => {});
   } catch { /* ignore */ }
 
-  // Step 1: Navigate to Notion home
-  console.log('   Navigating to Notion home...');
-  try {
-    await page.goto('https://www.notion.so', { waitUntil: 'domcontentloaded', timeout: 30000 });
-  } catch { /* timeout ok */ }
-  await page.locator('[aria-label="New page"], [data-testid="sidebar-new-page"], [class*="sidebar"]').first()
-    .waitFor({ state: 'visible', timeout: 8000 }).catch(() => {});
-  const initialWait = 8000 + Math.floor(Math.random() * 2000);
-  console.log(`   Waiting ${Math.round(initialWait / 1000)}s for Notion to settle...`);
-  await sleep(initialWait);
-
-  if (page.url().includes('/login') || page.url().includes('/sign-in')) {
-    throw new Error('Notion not logged in — manual login required');
-  }
-
-  // Steps 2–3: Click "New page" then "Page" type, retry if URL slug doesn't show showMoveTo=true&saveParent=true
+  // Steps 1–3: Navigate straight to the new-page URL and confirm we actually
+  // landed on a page (URL contains /p/{id}), instead of clicking the sidebar
+  // "New page" button/menu — the click flow was unreliable and could hang
+  // the whole batch when Notion's UI didn't respond as expected.
+  const NOTION_NEW_PAGE_URL = 'https://app.notion.com/new';
+  const PAGE_SLUG_RE = /\/p\/[a-zA-Z0-9-]{6,}/;
   const MAX_NEW_PAGE_ATTEMPTS = 3;
   let newPageFlowDone = false;
 
   for (let attempt = 0; attempt < MAX_NEW_PAGE_ATTEMPTS; attempt++) {
-    if (attempt > 0) {
-      console.log(`   🔁 URL slug not confirmed — refreshing and retrying new-page flow (attempt ${attempt + 1})...`);
-      try {
-        await page.goto('https://www.notion.so', { waitUntil: 'domcontentloaded', timeout: 30000 });
-      } catch { /* timeout ok */ }
-      await sleep(5000);
+    console.log(`   Navigating to ${NOTION_NEW_PAGE_URL} (attempt ${attempt + 1})...`);
+    try {
+      await page.goto(NOTION_NEW_PAGE_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    } catch { /* timeout ok, check URL below */ }
+
+    if (page.url().includes('/login') || page.url().includes('/sign-in')) {
+      throw new Error('Notion not logged in — manual login required');
     }
 
-    // Step 2: Click "New page" button in sidebar
-    console.log('   Clicking New page button...');
-    let newPageClicked = false;
-    const newPageSelectors = [
-      '[aria-label="New page"]',
-      'button[aria-label="New page"]',
-      '[data-testid="sidebar-new-page"]',
-    ];
-    for (const sel of newPageSelectors) {
-      const el = page.locator(sel).first();
-      if (await el.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await el.click();
-        newPageClicked = true;
-        console.log(`   ✅ New page clicked (${sel})`);
-        break;
-      }
-    }
-    if (!newPageClicked) {
-      await page.evaluate(() => {
-        const btns = Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'));
-        const btn = btns.find(b => b.getAttribute('aria-label') === 'New page' || b.textContent?.trim() === 'New page');
-        btn?.click();
-      });
-      console.warn('   ⚠️ Used JS fallback for New page button');
-    }
-    await sleep(2000);
-
-    // Step 3: Click "Page" in popup
-    console.log('   Selecting Page type in popup...');
-    let pageTypeClicked = false;
-    const pageTypeSelectors = [
-      '[role="menuitem"]:has-text("Page")',
-      '[role="option"]:has-text("Page")',
-      'div[data-testid="new-page-option-page"]',
-    ];
-    for (const sel of pageTypeSelectors) {
-      const el = page.locator(sel).first();
-      if (await el.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await el.click({ force: true });
-        pageTypeClicked = true;
-        console.log(`   ✅ Page type selected (${sel})`);
-        break;
-      }
-    }
-    if (!pageTypeClicked) {
-      await page.evaluate(() => {
-        const divs = Array.from(document.querySelectorAll<HTMLElement>('div'));
-        const match = divs.find(el => el.textContent?.trim() === 'Page' && (el as HTMLElement).offsetParent !== null);
-        match?.click();
-      });
-      console.warn('   ⚠️ Used JS fallback for Page type');
-    }
-
-    // Wait up to 8s for the URL to contain showMoveTo=true&saveParent=true
-    console.log('   Waiting for URL slug confirmation (showMoveTo=true&saveParent=true)...');
-    let slugConfirmed = false;
-    for (let tick = 0; tick < 8; tick++) {
+    // Wait up to 8s for the URL to settle on a real page slug (/p/{id})
+    let slugConfirmed = PAGE_SLUG_RE.test(page.url());
+    for (let tick = 0; !slugConfirmed && tick < 8; tick++) {
       await sleep(1000);
-      if (page.url().includes('showMoveTo=true') && page.url().includes('saveParent=true')) {
-        slugConfirmed = true;
-        console.log(`   ✅ URL slug confirmed: ${page.url()}`);
-        break;
-      }
+      slugConfirmed = PAGE_SLUG_RE.test(page.url());
     }
 
     if (slugConfirmed) {
+      console.log(`   ✅ Landed on new page: ${page.url()}`);
       newPageFlowDone = true;
       break;
     }
-    console.warn(`   ⚠️ URL slug not confirmed after attempt ${attempt + 1}`);
+    console.warn(`   ⚠️ Did not land on a /p/ page after attempt ${attempt + 1} (url: ${page.url()}) — redirecting back to ${NOTION_NEW_PAGE_URL}`);
   }
 
   if (!newPageFlowDone) {
-    console.warn('   ⚠️ Could not confirm URL slug after 3 attempts — proceeding anyway');
+    throw new Error(`Notion: could not create a new page after ${MAX_NEW_PAGE_ATTEMPTS} attempts at ${NOTION_NEW_PAGE_URL} — aborting instead of proceeding into a broken state`);
   }
   await sleep(2000);
 
@@ -193,10 +127,22 @@ export async function postToNotion(
   for (const sel of shareSelectors) {
     const el = page.locator(sel).first();
     if (await el.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await el.click();
-      shareOpened = true;
-      console.log(`   ✅ Share panel opened (${sel})`);
-      break;
+      try {
+        await el.click({ timeout: 8000 });
+        shareOpened = true;
+        console.log(`   ✅ Share panel opened (${sel})`);
+      } catch {
+        // isVisible() passed but the real click timed out — something is
+        // covering the button (toast/overlay) or it isn't fully stable yet.
+        // Fall back to a JS click, same pattern used below for Publish.
+        shareOpened = await page.evaluate((s: string) => {
+          const el = document.querySelector<HTMLElement>(s);
+          if (el) { el.click(); return true; }
+          return false;
+        }, sel).catch(() => false);
+        if (shareOpened) console.log(`   ✅ Share panel opened via JS click (${sel})`);
+      }
+      if (shareOpened) break;
     }
   }
   if (!shareOpened) {

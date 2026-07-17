@@ -45,7 +45,7 @@ function saveTweetToHistory(url: string, tweet: string): void {
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
-const OPENROUTER_MODEL = 'openai/gpt-oss-120b:free';
+const OPENROUTER_MODEL = 'google/gemma-4-26b-a4b-it:free';
 const NVIDIA_MODEL = 'meta/llama-3.1-70b-instruct';
 
 interface ApiKey {

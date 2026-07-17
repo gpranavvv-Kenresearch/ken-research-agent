@@ -7,20 +7,20 @@ const SAMPLES: Record<string, { file: string; type: 'html' | 'md'; formatLabel: 
   'format-1': {
     file: 'public/samples/format-1.html',
     type: 'html',
-    formatLabel: 'Format 1',
-    subLabel: 'SEO-Li Article',
+    formatLabel: 'Sample 1',
+    subLabel: '',
   },
   'format-2': {
     file: 'public/samples/format-2.html',
     type: 'html',
-    formatLabel: 'Format 2',
-    subLabel: 'LinkedIn Pulse',
+    formatLabel: 'Sample 2',
+    subLabel: '',
   },
   'format-3': {
     file: 'public/samples/format-3.html',
     type: 'html',
-    formatLabel: 'Format 3',
-    subLabel: 'Testing Demo',
+    formatLabel: 'Sample 3',
+    subLabel: '',
   },
 };
 

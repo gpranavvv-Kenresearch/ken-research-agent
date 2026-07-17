@@ -43,8 +43,8 @@ export async function postToLinkmate(
 
     // Wait for Create button then click
     console.log('   Navigating to Linkmate composer...');
-    await page.waitForSelector('a[title="Create"]', { timeout: 30000 });
-    await page.locator('a[title="Create"]').first().click({ delay: 150 });
+    await page.waitForSelector('button[aria-label="Create content"], a[title="Create"]', { timeout: 30000 });
+    await page.locator('button[aria-label="Create content"], a[title="Create"]').first().click({ delay: 150 });
     await sleep(800);
 
     // Click on space name

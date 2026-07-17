@@ -5,3 +5,31 @@ data
 node_modules
 *.pma
 *.log
+
+# Sessions & Chrome profiles (locked, large, machine-specific — never deploy)
+.sessions
+.sessions-abhinav
+.sessions-*
+li-sessions
+.playwright-mcp
+
+# Secrets — must never be uploaded (dashboard uses Vercel env vars instead)
+.accounts
+.secrets-export
+.env
+.env.*
+
+# Server-side / non-dashboard code & heavy artifacts
+src
+skills
+linkedin
+Seo-li
+outputs
+generated_images
+graphify-out
+logs
+testing-demo
+*.png
+.git
+.agents
+.codex
