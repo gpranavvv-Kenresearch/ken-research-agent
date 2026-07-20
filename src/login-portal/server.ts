@@ -18,16 +18,12 @@ import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import { spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import crypto from 'crypto';
-import * as tar from 'tar';
 import { requireDashboardSecret } from './auth.js';
 import {
   API_PORT, WEBSOCKIFY_PORT, TOKEN_DIR, NOVNC_WEB_ROOT, PUBLIC_BASE_URL, PLATFORMS,
 } from './config.js';
 import {
-  agentSessionDir, registerFleetAccount, listAgentStatus, nextIndex, sessionReadyForDir, fleetNickname,
+  agentSessionDir, registerFleetAccount, listAgentStatus, nextIndex, sessionReadyForDir,
 } from './sessionResolver.js';
 import { startLogin, teardown, getLogin, sweepExpired, poolStatus } from './cdpLoginPool.js';
 import { verifyOrSetPin, mintToken, requireAgentToken } from './agentAuth.js';
@@ -67,61 +63,6 @@ app.use(express.json());
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ ok: true, pool: poolStatus(), websockify: !!websockifyProc });
 });
-
-// ── Local-login-and-upload flow (upload half) ───────────────────────────────
-// Deliberately registered BEFORE the dashboard-secret gate below: this route
-// is hit by a script running on a team member's OWN machine, which has no
-// way to know the dashboard's shared secret (and shouldn't need to) — its
-// one-time, single-slot upload token (minted by the /prepare route, which
-// DOES sit behind the gate) is its only auth, scoped to exactly one account.
-interface PendingUpload { agent: string; platform: string; index: number; expiresAt: number }
-const pendingUploads = new Map<string, PendingUpload>();
-const UPLOAD_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 min — long enough to actually log in
-
-setInterval(() => {
-  const now = Date.now();
-  for (const [token, p] of pendingUploads) if (p.expiresAt <= now) pendingUploads.delete(token);
-}, 5 * 60 * 1000);
-
-app.post(
-  '/api/agent/:agent/local-login/upload/:uploadToken',
-  express.raw({ type: 'application/gzip', limit: '200mb' }),
-  async (req: Request, res: Response) => {
-    const agent = req.params.agent.toLowerCase();
-    const uploadToken = req.params.uploadToken;
-    const pending = pendingUploads.get(uploadToken);
-    if (!pending || pending.agent !== agent || pending.expiresAt < Date.now()) {
-      res.status(403).json({ error: 'invalid or expired upload token' });
-      return;
-    }
-    pendingUploads.delete(uploadToken); // one-time use
-
-    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
-      res.status(400).json({ error: 'expected a non-empty application/gzip body' });
-      return;
-    }
-
-    const targetDir = agentSessionDir(pending.agent, pending.platform, pending.index);
-    fs.mkdirSync(targetDir, { recursive: true });
-
-    const tmpFile = path.join(os.tmpdir(), `local-login-upload-${uploadToken}.tar.gz`);
-    fs.writeFileSync(tmpFile, req.body);
-
-    try {
-      await tar.extract({ file: tmpFile, cwd: targetDir });
-    } catch (err: any) {
-      console.error('[login-api] local-login upload extract failed:', err?.message || err);
-      res.status(500).json({ error: 'failed to extract uploaded session' });
-      return;
-    } finally {
-      fs.rmSync(tmpFile, { force: true });
-    }
-
-    const ready = sessionReadyForDir(targetDir, pending.platform);
-    console.log(`[login-api] local-login upload landed: ${pending.agent} ${pending.platform}-${pending.index} (ready=${ready})`);
-    res.json({ ok: true, platform: pending.platform, index: pending.index, ready });
-  },
-);
 
 app.use('/api', requireDashboardSecret);
 
@@ -202,40 +143,6 @@ app.post('/api/agent/:agent/login/:token/finish', requireAgentToken, async (req:
   await teardown(token);
   const ready = sessionReadyForDir(sessionDir, platform);
   res.json({ ok: true, platform, index, ready });
-});
-
-// ── Local-login-and-upload flow (prepare half — dashboard-authenticated) ────
-// See the `pendingUploads`/upload-route block above (registered before the
-// dashboard-secret gate, since the LOCAL script that hits it has no way to
-// know that shared secret — its one-time upload token IS its auth).
-
-// POST /api/agent/:agent/local-login/prepare { platform } — reserves the next
-// fleet slot (same registry entry the CDP flow would create) and returns a
-// ready-to-paste CLI command for the team member to run on their own machine.
-app.post('/api/agent/:agent/local-login/prepare', requireAgentToken, (req: Request, res: Response) => {
-  const agent = req.params.agent.toLowerCase();
-  const platform = String(req.body?.platform || '').toLowerCase();
-  const plat = PLATFORMS[platform];
-  if (!plat) {
-    res.status(400).json({ error: `unknown platform "${platform}"` });
-    return;
-  }
-
-  const index = nextIndex(agent, platform);
-  registerFleetAccount(agent, platform, index);
-
-  const uploadToken = crypto.randomBytes(24).toString('hex');
-  const expiresAt = Date.now() + UPLOAD_TOKEN_TTL_MS;
-  pendingUploads.set(uploadToken, { agent, platform, index, expiresAt });
-
-  const serverUrl = PUBLIC_BASE_URL || `http://localhost:${API_PORT}`;
-  const command = `npx tsx scripts/local-login-upload.ts --server "${serverUrl}" --agent ${agent} --platform ${platform} --login-url "${plat.loginUrl}" --upload-token ${uploadToken}`;
-
-  res.json({
-    ok: true, agent, platform, index,
-    nickname: fleetNickname(agent, index),
-    uploadToken, expiresAt, command,
-  });
 });
 
 // POST /api/agent/:agent/generate-blogs { count } — on-demand: generate N blogs now.
