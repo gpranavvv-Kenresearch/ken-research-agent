@@ -5,6 +5,12 @@
  * 11:00 AM and 11:00 PM IST, narrowing down through 5 stages (30 min between
  * each), then STOPPING after Stage 5 — no wraparound back to Stage 1 anymore.
  *
+ * Two start modes (see `npm run schedule` vs `npm run schedule:now`):
+ *   - Cron-only  (default): registers the 11:00 AM/PM triggers and waits —
+ *     nothing posts until the next trigger fires.
+ *   - Immediate: registers the same triggers AND starts a posting session
+ *     right away, for a manual/on-demand restart.
+ *
  * Stage 1 (15 platforms): everything
  * Stage 2 (13): drop LinkedIn Pulse, Medium
  * Stage 3 (8):  drop Note, Blogger, WordPress, Paragraph, Ameba
@@ -181,7 +187,13 @@ function startDailyLoop(): void {
   void runLoopFrom(0, myToken);
 }
 
-export async function startCoordinatorDaemon(): Promise<void> {
+/**
+ * @param immediate If true, also starts a posting session right away instead
+ * of only registering the 11:00 AM/PM cron triggers and waiting. Used to tell
+ * apart a plain "just live it, run on cron" start from an explicit "run right
+ * now too" start.
+ */
+export async function startCoordinatorDaemon(immediate: boolean = false): Promise<void> {
   const tz = 'Asia/Kolkata';
 
   // ── Daily reset at midnight IST ───────────────────────────────────────────
@@ -218,9 +230,12 @@ export async function startCoordinatorDaemon(): Promise<void> {
 
   console.log(`Coordinator Scheduler Started — 5-stage narrowing posting sessions at 11:00 AM and 11:00 PM IST, 30 min between stages, continuous blog generation fills the gaps until 10:30.\n`);
 
-  // If the process starts mid-day (deploy/restart), begin the loop immediately
-  // rather than waiting for tomorrow's 11:00 AM trigger.
-  startDailyLoop();
+  if (immediate) {
+    console.log(`[${nowIst()}] Immediate run requested — starting a posting session now instead of waiting for the next 11:00 AM/PM trigger.`);
+    startDailyLoop();
+  } else {
+    console.log(`[${nowIst()}] Cron-only start — waiting for the next 11:00 AM/PM trigger. No posting session started now.`);
+  }
 }
 
 /**

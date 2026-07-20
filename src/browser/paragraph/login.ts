@@ -25,7 +25,9 @@ export function getActiveParagraphAccount(): ParagraphAccount | null {
 }
 
 export function getParagraphAccountByNickname(nickname: string): ParagraphAccount | null {
-  return getParagraphAccounts().find(a => a.nickname?.toLowerCase() === nickname.toLowerCase()) || null;
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getParagraphAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 function sessionDirFor(nickname: string): string {
@@ -49,9 +51,12 @@ export async function loginToParagraph(options?: {
   nickname?: string;
 }): Promise<Page> {
   const account = options?.nickname
-    ? getParagraphAccountByNickname(options.nickname) ?? getActiveParagraphAccount()
+    ? getParagraphAccountByNickname(options.nickname)
     : getActiveParagraphAccount();
 
+  if (options?.nickname && !account) {
+    throw new Error(`Paragraph account "${options.nickname}" not found in ${PARAGRAPH_ACCOUNTS_FILE} — refusing to silently fall back to a different account`);
+  }
   if (!account) {
     throw new Error('No Paragraph account found in .accounts/accounts-paragraph.json');
   }

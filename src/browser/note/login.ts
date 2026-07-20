@@ -26,7 +26,9 @@ export function getActiveNoteAccount(): NoteAccount | null {
 }
 
 export function getNoteAccountByNickname(nickname: string): NoteAccount | null {
-  return getNoteAccounts().find(a => a.nickname?.toLowerCase() === nickname.toLowerCase()) || null;
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getNoteAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 function sessionDirFor(email: string): string {

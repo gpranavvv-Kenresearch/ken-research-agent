@@ -26,7 +26,9 @@ export function getActivePatreonAccount(): PatreonAccount | null {
 }
 
 export function getPatreonAccountByNickname(nickname: string): PatreonAccount | null {
-  return getPatreonAccounts().find(a => a.nickname?.toLowerCase() === nickname.toLowerCase()) || null;
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getPatreonAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 function sessionDirFor(nickname: string): string {
@@ -72,9 +74,12 @@ async function isLoggedIn(page: Page): Promise<boolean> {
 
 export async function loginToPatreon(options?: { nickname?: string }): Promise<Page> {
   const account = options?.nickname
-    ? getPatreonAccountByNickname(options.nickname) ?? getActivePatreonAccount()
+    ? getPatreonAccountByNickname(options.nickname)
     : getActivePatreonAccount();
 
+  if (options?.nickname && !account) {
+    throw new Error(`Patreon account "${options.nickname}" not found in ${PATREON_ACCOUNTS_FILE} — refusing to silently fall back to a different account`);
+  }
   if (!account) throw new Error('No Patreon account found in .accounts/accounts-patreon.json');
 
   const chromePath = process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : undefined);

@@ -77,6 +77,26 @@ export const DISPLAY_POOL: DisplaySlotDef[] = [
   { display: ':104', vncPort: 5914 },
 ];
 
+/**
+ * Pool for the CDP-based login flow (cdpLoginPool.ts) — replaces DISPLAY_POOL's
+ * Xvfb+x11vnc slots. No X server involved: each slot is just a pair of ports —
+ * one for headless Chrome's own remote-debugging endpoint (never exposed
+ * publicly, localhost only), one for that login's screencast viewer (the one
+ * actually reachable from the dashboard). Same capacity (5) as the old pool.
+ */
+export interface ScreencastPortSlot {
+  debugPort: number;  // Chrome's --remote-debugging-port, localhost only
+  viewerPort: number; // the screencast HTTP+WS server for this slot
+}
+
+export const SCREENCAST_PORT_POOL: ScreencastPortSlot[] = [
+  { debugPort: 9300, viewerPort: 7910 },
+  { debugPort: 9301, viewerPort: 7911 },
+  { debugPort: 9302, viewerPort: 7912 },
+  { debugPort: 9303, viewerPort: 7913 },
+  { debugPort: 9304, viewerPort: 7914 },
+];
+
 /** Single shared websockify (token-plugin) that fronts every display's VNC port. */
 export const WEBSOCKIFY_PORT = Number(process.env.LOGIN_WS_PORT || 6090);
 

@@ -30,9 +30,9 @@ export function getCalisthenicsAccounts(): CalisthenicsAccount[] {
 }
 
 export function getCalisthenicsAccountByNickname(nickname: string): CalisthenicsAccount | null {
-  return getCalisthenicsAccounts().find(
-    a => a.nickname.toLowerCase() === nickname.toLowerCase()
-  ) || null;
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getCalisthenicsAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 export async function closeCaliBrowser(): Promise<void> {

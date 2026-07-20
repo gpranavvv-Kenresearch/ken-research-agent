@@ -22,8 +22,9 @@ export function getInstagramAccounts(): InstagramAccount[] {
 
 export function getInstagramAccountByNickname(nickname: string): InstagramAccount | undefined {
   const accounts = getInstagramAccounts();
-  const needle = nickname.toLowerCase();
-  return accounts.find(a => a.active && a.nickname.toLowerCase() === needle) ?? accounts.find(a => a.active);
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const needle = normalize(nickname);
+  return accounts.find(a => a.active && a.nickname && normalize(a.nickname) === needle);
 }
 
 export async function closeInstagramBrowser(): Promise<void> {

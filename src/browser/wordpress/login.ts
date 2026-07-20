@@ -26,7 +26,9 @@ export function getActiveWordpressAccount(): WordpressAccount | null {
 }
 
 export function getWordpressAccountByNickname(nickname: string): WordpressAccount | null {
-  return getWordpressAccounts().find(a => a.nickname?.toLowerCase() === nickname.toLowerCase()) || null;
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getWordpressAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 function sessionDirFor(username: string): string {
@@ -52,8 +54,12 @@ export async function loginToWordpress(options?: {
   nickname?: string;
 }): Promise<Page> {
   const account = options?.nickname
-    ? getWordpressAccountByNickname(options.nickname) ?? getActiveWordpressAccount()
+    ? getWordpressAccountByNickname(options.nickname)
     : getActiveWordpressAccount();
+
+  if (options?.nickname && !account) {
+    throw new Error(`WordPress account "${options.nickname}" not found in ${WORDPRESS_ACCOUNTS_FILE} — refusing to silently fall back to a different account`);
+  }
 
   const email    = options?.email    || account?.email    || process.env.WORDPRESS_EMAIL;
   const password = options?.password || account?.password || process.env.WORDPRESS_PASSWORD;

@@ -24,7 +24,9 @@ export function getActiveGoogleSiteAccount(): GoogleSiteAccount | null {
 }
 
 export function getGoogleSiteAccountByNickname(nickname: string): GoogleSiteAccount | null {
-  return getGoogleSiteAccounts().find(a => a.nickname?.toLowerCase() === nickname.toLowerCase()) || null;
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getGoogleSiteAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 function sessionDirFor(email: string): string {
@@ -52,8 +54,12 @@ export async function loginToGoogleSite(options?: {
   batchMode?: boolean;
 }): Promise<Page> {
   const account = options?.nickname
-    ? getGoogleSiteAccountByNickname(options.nickname) ?? getActiveGoogleSiteAccount()
+    ? getGoogleSiteAccountByNickname(options.nickname)
     : getActiveGoogleSiteAccount();
+
+  if (options?.nickname && !account) {
+    throw new Error(`Google Sites account "${options.nickname}" not found in ${GOOGLESITE_ACCOUNTS_FILE} — refusing to silently fall back to a different account`);
+  }
 
   const email = options?.email || account?.email || process.env.GOOGLESITE_EMAIL || '';
 

@@ -5,6 +5,8 @@
  *
  * Modes:
  *   npm run dev                             → start cron scheduler daemon
+ *   npm run schedule                        → cron-only: arm 11AM/11PM triggers, wait (no immediate run)
+ *   npm run schedule:now                    → cron-armed AND start a posting session immediately
  *   npm run dev -- run-x-batch              → run X batch once now
  *   npm run dev -- run-fb-batch             → run FB batch once now
  *   npm run dev -- run-li-batch             → run LI batch once now
@@ -884,8 +886,10 @@ async function main() {
     return;
   }
 
-  // Default: start cron scheduler daemon
-  await startCoordinatorDaemon();
+  // mode === 'schedule-now': cron triggers armed AND a posting session starts
+  // right away. mode === 'schedule' (or unspecified): cron-only — register
+  // the 11:00 AM/PM triggers and wait for the next one, no immediate run.
+  await startCoordinatorDaemon(mode === 'schedule-now');
 
   // Keep the process alive for cron jobs to fire
   await new Promise(() => {});

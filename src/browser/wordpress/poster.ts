@@ -48,8 +48,9 @@ export async function postToWordpress(
 
   // Resolve blog URL from accounts
   const accounts = getWordpressAccounts();
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
   const account = nickname
-    ? accounts.find(a => a.nickname?.toLowerCase() === nickname.toLowerCase())
+    ? accounts.find(a => a.nickname && normalize(a.nickname) === normalize(nickname))
     : accounts.find(a => a.active);
   const blogUrl = account?.blogUrl || 'https://wordpress.com';
 

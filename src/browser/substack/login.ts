@@ -26,7 +26,9 @@ export function getActiveSubstackAccount(): SubstackAccount | null {
 }
 
 export function getSubstackAccountByNickname(nickname: string): SubstackAccount | null {
-  return getSubstackAccounts().find(a => a.nickname?.toLowerCase() === nickname.toLowerCase()) || null;
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getSubstackAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 function sessionDirFor(email: string): string {
@@ -51,9 +53,12 @@ export async function loginToSubstack(options?: {
   manualMode?: boolean;  // if true, skip auto-type and wait for full manual login
 }): Promise<Page> {
   const account = options?.nickname
-    ? getSubstackAccountByNickname(options.nickname) ?? getActiveSubstackAccount()
+    ? getSubstackAccountByNickname(options.nickname)
     : getActiveSubstackAccount();
 
+  if (options?.nickname && !account) {
+    throw new Error(`Substack account "${options.nickname}" not found in ${SUBSTACK_ACCOUNTS_FILE} — refusing to silently fall back to a different account`);
+  }
   if (!account) {
     throw new Error('No Substack account found in .accounts/accounts-substack.json');
   }

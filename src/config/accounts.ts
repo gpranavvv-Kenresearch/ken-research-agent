@@ -45,9 +45,10 @@ export function getNextAccount(accounts: XAccount[]): XAccount {
 }
 
 export function getAccountByHandle(handle: string): XAccount | undefined {
-  const q = handle.toLowerCase();
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const q = normalize(handle);
   return getAccounts().find(a =>
-    a.handle.toLowerCase() === q || a.nickname?.toLowerCase() === q
+    normalize(a.handle) === q || (a.nickname && normalize(a.nickname) === q)
   );
 }
 

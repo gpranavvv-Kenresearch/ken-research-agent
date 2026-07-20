@@ -2,6 +2,7 @@
 import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
+import { killChromeForProfile } from '../../utils/killChrome.js';
 
 const LINKEDIN_ACCOUNTS_FILE = '.accounts/linkedin-accounts.json';
 const SESSION_ROOT = path.resolve('li-sessions');
@@ -29,7 +30,12 @@ export function getActiveLinkedInAccount(): LinkedInAccount | null {
 }
 
 export function getLinkedInAccountByNickname(nickname: string): LinkedInAccount | null {
-  return getLinkedInAccounts().find(a => a.nickname?.toLowerCase() === nickname.toLowerCase()) || null;
+  // Sheet "Name" column entries are inconsistently spaced ("abhinav 7" vs "abhinav7") —
+  // match ignoring whitespace so both resolve to the same account instead of
+  // silently failing to find a real, existing session.
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getLinkedInAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 function sessionDirFor(username: string): string {
@@ -153,8 +159,12 @@ export async function loginToLinkedIn(options?: {
   nickname?: string;
 }): Promise<Page> {
   const account = options?.nickname
-    ? getLinkedInAccountByNickname(options.nickname) ?? getActiveLinkedInAccount()
+    ? getLinkedInAccountByNickname(options.nickname)
     : getActiveLinkedInAccount();
+
+  if (options?.nickname && !account) {
+    throw new Error(`LinkedIn account "${options.nickname}" not found in linkedin-accounts.json — refusing to silently fall back to a different account`);
+  }
 
   const nickname  = (options?.nickname || account?.nickname || 'unknown').toLowerCase();
   const email    = options?.email    || account?.email    || process.env.LINKEDIN_EMAIL!;
@@ -191,6 +201,7 @@ export async function loginToLinkedIn(options?: {
   const chromePath = fs.existsSync(CHROME_PATH) ? CHROME_PATH : chromium.executablePath();
   const sessionDir = account?.sessionDir ? path.resolve(account.sessionDir) : sessionDirFor(email);
   fs.mkdirSync(sessionDir, { recursive: true });
+  killChromeForProfile(sessionDir);
 
   console.log(`   Using session folder: ${sessionDir}`);
   console.log('   Launching LinkedIn browser...');

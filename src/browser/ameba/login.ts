@@ -24,7 +24,9 @@ export function getActiveAmebaAccount(): AmebaAccount | null {
 }
 
 export function getAmebaAccountByNickname(nickname: string): AmebaAccount | null {
-  return getAmebaAccounts().find(a => a.nickname?.toLowerCase() === nickname.toLowerCase()) || null;
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getAmebaAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 function sessionDirFor(nickname: string): string {
@@ -50,8 +52,12 @@ export async function loginToAmeba(options?: {
   nickname?: string;
 }): Promise<Page> {
   const account = options?.nickname
-    ? getAmebaAccountByNickname(options.nickname) ?? getActiveAmebaAccount()
+    ? getAmebaAccountByNickname(options.nickname)
     : getActiveAmebaAccount();
+
+  if (options?.nickname && !account) {
+    throw new Error(`Ameba account "${options.nickname}" not found in ${AMEBA_ACCOUNTS_FILE} — refusing to silently fall back to a different account`);
+  }
 
   const email    = options?.email    || account?.email    || process.env.AMEBA_EMAIL;
   const password = options?.password || account?.password || process.env.AMEBA_PASSWORD;

@@ -26,7 +26,9 @@ export function getActiveHackMDAccount(): HackMDAccount | null {
 }
 
 export function getHackMDAccountByNickname(nickname: string): HackMDAccount | null {
-  return getHackMDAccounts().find(a => a.nickname?.toLowerCase() === nickname.toLowerCase()) || null;
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getHackMDAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 function sessionDirFor(username: string): string {
@@ -87,8 +89,12 @@ export async function loginToHackMD(options?: {
   nickname?: string;
 }): Promise<Page> {
   const account = options?.nickname
-    ? getHackMDAccountByNickname(options.nickname) ?? getActiveHackMDAccount()
+    ? getHackMDAccountByNickname(options.nickname)
     : getActiveHackMDAccount();
+
+  if (options?.nickname && !account) {
+    throw new Error(`HackMD account "${options.nickname}" not found in ${HACKMD_ACCOUNTS_FILE} — refusing to silently fall back to a different account`);
+  }
 
   const email    = options?.email    || account?.email    || process.env.HACKMD_EMAIL!;
   const password = options?.password || account?.password || process.env.HACKMD_PASSWORD!;

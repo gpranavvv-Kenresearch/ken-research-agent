@@ -22,9 +22,9 @@ export function getActiveDevtoAccount(): DevtoAccount | null {
 }
 
 export function getDevtoAccountByNickname(nickname: string): DevtoAccount | null {
-  return getDevtoAccounts().find(
-    a => a.nickname?.toLowerCase() === nickname.toLowerCase()
-  ) || null;
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getDevtoAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -129,9 +129,12 @@ export async function loginToDevto(options?: {
   email?: string;
 }): Promise<Page> {
   const account = options?.nickname
-    ? getDevtoAccountByNickname(options.nickname) ?? getActiveDevtoAccount()
+    ? getDevtoAccountByNickname(options.nickname)
     : getActiveDevtoAccount();
 
+  if (options?.nickname && !account) {
+    throw new Error(`Dev.to account "${options.nickname}" not found in .accounts/accounts-devto.json — refusing to silently fall back to a different account`);
+  }
   if (!account) {
     throw new Error('No active Dev.to account found in .accounts/accounts-devto.json');
   }

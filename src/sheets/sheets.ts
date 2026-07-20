@@ -1495,8 +1495,6 @@ function pickNextSequentialBlogRows(
   const statusColIdx = statusColNames ? (col(colMap, ...statusColNames) ?? -1) : -1;
   const newNameIdx = requireNewName ? (col(colMap, 'New Name', 'new name', 'newName') ?? -1) : -1;
 
-  const canDetectViaSheet = urlColIdx >= 0 || statusColIdx >= 0;
-
   // A row counts as "processed" if it has a URL OR a status (Posted/Failed/Error)
   const isProcessed = (row: string[]): boolean => {
     if (urlColIdx >= 0) {
@@ -1509,31 +1507,15 @@ function pickNextSequentialBlogRows(
     return false;
   };
 
-  // Find the highest data-row index that has been processed (by sheet content)
-  let lastProcessedIdx = 0;
-  if (canDetectViaSheet) {
-    for (let i = 1; i < rows.length; i++) {
-      if (isProcessed(rows[i])) lastProcessedIdx = i;
-    }
-  }
-
-  // Respect caller-supplied minRowIndex (from local progress file) — take the max
-  // minRowIndex is a 1-based sheet row; convert to 0-based array index
-  if (minRowIndex > 0) {
-    const minArrayIdx = minRowIndex - 1;
-    if (minArrayIdx > lastProcessedIdx) {
-      console.log(`   📌 [${label}] Progress file last row=${minRowIndex} > sheet scan last=${lastProcessedIdx + 1}. Using progress file.`);
-      lastProcessedIdx = minArrayIdx;
-    }
-  }
-
-  if (!canDetectViaSheet && minRowIndex === 0) {
-    console.warn(`   ⚠️ [${label}] No URL/status column found in sheet AND no progress file offset. Columns tried: [${urlColNames.join(', ')}]. Will pick from row 2 every time until columns are added or a batch completes.`);
-  }
-
-  // Pick next rows after lastProcessedIdx that haven't been processed
+  // Scan the WHOLE sheet for unprocessed rows, in order — never skip ahead based
+  // on the highest row processed so far. Resuming from "highest processed row + 1"
+  // meant a single out-of-order row (e.g. a manual single-row retry/test hitting a
+  // row far ahead of the normal queue) permanently blinded every future automatic
+  // batch to every legitimate unprocessed row below it — confirmed to have silently
+  // stalled Dev.to for days despite ~90 ready rows sitting below the poisoned cursor.
+  const startIdx = minRowIndex > 0 ? minRowIndex - 1 : 1;
   const results: SheetRow[] = [];
-  for (let i = lastProcessedIdx + 1; i < rows.length && results.length < limit; i++) {
+  for (let i = startIdx; i < rows.length && results.length < limit; i++) {
     const row = rows[i];
     const title = titleIdx >= 0 ? (row[titleIdx] ?? '').trim() : '';
     const targetUrl = targetUrlIdx >= 0 ? (row[targetUrlIdx] ?? '').trim() : '';
@@ -1545,7 +1527,7 @@ function pickNextSequentialBlogRows(
     results.push(mapRow(row, colMap, i + 1, sheetType));
   }
 
-  console.log(`   📄 [${label}] Scanning from row ${lastProcessedIdx + 2} → found ${results.length} rows ready`);
+  console.log(`   📄 [${label}] Scanned rows ${startIdx + 1}-${rows.length} → found ${results.length} rows ready`);
   return results;
 }
 

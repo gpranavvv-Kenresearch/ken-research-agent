@@ -25,7 +25,9 @@ export function getActiveLinkmateAccount(): LinkmateAccount | null {
 }
 
 export function getLinkmateAccountByNickname(nickname: string): LinkmateAccount | null {
-  return getLinkmateAccounts().find(a => a.nickname?.toLowerCase() === nickname.toLowerCase()) || null;
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getLinkmateAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 function sessionDirFor(email: string): string {
@@ -51,8 +53,12 @@ export async function loginToLinkmate(options?: {
   nickname?: string;
 }): Promise<Page> {
   const account = options?.nickname
-    ? getLinkmateAccountByNickname(options.nickname) ?? getActiveLinkmateAccount()
+    ? getLinkmateAccountByNickname(options.nickname)
     : getActiveLinkmateAccount();
+
+  if (options?.nickname && !account) {
+    throw new Error(`Linkmate account "${options.nickname}" not found in ${LINKMATE_ACCOUNTS_FILE} — refusing to silently fall back to a different account`);
+  }
 
   const email    = options?.email    || account?.email    || process.env.LINKMATE_EMAIL;
   const password = options?.password || account?.password || process.env.LINKMATE_PASSWORD;

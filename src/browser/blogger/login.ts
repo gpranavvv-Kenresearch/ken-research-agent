@@ -26,7 +26,9 @@ export function getActiveBloggerAccount(): BloggerAccount | null {
 }
 
 export function getBloggerAccountByNickname(nickname: string): BloggerAccount | null {
-  return getBloggerAccounts().find(a => a.nickname?.toLowerCase() === nickname.toLowerCase()) || null;
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getBloggerAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 function sessionDirFor(username: string): string {
@@ -52,8 +54,12 @@ export async function loginToBlogger(options?: {
   nickname?: string;
 }): Promise<Page> {
   const account = options?.nickname
-    ? getBloggerAccountByNickname(options.nickname) ?? getActiveBloggerAccount()
+    ? getBloggerAccountByNickname(options.nickname)
     : getActiveBloggerAccount();
+
+  if (options?.nickname && !account) {
+    throw new Error(`Blogger account "${options.nickname}" not found in ${BLOGGER_ACCOUNTS_FILE} — refusing to silently fall back to a different account`);
+  }
 
   const email    = options?.email    || account?.email    || process.env.BLOGGER_EMAIL;
   const password = options?.password || account?.password || process.env.BLOGGER_PASSWORD;

@@ -25,7 +25,9 @@ export function getActiveFacebookAccount(): FacebookAccount | null {
 }
 
 export function getFacebookAccountByNickname(nickname: string): FacebookAccount | null {
-  return getFacebookAccounts().find(a => a.nickname?.toLowerCase() === nickname.toLowerCase()) || null;
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getFacebookAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 let browserContext: BrowserContext;
@@ -48,6 +50,10 @@ export async function loginToFacebook(options?: {
   const account = options?.nickname
     ? getFacebookAccountByNickname(options.nickname)
     : getActiveFacebookAccount();
+
+  if (options?.nickname && !account) {
+    throw new Error(`Facebook account "${options.nickname}" not found in ${FACEBOOK_ACCOUNTS_FILE} — refusing to silently fall back to a generic profile`);
+  }
 
   // Derive nickname directly from options so cookies work even if accounts file is missing
   const nickname  = (options?.nickname || account?.nickname || 'unknown').toLowerCase();

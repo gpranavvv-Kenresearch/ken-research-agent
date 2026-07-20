@@ -25,7 +25,9 @@ export function getActiveMediumAccount(): MediumAccount | null {
 }
 
 export function getMediumAccountByNickname(nickname: string): MediumAccount | null {
-  return getMediumAccounts().find(a => a.nickname?.toLowerCase() === nickname.toLowerCase()) || null;
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getMediumAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 function sessionDirFor(username: string): string {
@@ -51,8 +53,12 @@ export async function loginToMedium(options?: {
   nickname?: string;
 }): Promise<Page> {
   const account = options?.nickname
-    ? getMediumAccountByNickname(options.nickname) ?? getActiveMediumAccount()
+    ? getMediumAccountByNickname(options.nickname)
     : getActiveMediumAccount();
+
+  if (options?.nickname && !account) {
+    throw new Error(`Medium account "${options.nickname}" not found in ${MEDIUM_ACCOUNTS_FILE} — refusing to silently fall back to a different account`);
+  }
 
   const email    = options?.email    || account?.email    || process.env.MEDIUM_EMAIL;
   const password = options?.password || account?.password || process.env.MEDIUM_PASSWORD;

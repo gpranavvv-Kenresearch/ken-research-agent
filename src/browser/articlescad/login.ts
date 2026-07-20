@@ -26,7 +26,9 @@ export function getActiveArticlescadAccount(): ArticlescadAccount | null {
 }
 
 export function getArticlescadAccountByNickname(nickname: string): ArticlescadAccount | null {
-  return getArticlescadAccounts().find(a => a.nickname?.toLowerCase() === nickname.toLowerCase()) || null;
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+  const target = normalize(nickname);
+  return getArticlescadAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
 }
 
 function sessionDirFor(email: string): string {

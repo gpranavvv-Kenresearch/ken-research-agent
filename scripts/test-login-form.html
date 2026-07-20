@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Fake Login — CDP Input Test</title>
+<style>
+  body { font-family: sans-serif; background:#ffe600; color:#000; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
+  .card { background:#fff; padding:32px; border-radius:12px; width:320px; border:6px solid #ff00ff; }
+  h2 { margin-top:0; color:#0000ff; }
+  label { display:block; margin:12px 0 4px; font-size:14px; color:#000; font-weight:bold; }
+  input { width:100%; box-sizing:border-box; padding:10px; border-radius:6px; border:3px solid #ff0000; background:#fff; color:#000; font-size:16px; }
+  button { margin-top:20px; width:100%; padding:14px; border-radius:6px; border:none; background:#00aa00; color:#fff; font-size:18px; font-weight:bold; cursor:pointer; }
+  #echo { margin-top:16px; padding:10px; background:#000; border-radius:6px; font-size:14px; color:#0f0; min-height:20px; white-space:pre-wrap; font-weight:bold; }
+  #result { margin-top:12px; font-size:16px; font-weight:bold; color:#ff0000; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h2>Test Login Form</h2>
+    <label>Email</label>
+    <input id="email" type="text" placeholder="you@example.com">
+    <label>Password</label>
+    <input id="password" type="password" placeholder="password">
+    <button id="loginBtn">Log In</button>
+    <div id="echo"></div>
+    <div id="result"></div>
+  </div>
+<script>
+  const email = document.getElementById('email');
+  const password = document.getElementById('password');
+  const echo = document.getElementById('echo');
+  const result = document.getElementById('result');
+
+  function updateEcho() {
+    echo.textContent = 'email: ' + email.value + '\npassword: ' + password.value;
+  }
+  email.addEventListener('input', updateEcho);
+  password.addEventListener('input', updateEcho);
+
+  document.getElementById('loginBtn').addEventListener('click', () => {
+    result.textContent = email.value && password.value
+      ? ('✅ Logged in as ' + email.value)
+      : '❌ Fill both fields first';
+  });
+</script>
+</body>
+</html>

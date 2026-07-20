@@ -46,6 +46,12 @@ interface LoginModal {
   label: string;
   mode: 'login' | 'view';
 }
+interface LocalLoginInfo {
+  command: string;
+  nickname: string;
+  label: string;
+  expiresAt: number;
+}
 
 const tokenKey = (agent: string) => `kr_agent_token_${agent}`;
 
@@ -151,6 +157,37 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
         });
       } else {
         alert(res.error || 'Failed to start login');
+      }
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  const [localLoginInfo, setLocalLoginInfo] = useState<LocalLoginInfo | null>(null);
+
+  // Fast alternative to startLogin(): a real Chrome opens on the team member's
+  // OWN machine (full native speed, no remote-viewer lag) instead of streaming
+  // a remote browser. Reserves the same fleet slot, just hands back a
+  // copy-paste command instead of embedding a live viewer.
+  async function prepareLocalLogin(platform: string) {
+    if (!token) return;
+    const key = `${platform}-local`;
+    setBusyKey(key);
+    try {
+      const res = await fetch(`/api/agent/${agentId}/local-login/prepare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Agent-Token': token },
+        body: JSON.stringify({ platform }),
+      }).then((r) => r.json());
+      if (res.command) {
+        setLocalLoginInfo({
+          command: res.command,
+          nickname: res.nickname,
+          label: `${res.nickname} · ${platformLabel(platform)}`,
+          expiresAt: res.expiresAt,
+        });
+      } else {
+        alert(res.error || 'Failed to prepare local login');
       }
     } finally {
       setBusyKey(null);
@@ -379,13 +416,24 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => startLogin(p.key)}
-                    disabled={busyKey === `${p.key}-new`}
-                    className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors"
-                  >
-                    {busyKey === `${p.key}-new` ? 'Opening…' : '+ Add account'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => prepareLocalLogin(p.key)}
+                      disabled={busyKey === `${p.key}-local`}
+                      title="Opens a real Chrome on YOUR OWN computer — full speed, no remote-viewer lag"
+                      className="text-sm bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      {busyKey === `${p.key}-local` ? 'Preparing…' : '+ Add (local, fast)'}
+                    </button>
+                    <button
+                      onClick={() => startLogin(p.key)}
+                      disabled={busyKey === `${p.key}-new`}
+                      title="Log in through a remote live view instead — slower, but no local setup needed"
+                      className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      {busyKey === `${p.key}-new` ? 'Opening…' : '+ Add (remote view)'}
+                    </button>
+                  </div>
                 </div>
 
                 {accounts.length > 0 && (
@@ -435,6 +483,13 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
       )}
 
       {modal && <LoginOverlay modal={modal} onDone={finishLogin} />}
+      {localLoginInfo && (
+        <LocalLoginOverlay
+          info={localLoginInfo}
+          onClose={() => setLocalLoginInfo(null)}
+          onCheckStatus={() => mutate()}
+        />
+      )}
       {showGen && <GenerateModal agentId={agentId} busy={genBusy} onClose={() => setShowGen(false)} onSubmit={submitGenerate} />}
     </div>
   );
@@ -654,6 +709,69 @@ function LoginOverlay({ modal, onDone }: { modal: LoginModal; onDone: () => void
         className="flex-1 w-full rounded-lg bg-white border border-slate-700"
         allow="clipboard-read; clipboard-write"
       />
+    </div>
+  );
+}
+
+function LocalLoginOverlay({
+  info, onClose, onCheckStatus,
+}: {
+  info: LocalLoginInfo;
+  onClose: () => void;
+  onCheckStatus: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const minutesLeft = Math.max(0, Math.round((info.expiresAt - Date.now()) / 60000));
+
+  function copy() {
+    navigator.clipboard.writeText(info.command).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-xl p-6 max-w-2xl w-full">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-white font-semibold">Add locally — {info.label}</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl leading-none">✕</button>
+        </div>
+        <p className="text-xs text-slate-400 mb-4">
+          Run this on your own computer. A real Chrome window will open there — full speed, no lag.
+          Log in normally, then press Enter in that terminal when done.
+        </p>
+
+        <div className="bg-slate-950 border border-slate-700 rounded-lg p-3 font-mono text-xs text-green-400 break-all select-all">
+          {info.command}
+        </div>
+
+        <div className="flex items-center gap-2 mt-3">
+          <button
+            onClick={copy}
+            className="text-sm bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            {copied ? '✓ Copied' : '📋 Copy command'}
+          </button>
+          <button
+            onClick={onCheckStatus}
+            className="text-sm bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            ↻ Check status
+          </button>
+          <button
+            onClick={onClose}
+            className="text-sm text-slate-300 hover:text-white px-4 py-2 rounded-lg border border-border hover:border-slate-500 transition-colors ml-auto"
+          >
+            Close
+          </button>
+        </div>
+
+        <p className="text-[11px] text-slate-500 mt-3">
+          This command expires in ~{minutesLeft} min. Once uploaded, the account tile below will flip to
+          &ldquo;● Logged in&rdquo; — click &ldquo;Check status&rdquo; or just wait for the next auto-refresh.
+        </p>
+      </div>
     </div>
   );
 }

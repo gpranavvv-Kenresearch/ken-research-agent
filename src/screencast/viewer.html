@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Live Screencast</title>
+<style>
+  html, body { margin:0; padding:0; background:#111; height:100%; overflow:hidden; }
+  body { display:flex; align-items:center; justify-content:center; }
+  canvas { max-width:100%; max-height:100vh; background:#000; outline:none; cursor:default; }
+  canvas.interactive { cursor:pointer; }
+  #status { position:fixed; top:8px; left:8px; color:#0f0; font:12px monospace; z-index:1; }
+  #fps { position:fixed; top:8px; right:8px; color:#0f0; font:12px monospace; z-index:1; }
+  #mode { position:fixed; bottom:8px; left:8px; color:#0f0; font:12px monospace; z-index:1; }
+</style>
+</head>
+<body>
+<div id="status">connecting...</div>
+<div id="fps"></div>
+<div id="mode"></div>
+<canvas id="c" tabindex="0"></canvas>
+<script>
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const status = document.getElementById('status');
+  const fpsEl = document.getElementById('fps');
+  const modeEl = document.getElementById('mode');
+  const img = new Image();
+  let frameCount = 0;
+  let lastFpsTime = performance.now();
+  let interactive = false;
+  let ws = null;
+
+  img.onload = () => {
+    if (canvas.width !== img.naturalWidth) canvas.width = img.naturalWidth;
+    if (canvas.height !== img.naturalHeight) canvas.height = img.naturalHeight;
+    ctx.drawImage(img, 0, 0);
+    frameCount++;
+    const now = performance.now();
+    if (now - lastFpsTime >= 1000) {
+      fpsEl.textContent = frameCount + ' fps';
+      frameCount = 0;
+      lastFpsTime = now;
+    }
+  };
+
+  function send(msg) {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+  }
+
+  // ── Map a browser mouse/keyboard event onto CDP Input domain coordinates ──
+  function canvasPoint(ev) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: Math.round((ev.clientX - rect.left) * scaleX),
+      y: Math.round((ev.clientY - rect.top) * scaleY),
+    };
+  }
+
+  const BUTTONS = { 0: 'left', 1: 'middle', 2: 'right' };
+
+  canvas.addEventListener('mousedown', (ev) => {
+    ev.preventDefault();
+    canvas.focus();
+    const { x, y } = canvasPoint(ev);
+    send({ type: 'input', event: 'mousePressed', x, y, button: BUTTONS[ev.button] || 'left', clickCount: 1 });
+  });
+  canvas.addEventListener('mouseup', (ev) => {
+    ev.preventDefault();
+    const { x, y } = canvasPoint(ev);
+    send({ type: 'input', event: 'mouseReleased', x, y, button: BUTTONS[ev.button] || 'left', clickCount: 1 });
+  });
+  // Raw mousemove fires on every pixel — throttle it hard. Mouse position
+  // barely matters for login/typing flows anyway (no hover menus to reveal),
+  // so this only exists for pointer feedback, not precision.
+  let lastMoveSent = 0;
+  canvas.addEventListener('mousemove', (ev) => {
+    const now = performance.now();
+    if (now - lastMoveSent < 50) return; // cap ~20/s
+    lastMoveSent = now;
+    const { x, y } = canvasPoint(ev);
+    send({ type: 'input', event: 'mouseMoved', x, y, button: 'none', clickCount: 0 });
+  });
+  canvas.addEventListener('wheel', (ev) => {
+    ev.preventDefault();
+    const { x, y } = canvasPoint(ev);
+    send({ type: 'input', event: 'mouseWheel', x, y, deltaX: ev.deltaX, deltaY: ev.deltaY });
+  }, { passive: false });
+  canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
+
+  function modifiersOf(ev) {
+    return (ev.altKey ? 1 : 0) | (ev.ctrlKey ? 2 : 0) | (ev.metaKey ? 4 : 0) | (ev.shiftKey ? 8 : 0);
+  }
+
+  canvas.addEventListener('keydown', (ev) => {
+    ev.preventDefault();
+    const text = ev.key.length === 1 ? ev.key : '';
+    send({
+      type: 'input', event: 'keyDown',
+      key: ev.key, code: ev.code, keyCode: ev.keyCode,
+      text, modifiers: modifiersOf(ev),
+    });
+  });
+  canvas.addEventListener('keyup', (ev) => {
+    ev.preventDefault();
+    send({
+      type: 'input', event: 'keyUp',
+      key: ev.key, code: ev.code, keyCode: ev.keyCode,
+      text: '', modifiers: modifiersOf(ev),
+    });
+  });
+
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    // Preserve the full path (e.g. /screencast/7910/ when proxied through
+    // Nginx) AND the ?t= token — dropping either breaks routing or auth.
+    ws = new WebSocket(proto + '://' + location.host + location.pathname + location.search);
+    ws.onopen = () => { status.textContent = 'live'; };
+    ws.onclose = () => {
+      status.textContent = 'disconnected — retrying...';
+      setTimeout(connect, 1000);
+    };
+    ws.onerror = () => ws.close();
+    ws.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'frame') img.src = 'data:image/jpeg;base64,' + msg.data;
+      else if (msg.type === 'status') status.textContent = msg.text;
+      else if (msg.type === 'mode') {
+        interactive = msg.interactive;
+        canvas.classList.toggle('interactive', interactive);
+        modeEl.textContent = interactive ? 'interactive — click canvas, then type/click' : 'view only';
+      }
+    };
+  }
+  connect();
+</script>
+</body>
+</html>
