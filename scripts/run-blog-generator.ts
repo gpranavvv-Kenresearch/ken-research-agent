@@ -107,7 +107,7 @@ function generate(row: BlogRow): Promise<{ title: string; description: string; h
   const title = rowTitle(row);
   console.log(`\n📝 Generating blog for: "${title}"  (style: ${formatLabel(format)})`);
 
-  const args = ['tsx', 'scripts/generate_blog_chatgpt.ts', '--format', format, '--url', String(row.targetUrl || ''), '--title', title];
+  const args = ['tsx', 'scripts/generate_blog_chatgpt.ts', '--agent', NAME, '--format', format, '--url', String(row.targetUrl || ''), '--title', title];
   if (sampleFile) args.push('--sample-file', sampleFile);
 
   return new Promise((resolve) => {
@@ -140,7 +140,7 @@ function generate(row: BlogRow): Promise<{ title: string; description: string; h
  */
 function generateImage(marketName: string, reportUrl: string): Promise<string> {
   return new Promise((resolve) => {
-    const args = ['tsx', 'scripts/generate_image.ts', '--market-name', marketName];
+    const args = ['tsx', 'scripts/generate_image.ts', '--agent', NAME, '--market-name', marketName];
     if (reportUrl) args.push('--url', reportUrl);
     const child = spawn('npx', args, { env: process.env });
     let stdout = '';

@@ -179,7 +179,7 @@ function startDailyLoop(): void {
   lapNum = 0;
   console.log(`\n[${nowIst()}] ═══ Posting session starting — Stage 1 ═══`);
   try {
-    const stopped = stopCycle();
+    const stopped = stopCycle(BLOG_GEN_AGENT);
     if (stopped.stopped) console.log(`[${nowIst()}] Stopped blog generation (was running for ${stopped.agent}) to begin posting.`);
   } catch (err: any) {
     console.error(`[${nowIst()}] Could not stop blog generation before posting: ${err.message}`);
@@ -222,7 +222,7 @@ export async function startCoordinatorDaemon(immediate: boolean = false): Promis
   // posting session somehow finished late and is still generating past the
   // 30-min buffer before the next 11:00 session. ─────────────────────────
   const stopBlogGenBuffer = (label: string) => {
-    const result = stopCycle();
+    const result = stopCycle(BLOG_GEN_AGENT);
     if (result.stopped) console.log(`[${nowIst()}] ${label} — stopped blog generation (30 min buffer before next posting session).`);
   };
   cron.schedule('30 10 * * *', () => stopBlogGenBuffer('10:30 AM'), { timezone: tz });

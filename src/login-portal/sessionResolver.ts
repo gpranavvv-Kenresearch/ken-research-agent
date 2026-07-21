@@ -17,13 +17,24 @@ import { execFileSync } from 'child_process';
 import { PLATFORMS, PLATFORM_KEYS } from './config.js';
 import { isDevtoLoggedInCached } from './devtoDeepCheck.js';
 
+/**
+ * ChatGPT (and the image-gen variant) get one profile PER AGENT, not per-index —
+ * each agent's blog writer is a single persistent session, separate from every
+ * other agent's, so two agents can generate concurrently without fighting over
+ * the same Chrome profile lock. "abhinav" keeps the original un-suffixed path
+ * (the session already logged in there before this became per-agent) so nothing
+ * about the live, working session changes; every other agent gets its own
+ * `chatgpt-profile-{agent}` dir.
+ */
+function chatgptProfileDir(agent: string, base: 'chatgpt-profile' | 'chatgpt-image-profile'): string {
+  const a = agent.toLowerCase();
+  return path.resolve('.sessions-cookies', a === 'abhinav' ? base : `${base}-${a}`);
+}
+
 /** Absolute path to a fleet account's Chrome profile dir. */
 export function agentSessionDir(agent: string, platform: string, index: number): string {
-  // ChatGPT is a single SHARED blog-writer session for the whole team, so it
-  // ignores agent/index and always resolves to one dir. generate_image.ts uses a
-  // SEPARATE shared profile so cover-image generation can run concurrently with it.
-  if (platform === 'chatgpt') return path.resolve('.sessions-cookies/chatgpt-profile');
-  if (platform === 'chatgpt-image') return path.resolve('.sessions-cookies/chatgpt-image-profile');
+  if (platform === 'chatgpt') return chatgptProfileDir(agent, 'chatgpt-profile');
+  if (platform === 'chatgpt-image') return chatgptProfileDir(agent, 'chatgpt-image-profile');
   return path.resolve(`.sessions-${agent.toLowerCase()}`, `${platform}-${index}`);
 }
 
@@ -139,19 +150,20 @@ export function listAgentStatus(agent: string): AgentStatus {
 
   for (const key of PLATFORM_KEYS) platforms[key].sort((x, y) => x.index - y.index);
 
-  // ChatGPT sessions are shared team sessions (not under .sessions-{agent}); report directly.
+  // ChatGPT sessions live outside .sessions-{agent} (see agentSessionDir) — one
+  // profile per agent, not per-index; report this agent's own profile directly.
   if (PLATFORMS['chatgpt']) {
-    const sharedDir = path.resolve('.sessions-cookies/chatgpt-profile');
+    const dir = chatgptProfileDir(a, 'chatgpt-profile');
     platforms['chatgpt'] = [{
-      platform: 'chatgpt', index: 1, nickname: 'shared',
-      sessionDir: sharedDir, ready: isLoggedIn(sharedDir, 'chatgpt'),
+      platform: 'chatgpt', index: 1, nickname: a,
+      sessionDir: dir, ready: isLoggedIn(dir, 'chatgpt'),
     }];
   }
   if (PLATFORMS['chatgpt-image']) {
-    const sharedDir = path.resolve('.sessions-cookies/chatgpt-image-profile');
+    const dir = chatgptProfileDir(a, 'chatgpt-image-profile');
     platforms['chatgpt-image'] = [{
-      platform: 'chatgpt-image', index: 1, nickname: 'shared',
-      sessionDir: sharedDir, ready: isLoggedIn(sharedDir, 'chatgpt-image'),
+      platform: 'chatgpt-image', index: 1, nickname: a,
+      sessionDir: dir, ready: isLoggedIn(dir, 'chatgpt-image'),
     }];
   }
 

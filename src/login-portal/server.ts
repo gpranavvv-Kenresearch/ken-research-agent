@@ -197,8 +197,9 @@ app.get('/api/agent/:agent/generate-status', requireAgentToken, (req: Request, r
 });
 
 // POST /api/agent/:agent/blog-cycle/start — begin the continuous loop: generate
-// up to 5 blogs, sleep 30 min, repeat, until stopped. Only one agent's cycle
-// can run at a time (shared ChatGPT session).
+// up to 5 blogs, sleep 30 min, repeat, until stopped. Locking is per-agent —
+// each agent has its own ChatGPT profile, so different agents' cycles don't
+// block each other; only starting a second cycle for the SAME agent is rejected.
 app.post('/api/agent/:agent/blog-cycle/start', requireAgentToken, (req: Request, res: Response) => {
   const agent = req.params.agent.toLowerCase();
   try {
@@ -209,15 +210,15 @@ app.post('/api/agent/:agent/blog-cycle/start', requireAgentToken, (req: Request,
   }
 });
 
-// POST /api/agent/:agent/blog-cycle/stop — stop whichever cycle is running.
-app.post('/api/agent/:agent/blog-cycle/stop', requireAgentToken, (_req: Request, res: Response) => {
-  const result = stopCycle();
+// POST /api/agent/:agent/blog-cycle/stop — stop this agent's cycle.
+app.post('/api/agent/:agent/blog-cycle/stop', requireAgentToken, (req: Request, res: Response) => {
+  const result = stopCycle(req.params.agent.toLowerCase());
   res.json({ ok: true, ...result });
 });
 
-// GET /api/agent/:agent/blog-cycle/status — running? which agent? recent log lines.
-app.get('/api/agent/:agent/blog-cycle/status', requireAgentToken, (_req: Request, res: Response) => {
-  res.json(cycleStatus());
+// GET /api/agent/:agent/blog-cycle/status — running? recent log lines, for THIS agent.
+app.get('/api/agent/:agent/blog-cycle/status', requireAgentToken, (req: Request, res: Response) => {
+  res.json(cycleStatus(req.params.agent.toLowerCase()));
 });
 
 // POST /api/agent/:agent/post-cycle/start — one-off "Post Now" run: all 15

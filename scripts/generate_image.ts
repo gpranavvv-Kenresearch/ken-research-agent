@@ -45,6 +45,7 @@ const forecast   = get('--forecast', '');
 const sectorArg  = get('--sector', '');
 const countryArg = get('--country', 'Global');
 const reportUrl  = get('--url', '');
+const agentArg   = get('--agent', '').toLowerCase();
 
 // ── ImageKit ──────────────────────────────────────────────────────────────────
 const IMAGEKIT_PRIVATE_KEY = 'private_MkJ4nzxRoVz+dDpEeFUTryhRXVM=';
@@ -54,7 +55,13 @@ const IMAGEKIT_FOLDER      = '/microblogs';
 const SESSIONS_DIR    = path.join(__dirname, '..', '.sessions-cookies');
 // Dedicated profile — deliberately NOT the same one generate_blog_chatgpt.ts uses,
 // so this can run concurrently with blog-text generation without profile-lock conflicts.
-const CHATGPT_PROFILE = path.join(SESSIONS_DIR, 'chatgpt-image-profile');
+// One profile PER AGENT (not shared team-wide) so two agents can each generate images
+// concurrently too — "abhinav" keeps the original un-suffixed dir name (already logged
+// in there before this became per-agent); every other agent gets its own suffixed dir.
+const CHATGPT_PROFILE = path.join(
+  SESSIONS_DIR,
+  !agentArg || agentArg === 'abhinav' ? 'chatgpt-image-profile' : `chatgpt-image-profile-${agentArg}`,
+);
 const TMP_DIR          = path.join(__dirname, '..', 'generated_images');
 fs.mkdirSync(CHATGPT_PROFILE, { recursive: true });
 fs.mkdirSync(TMP_DIR, { recursive: true });

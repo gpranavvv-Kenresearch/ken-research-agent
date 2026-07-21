@@ -58,12 +58,14 @@ const CHATGPT_URL = 'https://chatgpt.com/';
 const RESPONSE_TIMEOUT_MS = 30 * 60 * 1000;   // hard cap 30 min
 const POLL_MS = Math.round(3.5 * 60 * 1000);  // check every ~3.5 min (generation is 12-15+ min)
 
-// One shared ChatGPT session for the whole team (same profile generate_image.ts uses).
-const SHARED_CHATGPT_DIR = '.sessions-cookies/chatgpt-profile';
-
+// One profile PER AGENT (not shared team-wide) so two agents can each generate
+// blog text concurrently without fighting over the same Chrome profile lock.
+// "abhinav" keeps the original un-suffixed dir (already logged in there before
+// this became per-agent); every other agent gets its own suffixed dir.
 function sessionDir(): string {
   if (sessionArg) return path.resolve(sessionArg);
-  return path.resolve(SHARED_CHATGPT_DIR);
+  const a = agent || 'abhinav';
+  return path.resolve('.sessions-cookies', a === 'abhinav' ? 'chatgpt-profile' : `chatgpt-profile-${a}`);
 }
 
 function loadSample(): string {

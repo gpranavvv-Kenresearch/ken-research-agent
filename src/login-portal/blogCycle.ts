@@ -1,21 +1,22 @@
 /**
  * blogCycle.ts — Start/stop control for the continuous blog-generation loop.
  *
- * Only one cycle can run system-wide at a time: every agent's generation
- * shares the same ChatGPT browser profile (.sessions-cookies/chatgpt-profile),
- * so two agents generating simultaneously would fight over the same Chrome
- * profile lock (the exact bug this repo hit earlier with Medium sessions).
+ * Locking is per-agent, not system-wide: each agent generates through its own
+ * ChatGPT browser profile (see sessionResolver.ts's chatgptProfileDir — one
+ * profile per agent, "abhinav" keeping the original un-suffixed dir), so two
+ * different agents CAN generate concurrently without fighting over a Chrome
+ * profile lock. Only the SAME agent starting a second cycle is rejected.
  *
- * State is persisted to a PID file, not just an in-memory variable — login-api
- * gets restarted often during deploys, and an in-memory-only tracker would
- * "lose" a running cycle on restart, making it un-stoppable via the API even
- * though the process is still alive and burning the shared ChatGPT session.
+ * State is persisted to a PID file per agent, not just an in-memory variable —
+ * login-api gets restarted often during deploys, and an in-memory-only tracker
+ * would "lose" a running cycle on restart, making it un-stoppable via the API
+ * even though the process is still alive and burning its ChatGPT session.
  */
 
 import { spawn } from 'child_process';
 import fs from 'fs';
 
-const PID_FILE = '/tmp/blog-cycle.json';
+const PID_FILE_FOR = (agent: string) => `/tmp/blog-cycle-${agent}.json`;
 const LOG_FILE_FOR = (agent: string) => `/tmp/blog-cycle-${agent}.log`;
 
 interface CycleState {
@@ -24,9 +25,9 @@ interface CycleState {
   startedAt: number;
 }
 
-function readState(): CycleState | null {
+function readState(agent: string): CycleState | null {
   try {
-    const state = JSON.parse(fs.readFileSync(PID_FILE, 'utf-8')) as CycleState;
+    const state = JSON.parse(fs.readFileSync(PID_FILE_FOR(agent), 'utf-8')) as CycleState;
     // Confirm the process is actually still alive — a stale PID file (e.g. the
     // server was killed before it could clean up) shouldn't block new starts.
     process.kill(state.pid, 0);
@@ -36,13 +37,13 @@ function readState(): CycleState | null {
   }
 }
 
-function writeState(state: CycleState | null): void {
-  if (state) fs.writeFileSync(PID_FILE, JSON.stringify(state), 'utf-8');
-  else { try { fs.unlinkSync(PID_FILE); } catch { /* already gone */ } }
+function writeState(agent: string, state: CycleState | null): void {
+  if (state) fs.writeFileSync(PID_FILE_FOR(agent), JSON.stringify(state), 'utf-8');
+  else { try { fs.unlinkSync(PID_FILE_FOR(agent)); } catch { /* already gone */ } }
 }
 
-export function cycleStatus(): { running: boolean; agent?: string; startedAt?: number; log?: string } {
-  const state = readState();
+export function cycleStatus(agent: string): { running: boolean; agent?: string; startedAt?: number; log?: string } {
+  const state = readState(agent);
   if (!state) return { running: false };
   let log = '';
   try {
@@ -51,11 +52,11 @@ export function cycleStatus(): { running: boolean; agent?: string; startedAt?: n
   return { running: true, agent: state.agent, startedAt: state.startedAt, log };
 }
 
-/** Start the loop for an agent. Throws if one is already running (any agent). */
+/** Start the loop for an agent. Throws if THIS agent already has one running. */
 export function startCycle(agent: string): void {
-  const existing = readState();
+  const existing = readState(agent);
   if (existing) {
-    throw new Error(`Blog cycle already running for "${existing.agent}" — stop it first (only one can run at a time, shared ChatGPT session)`);
+    throw new Error(`Blog cycle already running for "${agent}" — stop it first`);
   }
 
   const logFile = LOG_FILE_FOR(agent);
@@ -69,22 +70,22 @@ export function startCycle(agent: string): void {
   });
   child.unref();
 
-  writeState({ agent, pid: child.pid!, startedAt: Date.now() });
+  writeState(agent, { agent, pid: child.pid!, startedAt: Date.now() });
 
   // If the loop process ever exits on its own (crash, or the loop somehow
   // ends), clear the state so the button correctly shows "stopped" again.
   child.on('exit', () => {
-    const current = readState();
-    if (current?.pid === child.pid) writeState(null);
+    const current = readState(agent);
+    if (current?.pid === child.pid) writeState(agent, null);
   });
 }
 
-/** Stop whichever cycle is running. No-op (not an error) if none is running. */
-export function stopCycle(): { stopped: boolean; agent?: string } {
-  const state = readState();
+/** Stop this agent's cycle. No-op (not an error) if none is running. */
+export function stopCycle(agent: string): { stopped: boolean; agent?: string } {
+  const state = readState(agent);
   if (!state) return { stopped: false };
   try { process.kill(-state.pid, 'SIGTERM'); } catch { /* group gone */ }
   try { process.kill(state.pid, 'SIGTERM'); } catch { /* proc gone */ }
-  writeState(null);
+  writeState(agent, null);
   return { stopped: true, agent: state.agent };
 }
