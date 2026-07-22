@@ -26,7 +26,7 @@ console.log('✓ classify');
 // full cap, NOT throttled to 1 — this is the live-fleet safety guarantee.
 const gEst = canPost('X', 'established', T);
 assert.equal(gEst.ok, true);
-assert.equal(gEst.cap, 8, `established X account should get full cap 8, got ${gEst.cap}`);
+assert.equal(gEst.cap, 6, `established X account should get full cap 6, got ${gEst.cap}`);
 console.log('✓ existing account = full cap (no accidental throttle)');
 
 // 2b. Only an explicitly-onboarded new account warms up from cap 1.
@@ -66,8 +66,8 @@ console.log('✓ FATAL → dead, reactivate recovers');
 // 7. an aged account gets the full safe cap (warmup complete)
 const aged = '2026-09-01T04:00:00.000Z'; // >18 days after firstSeen(T)
 // force firstSeen far in the past by seeding via a success at T then checking cap much later
-assert.equal(effectiveCap({ platform: 'X', warmup: true, firstSeen: '2026-06-01' } as any, aged), 8,
-  'aged X account should reach full cap 8');
+assert.equal(effectiveCap({ platform: 'X', warmup: true, firstSeen: '2026-06-01' } as any, aged), 6,
+  'aged X account should reach full cap 6');
 console.log('✓ warmup completes → full cap');
 
 console.log('\nALL ACCOUNT-HEALTH CHECKS PASSED');

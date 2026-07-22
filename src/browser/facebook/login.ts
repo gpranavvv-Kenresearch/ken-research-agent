@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
 import { blockHeavyResources } from '../../utils/blockResources.js';
+import { identityLaunchOverrides } from '../../health/proxyPool.js';
 
 const FACEBOOK_ACCOUNTS_FILE = '.accounts/facebook-accounts.json';
 
@@ -118,6 +119,9 @@ export async function loginToFacebook(options?: {
       '--disable-infobars',
     ],
     viewport: { width: 1280, height: 800 },
+    // New accounts only: stable per-account fingerprint (+ proxy once configured).
+    // Established sessions are untouched (returns {}) to avoid device-change checkpoints.
+    ...identityLaunchOverrides(sessionDir, nickname),
   });
 
   await blockHeavyResources(browserContext, 'facebook');

@@ -41,9 +41,14 @@ export interface AccountHealth {
   note: string;             // human-readable last event (for the dashboard/sheet)
 }
 
-/** Ban-safe posts/account/day per platform (see capacity model). */
+/**
+ * Ban-safe posts/account/day per platform (see capacity model). The ban-happy
+ * three (X/FB/LinkedIn) are held a notch BELOW nominal because, with no proxies,
+ * all accounts still share one datacenter IP — extra conservatism there buys
+ * headroom against correlation flags. Raise once per-account proxies exist.
+ */
 const SAFE_CAP: Record<string, number> = {
-  X: 8, Facebook: 5, LinkedIn: 3, 'LinkedIn Pulse': 1,
+  X: 6, Facebook: 4, LinkedIn: 2, 'LinkedIn Pulse': 1,
   Medium: 3, 'Dev.to': 3, Calisthenics: 3,
   Ameba: 5, Note: 5, Linkmate: 5, Paragraph: 8,
   Blogger: 10, WordPress: 10, 'Google Sites': 10, HackMD: 10, Notion: 10,

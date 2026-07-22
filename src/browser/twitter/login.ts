@@ -7,6 +7,7 @@ import 'dotenv/config';
 import { killChromeForProfile } from '../../utils/killChrome.js';
 import { blockHeavyResources } from '../../utils/blockResources.js';
 import { getChromeLaunchArgs } from '../../utils/chromeArgs.js';
+import { identityLaunchOverrides } from '../../health/proxyPool.js';
 
 let browserContext: BrowserContext | null = null;
 let loginPage: Page | null = null;
@@ -25,7 +26,7 @@ export async function closeBrowser() {
 // on-disk offenders (~800MB each × 11).
 const CHROME_LAUNCH_ARGS = getChromeLaunchArgs();
 
-async function launchPersistentChrome(profileDir: string): Promise<{ context: BrowserContext; page: Page }> {
+async function launchPersistentChrome(profileDir: string, nickname?: string): Promise<{ context: BrowserContext; page: Page }> {
   const chromePath = process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : undefined);
   fs.mkdirSync(profileDir, { recursive: true });
   killChromeForProfile(profileDir);
@@ -39,6 +40,9 @@ async function launchPersistentChrome(profileDir: string): Promise<{ context: Br
     viewport: { width: 1280, height: 900 },
     ignoreDefaultArgs: ['--enable-automation'],
     args: CHROME_LAUNCH_ARGS,
+    // New accounts only: stable per-account fingerprint (+ proxy once configured).
+    // Established sessions are untouched (returns {}) to avoid device-change checkpoints.
+    ...identityLaunchOverrides(profileDir, nickname || path.basename(profileDir)),
   });
 
   await context.addInitScript(() => {
@@ -146,7 +150,7 @@ async function launchSavedSessionChrome(account: Account | undefined, handle: st
   }
 
   console.log(`   Loading X session: ${sessionDir}`);
-  const { context, page } = await launchPersistentChrome(sessionDir);
+  const { context, page } = await launchPersistentChrome(sessionDir, nickname);
   browserContext = context;
   loginPage = page;
 
@@ -205,7 +209,7 @@ export async function loginToX(account?: Account): Promise<Page> {
 
   console.log('   Launching fresh Chrome for login...');
   const properSessionDir = getSessionProfileDir(account);
-  const launched = await launchPersistentChrome(properSessionDir);
+  const launched = await launchPersistentChrome(properSessionDir, account?.nickname || handle);
   browserContext = launched.context;
   loginPage = launched.page;
 

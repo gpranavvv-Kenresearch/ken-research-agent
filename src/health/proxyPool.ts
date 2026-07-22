@@ -117,6 +117,28 @@ export function getLaunchIdentity(nickname: string): LaunchIdentity {
   };
 }
 
+/**
+ * Playwright launchPersistentContext option overrides for an account.
+ *
+ * Applied ONLY to FRESH profiles (new accounts). Changing the UA/viewport/
+ * timezone of an already-logged-in session can itself trigger a "new device"
+ * checkpoint — the very restriction we're trying to avoid — so established
+ * sessions are left completely untouched. New accounts get a stable, distinct
+ * fingerprint (and proxy, once configured) from their very first launch.
+ *
+ * Spreads directly into launch options: field names match Playwright's.
+ */
+export function identityLaunchOverrides(sessionDir: string, nickname: string):
+  Partial<{ proxy: ProxyConfig; userAgent: string; viewport: { width: number; height: number }; locale: string; timezoneId: string }> {
+  try {
+    if (fs.existsSync(sessionDir)) return {}; // established session → change nothing
+  } catch { return {}; }
+  const id = getLaunchIdentity(nickname);
+  const out: any = { userAgent: id.userAgent, viewport: id.viewport, locale: id.locale, timezoneId: id.timezoneId };
+  if (id.proxy) out.proxy = id.proxy;
+  return out;
+}
+
 /** True once proxies.json actually defines something. Lets callers log/skip. */
 export function proxiesConfigured(): boolean {
   const f = loadFile();

@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
 import { killChromeForProfile } from '../../utils/killChrome.js';
+import { identityLaunchOverrides } from '../../health/proxyPool.js';
 
 const LINKEDIN_ACCOUNTS_FILE = '.accounts/linkedin-accounts.json';
 const SESSION_ROOT = path.resolve('li-sessions');
@@ -251,6 +252,9 @@ export async function loginToLinkedIn(options?: {
       '--disable-session-crashed-bubble',
       '--disable-infobars',
     ],
+    // New accounts only: stable per-account fingerprint (+ proxy once configured).
+    // Established sessions are untouched (returns {}) to avoid device-change checkpoints.
+    ...identityLaunchOverrides(sessionDir, nickname),
   });
 
   await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);
