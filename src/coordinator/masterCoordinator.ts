@@ -62,6 +62,33 @@ function extractSocialPost(rawContent: string | undefined): string | null {
 
 import { ensureTargetUrl } from '../utils/utm.js';
 import { retryOnSelectorTimeout } from '../utils/retry.js';
+import { canPost as healthCanPost, record as healthRecord } from '../health/accountHealth.js';
+
+/**
+ * Ban-avoidance gate: skip an account that is dead/quarantined/cooling-down or
+ * over its adaptive daily cap. Fail-OPEN — if anything in the health layer
+ * throws, posting proceeds as before (health must never be able to halt a batch).
+ */
+function healthGate(platform: string, nickname: string): boolean {
+  try {
+    const g = healthCanPost(platform, nickname);
+    if (g.ok) return true;
+    // Observe mode (default): log what WOULD be skipped but still post, so the
+    // ledger can be validated against real traffic first. Set HEALTH_ENFORCE=true
+    // to actually bench flagged accounts.
+    const enforce = process.env.HEALTH_ENFORCE === 'true';
+    console.log(`    ⏭ [health] ${enforce ? 'SKIP' : 'would-skip (observe)'} ${platform}/${nickname}: ${g.reason}`);
+    return !enforce;
+  } catch { return true; }
+}
+/** Feed a post outcome back into the ledger. Never throws. */
+function healthRecordSafe(platform: string, nickname: string, r: { success?: boolean; error?: string; reason?: string }): void {
+  try {
+    const sig = healthRecord(platform, nickname, r);
+    if (sig === 'HARD' || sig === 'FATAL' || sig === 'SOFT')
+      console.log(`    🩺 [health] ${platform}/${nickname} → ${sig} (account benched)`);
+  } catch { /* health must never break posting */ }
+}
 import { addFailure, printDiagnostics, type FailureEntry } from '../utils/diagnostics.js';
 import { recordError } from '../errorInterceptor.js';
 import { applyFix } from '../autoFix.js';
@@ -280,6 +307,7 @@ export async function runXBatch(batchNum: number = 1): Promise<void> {
     const row = batchUrls[rowIdx];
     try {
       console.log(`  Processing: ${row.title.slice(0, 60)}`);
+      if (!healthGate('X', row.name)) continue;
 
       // Use sheet content if available, otherwise generate
       let tweet = row.xPost?.trim() || '';
@@ -294,6 +322,7 @@ export async function runXBatch(batchNum: number = 1): Promise<void> {
         if (!tweet?.trim()) { console.log(`    ⏭ Skipping — generated content empty`); continue; }
       }
       const xResult = await retryOnSelectorTimeout(() => runXAgent({ tweetText: tweet, accountHandle: row.name }), { label: 'X post' });
+      healthRecordSafe('X', row.name, { success: xResult.success, error: xResult.error, reason: (xResult as any).reason });
 
       // 3. Save result
       if (xResult.success) {
@@ -365,6 +394,7 @@ export async function runFbBatch(batchNum: number = 1): Promise<void> {
   for (const row of rows) {
     try {
       console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
+      if (!healthGate('Facebook', row.name)) continue;
 
       // Use sheet content if available, otherwise generate
       let fbPost = row.fbPost?.trim() || '';
@@ -383,6 +413,7 @@ export async function runFbBatch(batchNum: number = 1): Promise<void> {
       // 3. Post to FB
       console.log(`    Posting to FB (account: ${row.name})...`);
       const postResult = await retryOnSelectorTimeout(() => postToFbAccount(row.name, fbPost), { label: 'FB post' });
+      healthRecordSafe('Facebook', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
 
       if (postResult.success) {
         fbPost = postResult.postText || fbPost;
@@ -483,6 +514,7 @@ export async function runLiBatch(options?: { manual?: boolean }, batchNum: numbe
   for (const row of rows) {
     try {
       console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
+      if (!healthGate('LinkedIn', row.name)) continue;
 
       // Use sheet content if available, otherwise generate
       let liPost = row.linkedinPost?.trim() || '';
@@ -501,6 +533,7 @@ export async function runLiBatch(options?: { manual?: boolean }, batchNum: numbe
       // 3. Post to LI
       console.log(`    Posting to LI (account: ${row.name})...`);
       const postResult = await retryOnSelectorTimeout(() => postToLiAccount(row.name, liPost), { label: 'LI post' });
+      healthRecordSafe('LinkedIn', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
 
       if (postResult.success) {
         liPost = postResult.postText || liPost;
