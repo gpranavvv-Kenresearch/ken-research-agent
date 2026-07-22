@@ -27,6 +27,7 @@ import fs from 'fs';
 import path from 'path';
 
 const proxyFilePath = () => process.env.PROXY_POOL_FILE || path.join(process.cwd(), '.accounts', 'proxies.json');
+const rotationFilePath = () => process.env.PROXY_ROTATION_FILE || path.join(process.cwd(), '.accounts', 'proxy-rotation.json');
 
 export interface ProxyConfig { server: string; username?: string; password?: string; }
 export interface Geo { timezoneId: string; locale: string; }
@@ -74,11 +75,20 @@ const VIEWPORTS = [
   { width: 1440, height: 900 }, { width: 1536, height: 864 },
 ];
 
-function subst(entry: ProxyEntry, nick: string): ProxyConfig {
+// Rotation counters. Appended to the {nick} session token so a rotation makes the
+// provider hand out a NEW sticky IP for that account. Only affects sessionTemplate
+// (or any username containing {nick}); static byNickname IPs have no {nick} so they
+// don't rotate — that's correct, a fixed IP can't be rotated client-side.
+function loadRotation(): Record<string, number> {
+  try { return JSON.parse(fs.readFileSync(rotationFilePath(), 'utf8')); } catch { return {}; }
+}
+
+function subst(entry: ProxyEntry, nick: string, rot = 0): ProxyConfig {
   const n = nick.toLowerCase().trim();
+  const token = rot > 0 ? `${n}-r${rot}` : n;
   return {
     server: entry.server,
-    username: entry.username?.replace(/\{nick\}/g, n),
+    username: entry.username?.replace(/\{nick\}/g, token),
     password: entry.password,
   };
 }
@@ -87,10 +97,35 @@ function subst(entry: ProxyEntry, nick: string): ProxyConfig {
 export function getProxy(nickname: string): ProxyConfig | undefined {
   const f = loadFile();
   const n = nickname.toLowerCase().trim();
-  if (f.byNickname?.[n]) return subst(f.byNickname[n], n);
-  if (f.sessionTemplate)  return subst(f.sessionTemplate, n);
-  if (f.default)          return subst(f.default, n);
+  const rot = loadRotation()[n] || 0;
+  if (f.byNickname?.[n]) return subst(f.byNickname[n], n, rot);
+  if (f.sessionTemplate)  return subst(f.sessionTemplate, n, rot);
+  if (f.default)          return subst(f.default, n, rot);
   return undefined;
+}
+
+/**
+ * Rotate this account onto a fresh sticky IP by bumping its session token.
+ * Returns the new proxy config (or undefined if no proxy is configured / the
+ * config has no {nick} token to rotate). Persists the counter.
+ */
+export function rotateProxy(nickname: string): { rotated: boolean; rotation: number; proxy?: ProxyConfig; reason?: string } {
+  const n = nickname.toLowerCase().trim();
+  const f = loadFile();
+  const entry = f.byNickname?.[n] || f.sessionTemplate || f.default;
+  if (!entry) return { rotated: false, rotation: 0, reason: 'no proxy configured' };
+  if (!entry.username?.includes('{nick}')) {
+    return { rotated: false, rotation: loadRotation()[n] || 0, reason: 'static IP (no {nick} token) — cannot rotate client-side' };
+  }
+  const rotation = (loadRotation()[n] || 0) + 1;
+  const all = loadRotation();
+  all[n] = rotation;
+  try {
+    fs.mkdirSync(path.dirname(rotationFilePath()), { recursive: true });
+    fs.writeFileSync(rotationFilePath(), JSON.stringify(all, null, 2));
+  } catch { /* non-fatal */ }
+  cache = null; // force reload so getProxy reflects new rotation immediately
+  return { rotated: true, rotation, proxy: subst(entry, n, rotation) };
 }
 
 function geoFor(nickname: string): Geo {
@@ -137,6 +172,20 @@ export function identityLaunchOverrides(sessionDir: string, nickname: string):
   const out: any = { userAgent: id.userAgent, viewport: id.viewport, locale: id.locale, timezoneId: id.timezoneId };
   if (id.proxy) out.proxy = id.proxy;
   return out;
+}
+
+/**
+ * Non-sensitive summary for the dashboard: which accounts have an explicit proxy,
+ * whether a template exists, and rotation counters. NEVER returns credentials.
+ */
+export function proxySummary(): { configured: boolean; template: boolean; accounts: string[]; rotations: Record<string, number> } {
+  const f = loadFile();
+  return {
+    configured: proxiesConfigured(),
+    template: !!f.sessionTemplate,
+    accounts: Object.keys(f.byNickname || {}),
+    rotations: loadRotation(),
+  };
 }
 
 /** True once proxies.json actually defines something. Lets callers log/skip. */

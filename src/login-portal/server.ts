@@ -29,6 +29,8 @@ import { startLogin, teardown, getLogin, sweepExpired, poolStatus } from './cdpL
 import { verifyOrSetPin, mintToken, requireAgentToken } from './agentAuth.js';
 import { startCycle, stopCycle, cycleStatus } from './blogCycle.js';
 import { startPostCycle, stopPostCycle, postCycleStatus } from './postCycle.js';
+import { proxySummary, rotateProxy } from '../health/proxyPool.js';
+import { checkProxies } from '../health/proxyCheck.js';
 
 let websockifyProc: ChildProcess | null = null;
 
@@ -242,6 +244,35 @@ app.post('/api/agent/:agent/post-cycle/stop', requireAgentToken, (_req: Request,
 // GET /api/agent/:agent/post-cycle/status — running? which agent? recent log + stage detail.
 app.get('/api/agent/:agent/post-cycle/status', requireAgentToken, (_req: Request, res: Response) => {
   res.json(postCycleStatus());
+});
+
+// ── Proxy management (dashboard test/rotate buttons) ────────────────────────
+// All under /api, so already behind requireDashboardSecret. Never returns proxy
+// credentials — only names, rotation counters, and live exit-IP test results.
+
+// GET /api/proxy/list — configured accounts + rotation state (fast, no browser).
+app.get('/api/proxy/list', (_req: Request, res: Response) => {
+  res.json(proxySummary());
+});
+
+// POST /api/proxy/test { nicks: string[] } — verify proxies via the real
+// Playwright path (launches a headless browser; admin action, so it's fine).
+app.post('/api/proxy/test', async (req: Request, res: Response) => {
+  const nicks = Array.isArray(req.body?.nicks) ? req.body.nicks.map(String).slice(0, 50) : [];
+  try {
+    res.json(await checkProxies(nicks));
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'proxy test failed' });
+  }
+});
+
+// POST /api/proxy/rotate { nick } — hand this account a fresh sticky IP.
+app.post('/api/proxy/rotate', (req: Request, res: Response) => {
+  const nick = String(req.body?.nick || '').trim();
+  if (!nick) { res.status(400).json({ error: 'nick required' }); return; }
+  const r = rotateProxy(nick);
+  // Strip the proxy creds from the response — dashboard only needs the outcome.
+  res.json({ rotated: r.rotated, rotation: r.rotation, reason: r.reason });
 });
 
 // Watchdog: force-tear-down abandoned logins past their TTL.
