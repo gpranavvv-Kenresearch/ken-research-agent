@@ -30,6 +30,14 @@ export function getChromeLaunchArgs(opts?: { minimized?: boolean; extra?: string
     '--no-default-browser-check',
     '--disable-session-crashed-bubble',
     '--disable-infobars',
+    // Stop Chrome downloading on-device ML / component blobs the posting bot
+    // never uses. Each persistent profile otherwise accumulates hundreds of MB
+    // (optimization_guide_model_store, component_crx_cache, WasmTtsEngine) that
+    // the idle-window prune cron then has to keep sweeping. Kill it at source.
+    // NOTE: keep all disable-features in this ONE flag — Chrome honours only the
+    // last --disable-features on the command line, so a second one would win.
+    '--disable-component-update',
+    '--disable-features=OptimizationGuideModelDownloading,OptimizationHints,OptimizationTargetPrediction,MediaRouter',
   ];
 
   return opts?.extra ? [...args, ...opts.extra] : args;

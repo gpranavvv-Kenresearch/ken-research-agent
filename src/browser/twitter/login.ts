@@ -6,6 +6,7 @@ import fs from 'fs';
 import 'dotenv/config';
 import { killChromeForProfile } from '../../utils/killChrome.js';
 import { blockHeavyResources } from '../../utils/blockResources.js';
+import { getChromeLaunchArgs } from '../../utils/chromeArgs.js';
 
 let browserContext: BrowserContext | null = null;
 let loginPage: Page | null = null;
@@ -18,18 +19,11 @@ export async function closeBrowser() {
   console.log('   Browser closed.');
 }
 
-const CHROME_LAUNCH_ARGS = [
-  '--start-minimized',
-  ...(process.platform !== 'win32' ? ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] : []),
-  '--disable-blink-features=AutomationControlled',
-  '--disable-renderer-backgrounding',
-  '--disable-background-timer-throttling',
-  '--disable-backgrounding-occluded-windows',
-  '--no-first-run',
-  '--no-default-browser-check',
-  '--disable-session-crashed-bubble',
-  '--disable-infobars',
-];
+// Was a hand-maintained copy of getChromeLaunchArgs()'s output — now sourced
+// from the shared helper so the anti-bloat flags (component-update /
+// optimization-guide off) apply to the X profiles too, which are the biggest
+// on-disk offenders (~800MB each × 11).
+const CHROME_LAUNCH_ARGS = getChromeLaunchArgs();
 
 async function launchPersistentChrome(profileDir: string): Promise<{ context: BrowserContext; page: Page }> {
   const chromePath = process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : undefined);
