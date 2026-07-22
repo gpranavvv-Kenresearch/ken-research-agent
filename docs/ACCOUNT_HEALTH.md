@@ -76,6 +76,16 @@ sessions via a username suffix — `{nick}` is replaced with the account nicknam
 Absent/empty file ⇒ no proxy (safe no-op). `geo` sets the browser timezone/locale
 to match the proxy's exit country.
 
+### Verify proxies before relying on them
+Bought proxies are often partly dead. `scripts/proxy-check.ts` tests each account's
+proxy through the *same* Playwright path the posters use, and flags dead / not-routing IPs:
+```bash
+node --import=tsx scripts/proxy-check.ts --direct          # baseline: the box's own IP
+node --import=tsx scripts/proxy-check.ts aniket krishi ...  # each account's exit IP + geo + latency
+```
+Exit code is non-zero if any proxy is dead or not routing (safe to wire into a cron check).
+No server, no third-party code — nothing to hijack.
+
 ### Migration caution
 Do NOT flip every existing account onto a new IP at once — a sudden IP change on
 an established session can itself trigger a checkpoint. Roll out gradually:
