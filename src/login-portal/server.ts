@@ -261,3 +261,15 @@ function shutdown() {
 }
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+
+// Keep the daemon alive through async faults. The screencast/CDP path throws
+// "Target/context/browser has been closed" as an *unhandled rejection* when a
+// user's Chrome dies mid-session — which was crashing the whole login-api and
+// forcing a PM2 restart (42 of them). These are per-session faults, not process
+// faults: log and carry on so other logins aren't interrupted.
+process.on('unhandledRejection', (reason: any) => {
+  console.error(`[login-api] unhandledRejection (ignored):`, reason?.message || reason);
+});
+process.on('uncaughtException', (err: any) => {
+  console.error(`[login-api] uncaughtException (ignored):`, err?.message || err);
+});
