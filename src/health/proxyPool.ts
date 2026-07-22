@@ -165,12 +165,18 @@ export function getLaunchIdentity(nickname: string): LaunchIdentity {
  */
 export function identityLaunchOverrides(sessionDir: string, nickname: string):
   Partial<{ proxy: ProxyConfig; userAgent: string; viewport: { width: number; height: number }; locale: string; timezoneId: string }> {
-  try {
-    if (fs.existsSync(sessionDir)) return {}; // established session → change nothing
-  } catch { return {}; }
   const id = getLaunchIdentity(nickname);
-  const out: any = { userAgent: id.userAgent, viewport: id.viewport, locale: id.locale, timezoneId: id.timezoneId };
+  const out: any = {};
+  // PROXY applies to every launch — existing AND new. Routing an already-logged-in
+  // account through its proxy is the intended IP change (that's the whole point of
+  // buying proxies), so it must NOT be gated on a fresh profile.
   if (id.proxy) out.proxy = id.proxy;
+  // FINGERPRINT (UA/viewport/locale/timezone) only for FRESH profiles. Changing the
+  // DEVICE of an established session can itself trip a "new device" checkpoint, so
+  // logged-in accounts keep their existing fingerprint and only swap IP.
+  let fresh = true;
+  try { fresh = !fs.existsSync(sessionDir); } catch { fresh = false; }
+  if (fresh) { out.userAgent = id.userAgent; out.viewport = id.viewport; out.locale = id.locale; out.timezoneId = id.timezoneId; }
   return out;
 }
 

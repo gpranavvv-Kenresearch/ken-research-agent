@@ -1,7 +1,7 @@
 /** Run: PROXY_POOL_FILE=/tmp/p.json node --import=tsx src/health/proxyPool.selfcheck.ts */
 import assert from 'assert';
 import fs from 'fs';
-import { getProxy, getLaunchIdentity, proxiesConfigured, _resetForTest } from './proxyPool.js';
+import { getProxy, getLaunchIdentity, identityLaunchOverrides, proxiesConfigured, _resetForTest } from './proxyPool.js';
 
 const F = '/tmp/proxy-selfcheck.json';
 process.env.PROXY_POOL_FILE = F;
@@ -48,5 +48,18 @@ _resetForTest();
 const ids = ['a', 'b', 'c', 'd', 'e', 'f'].map(getLaunchIdentity);
 assert.ok(new Set(ids.map(i => i.userAgent + JSON.stringify(i.viewport))).size > 1, 'fingerprints should vary across accounts');
 console.log('✓ fingerprints vary across accounts');
+
+// 5. identityLaunchOverrides: proxy applies to EXISTING sessions, fingerprint only to FRESH.
+fs.writeFileSync(F, JSON.stringify({ sessionTemplate: { server: 'http://gate:7000', username: 'u-{nick}', password: 'p' } }));
+_resetForTest();
+const existingDir = '/tmp/pp-existing-session'; fs.mkdirSync(existingDir, { recursive: true });
+const freshDir = '/tmp/pp-fresh-session-does-not-exist'; try { fs.rmSync(freshDir, { recursive: true, force: true }); } catch {}
+const oExisting = identityLaunchOverrides(existingDir, 'aniket');
+assert.ok(oExisting.proxy, 'existing session STILL gets the proxy (the point)');
+assert.equal(oExisting.userAgent, undefined, 'existing session keeps its device — no UA change');
+const oFresh = identityLaunchOverrides(freshDir, 'aniket');
+assert.ok(oFresh.proxy && oFresh.userAgent, 'fresh session gets proxy + full fingerprint');
+fs.rmSync(existingDir, { recursive: true, force: true });
+console.log('✓ existing→proxy-only, fresh→proxy+fingerprint');
 
 console.log('\nALL PROXY-POOL CHECKS PASSED');
