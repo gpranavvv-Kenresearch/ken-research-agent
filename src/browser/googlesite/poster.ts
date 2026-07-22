@@ -68,11 +68,20 @@ export async function postToGoogleSite(
   const MAX_SLUG_LEN = 30;
   const baseSlug = rawSlug.slice(0, MAX_SLUG_LEN);
 
-  // Numeric suffix variants only — avoids duplicates when base is already 30 chars
+  // Numeric suffix variants first, then random-suffix variants as a fallback —
+  // Google Sites slugs are global (not per-account), so a frequently-reused
+  // report title can exhaust all 30 numeric variants on its own; confirmed
+  // live when "abhinav 5" hit exactly this after this title had already been
+  // attempted many times. Random suffixes can't run out the same way.
   function buildSlugVariants(base: string): string[] {
     const variants: string[] = [base];
     for (let i = 1; i <= 30; i++) {
       const suffix = `-${i}`;
+      const candidate = base.slice(0, MAX_SLUG_LEN - suffix.length) + suffix;
+      if (!variants.includes(candidate)) variants.push(candidate);
+    }
+    for (let i = 0; i < 15; i++) {
+      const suffix = `-${Math.random().toString(36).slice(2, 7)}`;
       const candidate = base.slice(0, MAX_SLUG_LEN - suffix.length) + suffix;
       if (!variants.includes(candidate)) variants.push(candidate);
     }

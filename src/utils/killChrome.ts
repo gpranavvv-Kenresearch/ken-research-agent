@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { gracefulKillByNeedle } from './procKill.js';
 
 /**
  * Kill any Chrome processes that are using the given user-data-dir profile,
@@ -26,8 +27,12 @@ export function killChromeForProfile(sessionDir: string): void {
         timeout: 10000,
       });
     } else {
-      // Linux/macOS — pkill any chromium process using this profile dir
-      execSync(`pkill -f "${absDir}" || true`, { stdio: 'pipe', timeout: 5000 });
+      // Linux/macOS — graceful kill of the Chrome process tree using this
+      // profile dir. Trailing space anchors `--user-data-dir=<dir> ` so e.g.
+      // "note-1" does NOT also match "note-10/11/12" (Chrome always has more
+      // args after user-data-dir, so the space is always present). Self-safe
+      // and SIGTERM-before-SIGKILL — see gracefulKillByNeedle.
+      gracefulKillByNeedle(`--user-data-dir=${absDir} `);
     }
   } catch {
     // Non-fatal — best effort

@@ -2,6 +2,7 @@
 import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
+import { STEALTH_ARGS, STEALTH_USER_AGENT, applyStealth } from '../../utils/stealth.js';
 
 const LINKMATE_ACCOUNTS_FILE = '.accounts/accounts-linkmate.json';
 const SESSION_ROOT = path.resolve('.sessions/linkmate');
@@ -82,38 +83,34 @@ export async function loginToLinkmate(options?: {
   console.log('   Launching Linkmate browser...');
 
   browserContext = await chromium.launchPersistentContext(sessionDir, {
-    // Linkmate (Mighty Networks) sits behind Cloudflare, which blocks headless
-    // Chrome outright (shows a "Just a moment..." challenge instead of the real
-    // site) regardless of stealth flags — confirmed by testing the same session
-    // headless vs headed. So this always runs headed, ignoring the HEADLESS toggle.
+    // Linkmate (Mighty Networks) sits behind Cloudflare, which challenges
+    // headless Chrome outright — confirmed live via the dashboard's remote-view
+    // (a Turnstile "Verify you are human" screen instead of the real site).
+    // Runs headed regardless of the HEADLESS toggle, plus the full stealth
+    // patch set below (STEALTH_ARGS/applyStealth) to remove the static
+    // JS-level automation signals Cloudflare's check looks for.
     headless: false,
     env: { ...process.env, DISPLAY: process.env.DISPLAY || ':99' },
     permissions: ['clipboard-read', 'clipboard-write'],
     executablePath: chromePath,
+    userAgent: STEALTH_USER_AGENT,
     viewport: { width: 1366, height: 900 },
     slowMo: 50,
     ignoreDefaultArgs: ['--enable-automation'],
     args: [
       '--start-minimized',
       ...(process.platform !== 'win32' ? ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] : []),
-      '--disable-blink-features=AutomationControlled',
+      ...STEALTH_ARGS,
       '--disable-renderer-backgrounding',
       '--disable-background-timer-throttling',
       '--disable-backgrounding-occluded-windows',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--disable-session-crashed-bubble',
-      '--disable-infobars',
       '--simulate-outdated-no-au=Tue, 31 Dec 2099 00:00:00 GMT',
       '--disable-component-update',
       '--disable-features=ChromeWhatsNewUI',
     ],
   });
 
-  await browserContext.addInitScript(() => {
-    Object.defineProperty((globalThis as any).navigator, 'webdriver', { get: () => false });
-    (globalThis as any).window.chrome = (globalThis as any).window.chrome || { runtime: {} };
-  });
+  await applyStealth(browserContext);
 
   // Minimize window immediately so it doesn't disturb the screen
   try {

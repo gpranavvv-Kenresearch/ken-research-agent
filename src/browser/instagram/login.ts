@@ -2,6 +2,8 @@
 import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
+import { getChromeLaunchArgs } from '../../utils/chromeArgs.js';
+import { killChromeForProfile } from '../../utils/killChrome.js';
 
 export interface InstagramAccount {
   nickname: string;
@@ -47,6 +49,7 @@ export async function loginToInstagram(account: InstagramAccount): Promise<Page>
   if (!fs.existsSync(chromePath)) {
     throw new Error(`Chrome not found at ${chromePath}. Set CHROME_PATH env var.`);
   }
+  killChromeForProfile(sessionDir);
 
   browserContext = await chromium.launchPersistentContext(sessionDir, {
     headless: process.env.HEADLESS !== 'false',
@@ -54,17 +57,7 @@ export async function loginToInstagram(account: InstagramAccount): Promise<Page>
     executablePath: chromePath,
     slowMo: 50,
     ignoreDefaultArgs: ['--enable-automation'],
-    args: [
-      '--start-minimized',
-      '--window-size=1366,768',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-renderer-backgrounding',
-      '--disable-background-timer-throttling',
-      '--disable-backgrounding-occluded-windows',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--disable-infobars',
-    ],
+    args: getChromeLaunchArgs({ extra: ['--window-size=1366,768'] }),
     viewport: { width: 1366, height: 768 },
   });
 

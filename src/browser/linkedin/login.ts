@@ -35,7 +35,34 @@ export function getLinkedInAccountByNickname(nickname: string): LinkedInAccount 
   // silently failing to find a real, existing session.
   const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
   const target = normalize(nickname);
-  return getLinkedInAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
+  const accounts = getLinkedInAccounts();
+  const exact = accounts.find(a => a.nickname && normalize(a.nickname) === target);
+  if (exact) return exact;
+
+  // Fleet nicknames are "{agent} {index}", and the same index is reused across every
+  // platform for a given row — but LinkedIn may have fewer registered accounts than
+  // other platforms (e.g. a row says "abhinav 10" but LinkedIn only has 1-8 set up).
+  // Confirmed live: this caused both regular LinkedIn and LinkedIn Pulse to fail
+  // identically with "account not found" for every row assigned an out-of-range
+  // index. Wrap the requested index into whatever range LinkedIn actually has,
+  // same pattern as the Note account lookup.
+  const m = nickname.trim().match(/^(.+?)\s*(\d+)$/);
+  if (!m) return null;
+  const [, agent, idxStr] = m;
+  const agentNorm = normalize(agent);
+  const agentAccounts = accounts
+    .map((a) => {
+      const am = (a.nickname || '').trim().match(/^(.+?)\s*(\d+)$/);
+      return am && normalize(am[1]) === agentNorm ? { account: a, index: Number(am[2]) } : null;
+    })
+    .filter((x): x is { account: LinkedInAccount; index: number } => x !== null)
+    .sort((a, b) => a.index - b.index);
+  if (!agentAccounts.length) return null;
+
+  const wrappedPos = (((Number(idxStr) - 1) % agentAccounts.length) + agentAccounts.length) % agentAccounts.length;
+  const wrapped = agentAccounts[wrappedPos];
+  console.log(`   ℹ️ LinkedIn: "${nickname}" not registered — wrapped to "${wrapped.account.nickname}" (LinkedIn only has ${agentAccounts.length} account(s) for "${agent.trim()}")`);
+  return wrapped.account;
 }
 
 function sessionDirFor(username: string): string {

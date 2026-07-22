@@ -45,6 +45,8 @@ import {
   runWeeklySerpRecheck, runSundayExamination, resetBatchCounters,
 } from './coordinator/masterCoordinator.js';
 import { startCycle, stopCycle } from './login-portal/blogCycle.js';
+import { closeAllBrowsers } from './tools/browserTools.js';
+import { killPostingChrome } from './utils/procKill.js';
 
 // Which agent's blog-generation session runs during the posting gaps.
 const BLOG_GEN_AGENT = process.env.WORKER_NAME || 'abhinav';
@@ -134,6 +136,18 @@ async function runStage(stageIndex: number, statusFile: string = STATUS_FILE): P
       await withTimeout(platform.run(lapNum), PLATFORM_TIMEOUT_MS, platform.label);
     } catch (err: any) {
       console.error(`[Stage ${stageIndex + 1}] ${platform.label} error: ${err.message}`);
+    } finally {
+      // Hard teardown after EVERY platform — success, error, or timeout. On a
+      // timeout `withTimeout` only abandoned the promise; the batch's browser
+      // (and any orphan it left) is still alive. Best-effort close the
+      // browserTools singletons, then sweep-kill any Chrome still holding a
+      // posting profile dir. This is what stops the zombie pileup.
+      try {
+        await withTimeout(closeAllBrowsers(), 30_000, 'closeAllBrowsers');
+      } catch (e: any) {
+        console.error(`[Stage ${stageIndex + 1}] closeAllBrowsers after ${platform.label}: ${e.message}`);
+      }
+      killPostingChrome();
     }
   }
   console.log(`[${nowIst()}] ◀ Stage ${stageIndex + 1}/5 complete.`);
@@ -214,27 +228,31 @@ export async function startCoordinatorDaemon(immediate: boolean = false): Promis
     try { await runSundayExamination(); } catch (err: any) { console.error(`[Sunday Failed Posts Examination] Error: ${err.message}`); }
   }, { timezone: tz });
 
-  // ── Posting: fresh Stage 1 start at 11:00 AM AND 11:00 PM IST ─────────────
-  cron.schedule('0 11 * * *', () => startDailyLoop(), { timezone: tz });
+  // ── Posting: fresh Stage 1 start THREE times a day — 07:00, 15:00, 23:00 IST
+  // (8h apart). A full 5-stage lap (4×30-min gaps + posting) is ~3-4h, so each
+  // session finishes well inside its 8h window before the next fires. ─────────
+  cron.schedule('0 7 * * *', () => startDailyLoop(), { timezone: tz });
+  cron.schedule('0 15 * * *', () => startDailyLoop(), { timezone: tz });
   cron.schedule('0 23 * * *', () => startDailyLoop(), { timezone: tz });
 
-  // ── Safety-net buffer: stop blog generation at 10:30 (AM/PM) even if a
-  // posting session somehow finished late and is still generating past the
-  // 30-min buffer before the next 11:00 session. ─────────────────────────
+  // ── Safety-net buffer: stop blog generation 30 min before EACH of the three
+  // posting sessions (06:30, 14:30, 22:30), so a session never has to fight the
+  // blog-gen ChatGPT browser for the box. ────────────────────────────────────
   const stopBlogGenBuffer = (label: string) => {
     const result = stopCycle(BLOG_GEN_AGENT);
     if (result.stopped) console.log(`[${nowIst()}] ${label} — stopped blog generation (30 min buffer before next posting session).`);
   };
-  cron.schedule('30 10 * * *', () => stopBlogGenBuffer('10:30 AM'), { timezone: tz });
-  cron.schedule('30 22 * * *', () => stopBlogGenBuffer('10:30 PM'), { timezone: tz });
+  cron.schedule('30 6 * * *', () => stopBlogGenBuffer('06:30'), { timezone: tz });
+  cron.schedule('30 14 * * *', () => stopBlogGenBuffer('14:30'), { timezone: tz });
+  cron.schedule('30 22 * * *', () => stopBlogGenBuffer('22:30'), { timezone: tz });
 
-  console.log(`Coordinator Scheduler Started — 5-stage narrowing posting sessions at 11:00 AM and 11:00 PM IST, 30 min between stages, continuous blog generation fills the gaps until 10:30.\n`);
+  console.log(`Coordinator Scheduler Started — 5-stage narrowing posting sessions at 07:00, 15:00 and 23:00 IST, 30 min between stages, continuous blog generation fills the gaps.\n`);
 
   if (immediate) {
-    console.log(`[${nowIst()}] Immediate run requested — starting a posting session now instead of waiting for the next 11:00 AM/PM trigger.`);
+    console.log(`[${nowIst()}] Immediate run requested — starting a posting session now instead of waiting for the next 07:00/15:00/23:00 trigger.`);
     startDailyLoop();
   } else {
-    console.log(`[${nowIst()}] Cron-only start — waiting for the next 11:00 AM/PM trigger. No posting session started now.`);
+    console.log(`[${nowIst()}] Cron-only start — waiting for the next 07:00/15:00/23:00 trigger. No posting session started now.`);
   }
 }
 

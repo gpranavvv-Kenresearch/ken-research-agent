@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
 import { killChromeForProfile } from '../../utils/killChrome.js';
+import { getChromeLaunchArgs } from '../../utils/chromeArgs.js';
 
 const NOTE_ACCOUNTS_FILE = '.accounts/accounts-note.json';
 const SESSION_ROOT = path.resolve('.sessions/note');
@@ -28,7 +29,33 @@ export function getActiveNoteAccount(): NoteAccount | null {
 export function getNoteAccountByNickname(nickname: string): NoteAccount | null {
   const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
   const target = normalize(nickname);
-  return getNoteAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
+  const accounts = getNoteAccounts();
+  const exact = accounts.find(a => a.nickname && normalize(a.nickname) === target);
+  if (exact) return exact;
+
+  // Fleet nicknames are "{agent} {index}", and the same index is reused across every
+  // platform for a given row — but Note may have fewer registered accounts than other
+  // platforms (e.g. a row says "abhinav 10" but Note only has 1-6 set up). Rather than
+  // failing that row outright for Note specifically, wrap the requested index into
+  // whatever range Note actually has. Uneven load on the smaller pool, but that beats a
+  // guaranteed failure every time a row's index exceeds Note's account count.
+  const m = nickname.trim().match(/^(.+?)\s*(\d+)$/);
+  if (!m) return null;
+  const [, agent, idxStr] = m;
+  const agentNorm = normalize(agent);
+  const agentAccounts = accounts
+    .map((a) => {
+      const am = (a.nickname || '').trim().match(/^(.+?)\s*(\d+)$/);
+      return am && normalize(am[1]) === agentNorm ? { account: a, index: Number(am[2]) } : null;
+    })
+    .filter((x): x is { account: NoteAccount; index: number } => x !== null)
+    .sort((a, b) => a.index - b.index);
+  if (!agentAccounts.length) return null;
+
+  const wrappedPos = (((Number(idxStr) - 1) % agentAccounts.length) + agentAccounts.length) % agentAccounts.length;
+  const wrapped = agentAccounts[wrappedPos];
+  console.log(`   ℹ️ Note: "${nickname}" not registered — wrapped to "${wrapped.account.nickname}" (Note only has ${agentAccounts.length} account(s) for "${agent.trim()}")`);
+  return wrapped.account;
 }
 
 function sessionDirFor(email: string): string {
@@ -92,18 +119,7 @@ export async function loginToNote(options?: {
     viewport: { width: 1280, height: 800 },
     slowMo: 120,
     ignoreDefaultArgs: ['--enable-automation'],
-    args: [
-      '--start-minimized',
-      '--window-size=1366,768',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-renderer-backgrounding',
-      '--disable-background-timer-throttling',
-      '--disable-backgrounding-occluded-windows',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--disable-session-crashed-bubble',
-      '--disable-infobars',
-    ],
+    args: getChromeLaunchArgs({ extra: ['--window-size=1366,768'] }),
   });
 
   await browserContext.addInitScript(() => {

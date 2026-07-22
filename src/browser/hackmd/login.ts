@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
 import { killChromeForProfile } from '../../utils/killChrome.js';
+import { getChromeLaunchArgs } from '../../utils/chromeArgs.js';
 
 const HACKMD_ACCOUNTS_FILE = '.accounts/accounts-hackmd.json';
 const SESSION_ROOT = path.resolve('.sessions/hackmd');
@@ -124,18 +125,7 @@ export async function loginToHackMD(options?: {
     viewport: { width: 1280, height: 800 },
     slowMo: 120,
     ignoreDefaultArgs: ['--enable-automation'],
-    args: [
-      '--start-minimized',
-      '--window-size=1366,768',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-renderer-backgrounding',
-      '--disable-background-timer-throttling',
-      '--disable-backgrounding-occluded-windows',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--disable-session-crashed-bubble',
-      '--disable-infobars',
-    ],
+    args: getChromeLaunchArgs({ extra: ['--window-size=1366,768'] }),
   });
 
   await browserContext.addInitScript(() => {

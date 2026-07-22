@@ -2,6 +2,9 @@
 import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
+import { getChromeLaunchArgs } from '../../utils/chromeArgs.js';
+import { killChromeForProfile } from '../../utils/killChrome.js';
+import { blockHeavyResources } from '../../utils/blockResources.js';
 
 const DEVTO_ACCOUNTS_FILE = '.accounts/accounts-devto.json';
 
@@ -146,6 +149,7 @@ export async function loginToDevto(options?: {
   fs.mkdirSync(sessionDir, { recursive: true });
 
   console.log(`   Dev.to session: ${sessionDir} (${account.email})`);
+  killChromeForProfile(sessionDir);
 
   browserContext = await chromium.launchPersistentContext(sessionDir, {
     headless: process.env.HEADLESS !== 'false',
@@ -155,18 +159,10 @@ export async function loginToDevto(options?: {
     viewport: { width: 1366, height: 900 },
     slowMo: 50,
     ignoreDefaultArgs: ['--enable-automation'],
-    args: [
-      '--start-minimized',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-renderer-backgrounding',
-      '--disable-background-timer-throttling',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--disable-session-crashed-bubble',
-      '--disable-infobars',
-    ],
+    args: getChromeLaunchArgs(),
   });
 
+  await blockHeavyResources(browserContext, 'devto');
   await browserContext.addInitScript(() => {
     Object.defineProperty((globalThis as any).navigator, 'webdriver', { get: () => false });
   });

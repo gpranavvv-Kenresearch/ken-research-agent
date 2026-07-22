@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
 import { killChromeForProfile } from '../../utils/killChrome';
+import { getChromeLaunchArgs } from '../../utils/chromeArgs.js';
 
 const PARAGRAPH_ACCOUNTS_FILE = '.accounts/accounts-paragraph.json';
 const SESSION_ROOT = path.resolve('.sessions/paragraph');
@@ -79,7 +80,7 @@ export async function loginToParagraph(options?: {
     viewport: { width: 1280, height: 720 },
     slowMo: 50,
     ignoreDefaultArgs: ['--enable-automation'],
-    args: ['--disable-infobars'],
+    args: getChromeLaunchArgs(),
   });
 
   await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);

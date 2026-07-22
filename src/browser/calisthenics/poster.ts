@@ -15,29 +15,20 @@ export interface CalisthenicsPostParams {
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 async function attemptPost(page: Page, params: CalisthenicsPostParams): Promise<string> {
-  // ── Step 1: Navigate to home and wait for Create button ───────────────────
-  console.log('  1️⃣ Navigating to home...');
-  await page.goto('https://calisthenics.mn.co/', { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForSelector('button[aria-label="Create content"], a[title="Create"]', { timeout: 30000 });
+  // ── Step 1: Go straight to the article composer ────────────────────────────
+  // The old flow (home → click Create → pick a space → click Article) relied on
+  // selectors from an older Mighty Networks UI that no longer exist. A bare
+  // `/posts/new` also doesn't work — it redirects to /feed with an "Articles
+  // are not enabled" toast, because the real "Article" menu link's actual href
+  // is the space's feed URL with a `?new_post=true` query param (confirmed live
+  // by inspecting the real DOM: `a.mighty-menu-list-item[title="Article"]`
+  // points at `/spaces/9350032/feed?new_post=true`, which the app then
+  // client-side-routes to `/posts/new` with the Article editor actually open).
+  // `9350032` is this community's fixed "Home" space id, not per-account.
+  console.log('  1️⃣ Navigating directly to the article composer...');
+  await page.goto('https://calisthenics.mn.co/spaces/9350032/feed?new_post=true', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await sleep(5000);
 
-  console.log('  2️⃣ Clicking Create...');
-  await page.click('button[aria-label="Create content"], a[title="Create"]');
-  await sleep(800);
-
-  // ── Step 2: Select space ───────────────────────────────────────────────────
-  console.log('  3️⃣ Selecting space...');
-  const spaceItem = await page.waitForSelector('span.text-color-title-link.space-name.result-item', { timeout: 10000 }).catch(() => null);
-  if (spaceItem) {
-    await spaceItem.click();
-    await sleep(800);
-  } else {
-    console.warn('   ⚠️ Space item not found — proceeding');
-  }
-
-  // ── Step 3: Click Article ──────────────────────────────────────────────────
-  console.log('  4️⃣ Selecting Article...');
-  await page.waitForSelector('a[title="Article"]', { timeout: 15000 });
-  await page.click('a[title="Article"]');
   // Wait for the article editor to fully load (title + body editors must appear)
   await page.waitForSelector('p[data-placeholder="Title"]', { timeout: 30000 });
 

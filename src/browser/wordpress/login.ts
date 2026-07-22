@@ -2,6 +2,7 @@
 import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
+import { blockHeavyResources } from '../../utils/blockResources.js';
 
 const WORDPRESS_ACCOUNTS_FILE = '.accounts/accounts-wordpress.json';
 const SESSION_ROOT = path.resolve('.sessions/wordpress');
@@ -102,6 +103,7 @@ export async function loginToWordpress(options?: {
     ],
   });
 
+  await blockHeavyResources(browserContext, 'wordpress');
   await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);
 
   await browserContext.addInitScript(() => {

@@ -7,7 +7,7 @@ export async function postToAmeba(
   page: Page,
   title: string,
   htmlContent: string,
-): Promise<{ success: true; postUrl: string; postedAt: Date }> {
+): Promise<{ success: boolean; postUrl?: string; error?: string; postedAt?: Date }> {
   // Minimize browser
   try {
     const cdp = await page.context().newCDPSession(page);
@@ -22,6 +22,18 @@ export async function postToAmeba(
   console.log('   Navigating to Ameba composer...');
   await page.goto('https://blog.ameba.jp/ucs/entry/srventryinsertinput.do', { waitUntil: 'domcontentloaded', timeout: 30000 });
   await sleep(4000);
+
+  // If a previous session left an unsaved draft (e.g. a prior run that didn't
+  // finish cleanly), Ameba shows a "restore draft?" modal that blocks every
+  // click on the page underneath it, including the title field — confirmed
+  // live as the actual cause of a hang here. Always start a fresh post rather
+  // than restoring whatever was left over.
+  const restoreModal = page.locator('.p-restore-modal').first();
+  if (await restoreModal.isVisible({ timeout: 3000 }).catch(() => false)) {
+    console.log('   Dismissing "restore draft?" modal...');
+    await page.locator('button.js-restoreModal-cancel').first().click({ timeout: 5000 }).catch(() => {});
+    await sleep(1000);
+  }
 
   // Step 2: Fill title
   console.log('   Filling title...');
@@ -148,6 +160,29 @@ export async function postToAmeba(
   console.log('   Clicking Publish...');
   const popupPromise = page.context().waitForEvent('page', { timeout: 20000 }).catch(() => null);
   await clickPublish();
+
+  // Ameba shows a "CoverConfirmModal" ("Let's try setting the cover") after the
+  // Post click whenever no cover image was set — the actual publish request never
+  // fires until "Post without cover" is clicked. Confirmed live: without this, the
+  // Post button click is a no-op from the server's perspective (no request ever
+  // reaches srventryinsertend.do), which is why publish silently produced nothing.
+  let dismissedCoverModal = false;
+  for (let attempt = 0; attempt < 8 && !dismissedCoverModal; attempt++) {
+    await sleep(1000);
+    dismissedCoverModal = await page.evaluate(() => {
+      const modal = document.querySelector('[class*="CoverConfirmModal"]');
+      if (!modal) return false;
+      const root = modal.closest('[class*="ucsCommonModal"]') || modal;
+      const btn = Array.from(root.querySelectorAll('button')).find(
+        b => /post without cover/i.test((b.textContent || '').trim())
+      ) as HTMLButtonElement | undefined;
+      if (!btn) return false;
+      btn.click();
+      return true;
+    }).catch(() => false);
+  }
+  console.log(`   Cover-modal dismissal attempted — dismissed: ${dismissedCoverModal}`);
+
   const successPopup = await popupPromise;
   if (successPopup) {
     await successPopup.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
@@ -175,17 +210,29 @@ export async function postToAmeba(
     } catch { /* try next */ }
   }
 
-  // Fallbacks — try canonical / URL on any live page
+  // Fallbacks — try canonical / URL on any live page. Both of these still
+  // require a URL that actually looks like a specific blog entry — a bare
+  // domain (e.g. the Ameba homepage) is not evidence a post was created.
   if (!postUrl) {
     for (const p of page.context().pages()) {
       if (p.isClosed()) continue;
       const canonical = await p.$eval('link[rel="canonical"]', el => el.getAttribute('href') ?? '').catch(() => '');
-      if (canonical && canonical.includes('ameba')) { postUrl = canonical; break; }
+      if (canonical && /entry-\d+/.test(canonical)) { postUrl = canonical; break; }
       const u = p.url();
       if (u && u.includes('ameblo.jp/') && /entry-\d+/.test(u)) { postUrl = u; break; }
     }
   }
-  if (!postUrl) postUrl = page.isClosed() ? '' : page.url();
+
+  // No real entry URL found anywhere (no popup, no canonical, no matching page
+  // URL) — this is NOT a success. Returning `success: true` with a placeholder
+  // like the bare homepage was a false positive: the sheet would mark the row
+  // "Posted" with nothing actually published. Report failure instead so the
+  // row gets retried.
+  if (!postUrl) {
+    const msg = 'Could not confirm a real post URL after publishing (no success popup, no matching canonical/page URL)';
+    console.warn(`   ❌ Ameba post not confirmed: ${msg}`);
+    return { success: false, error: msg };
+  }
 
   console.log(`   ✅ Posted to Ameba: ${postUrl}`);
   return { success: true, postUrl, postedAt: new Date() };

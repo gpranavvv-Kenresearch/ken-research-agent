@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
 import { killChromeForProfile } from '../../utils/killChrome.js';
+import { blockHeavyResources } from '../../utils/blockResources.js';
 
 let browserContext: BrowserContext | null = null;
 let loginPage: Page | null = null;
@@ -50,6 +51,8 @@ async function launchPersistentChrome(profileDir: string): Promise<{ context: Br
     Object.defineProperty(navigator, 'webdriver', { get: () => false });
     (window as any).chrome = (window as any).chrome || { runtime: {} };
   });
+
+  await blockHeavyResources(context, 'x');
 
   const pages = context.pages();
   const page = pages[0] || await context.newPage();

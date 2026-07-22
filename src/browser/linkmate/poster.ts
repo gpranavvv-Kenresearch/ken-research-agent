@@ -41,24 +41,18 @@ export async function postToLinkmate(
       contentWithUtm = $.html();
     }
 
-    // Wait for Create button then click
-    console.log('   Navigating to Linkmate composer...');
-    await page.waitForSelector('button[aria-label="Create content"], a[title="Create"]', { timeout: 30000 });
-    await page.locator('button[aria-label="Create content"], a[title="Create"]').first().click({ delay: 150 });
-    await sleep(800);
+    // Go straight to the article composer. The old flow (click Create → pick a
+    // space → click Article) relied on selectors from an older Mighty Networks
+    // UI that no longer exist. A bare `/posts/new` also doesn't work — the real
+    // "Article" menu link's actual href is the space's feed URL with a
+    // `?new_post=true` query param (confirmed live: `a.mighty-menu-list-item
+    // [title="Article"]` points at `/spaces/9350115/feed?new_post=true`, which
+    // the app then client-side-routes to `/posts/new` with the editor open).
+    // `9350115` is this community's fixed "Daily Quest" space id, not per-account.
+    console.log('   Navigating directly to the article composer...');
+    await page.goto('https://linkmate.mn.co/spaces/9350115/feed?new_post=true', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await sleep(5000);
 
-    // Click on space name
-    console.log('   Selecting space...');
-    const spaceBtn = await page.waitForSelector('span.text-color-title-link.space-name.result-item', { timeout: 10000 }).catch(() => null);
-    if (spaceBtn) {
-      await spaceBtn.click();
-      await sleep(800);
-    }
-
-    // Click Article and wait for editor
-    console.log('   Clicking Article...');
-    await page.waitForSelector('a[title="Article"]', { timeout: 15000 });
-    await page.locator('a[title="Article"]').first().click({ delay: 150 });
     // Wait for title editor to signal the article editor is fully loaded
     await page.waitForSelector('p[data-placeholder="Title"]', { timeout: 30000 });
 

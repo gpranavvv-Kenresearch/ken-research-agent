@@ -2,6 +2,7 @@
 import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
+import { blockHeavyResources } from '../../utils/blockResources.js';
 
 const GOOGLESITE_ACCOUNTS_FILE = '.accounts/accounts-googlesite.json';
 const SESSION_ROOT = path.resolve('.sessions/googlesite');
@@ -109,6 +110,7 @@ export async function loginToGoogleSite(options?: {
     ],
   });
 
+  await blockHeavyResources(browserContext, 'googlesite');
   await browserContext.addInitScript(() => {
     Object.defineProperty((globalThis as any).navigator, 'webdriver', { get: () => false });
     (globalThis as any).window.chrome = (globalThis as any).window.chrome || { runtime: {} };

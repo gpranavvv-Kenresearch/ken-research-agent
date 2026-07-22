@@ -2,6 +2,9 @@
 import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
+import { getChromeLaunchArgs } from '../../utils/chromeArgs.js';
+import { killChromeForProfile } from '../../utils/killChrome.js';
+import { blockHeavyResources } from '../../utils/blockResources.js';
 
 const BLOGGER_ACCOUNTS_FILE = '.accounts/accounts-blogger.json';
 const SESSION_ROOT = path.resolve('.sessions/blogger');
@@ -81,6 +84,7 @@ export async function loginToBlogger(options?: {
 
   console.log(`   Using session folder: ${sessionDir}`);
   console.log('   Launching Blogger browser...');
+  killChromeForProfile(sessionDir);
 
   browserContext = await chromium.launchPersistentContext(sessionDir, {
     headless: process.env.HEADLESS !== 'false',
@@ -88,18 +92,10 @@ export async function loginToBlogger(options?: {
     viewport: null,
     slowMo: 50,
     ignoreDefaultArgs: ['--enable-automation'],
-    args: [
-      '--disable-blink-features=AutomationControlled',
-      '--disable-renderer-backgrounding',
-      '--disable-background-timer-throttling',
-      '--disable-backgrounding-occluded-windows',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--disable-session-crashed-bubble',
-      '--disable-infobars',
-    ],
+    args: getChromeLaunchArgs(),
   });
 
+  await blockHeavyResources(browserContext, 'blogger');
   await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);
 
   await browserContext.addInitScript(() => {

@@ -3,6 +3,7 @@ import { humanDelay } from '../stagehand.js';
 import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
+import { blockHeavyResources } from '../../utils/blockResources.js';
 
 const FACEBOOK_ACCOUNTS_FILE = '.accounts/facebook-accounts.json';
 
@@ -119,6 +120,7 @@ export async function loginToFacebook(options?: {
     viewport: { width: 1280, height: 800 },
   });
 
+  await blockHeavyResources(browserContext, 'facebook');
   await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);
 
   await browserContext.addInitScript(() => {

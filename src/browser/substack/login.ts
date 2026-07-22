@@ -28,7 +28,32 @@ export function getActiveSubstackAccount(): SubstackAccount | null {
 export function getSubstackAccountByNickname(nickname: string): SubstackAccount | null {
   const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '');
   const target = normalize(nickname);
-  return getSubstackAccounts().find(a => a.nickname && normalize(a.nickname) === target) || null;
+  const accounts = getSubstackAccounts();
+  const exact = accounts.find(a => a.nickname && normalize(a.nickname) === target);
+  if (exact) return exact;
+
+  // Fleet nicknames are "{agent} {index}", and the same index is reused across every
+  // platform for a given row — but Substack may have fewer registered accounts than
+  // other platforms (e.g. a row says "abhinav 10" but Substack only has 1-4 set up).
+  // Wrap the requested index into whatever range Substack actually has, same pattern
+  // as the Note/LinkedIn/X account lookups.
+  const m = nickname.trim().match(/^(.+?)\s*(\d+)$/);
+  if (!m) return null;
+  const [, agent, idxStr] = m;
+  const agentNorm = normalize(agent);
+  const agentAccounts = accounts
+    .map((a) => {
+      const am = (a.nickname || '').trim().match(/^(.+?)\s*(\d+)$/);
+      return am && normalize(am[1]) === agentNorm ? { account: a, index: Number(am[2]) } : null;
+    })
+    .filter((x): x is { account: SubstackAccount; index: number } => x !== null)
+    .sort((a, b) => a.index - b.index);
+  if (!agentAccounts.length) return null;
+
+  const wrappedPos = (((Number(idxStr) - 1) % agentAccounts.length) + agentAccounts.length) % agentAccounts.length;
+  const wrapped = agentAccounts[wrappedPos];
+  console.log(`   ℹ️ Substack: "${nickname}" not registered — wrapped to "${wrapped.account.nickname}" (Substack only has ${agentAccounts.length} account(s) for "${agent.trim()}")`);
+  return wrapped.account;
 }
 
 function sessionDirFor(email: string): string {

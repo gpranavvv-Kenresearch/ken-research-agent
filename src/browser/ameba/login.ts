@@ -87,7 +87,7 @@ export async function loginToAmeba(options?: {
     slowMo: 50,
     ignoreDefaultArgs: ['--enable-automation'],
     args: [
-      '--start-minimized',
+      ...(process.env.AMEBA_NO_MINIMIZE === '1' ? [] : ['--start-minimized']),
       ...(process.platform !== 'win32' ? ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] : []),
       '--disable-blink-features=AutomationControlled',
       '--disable-renderer-backgrounding',

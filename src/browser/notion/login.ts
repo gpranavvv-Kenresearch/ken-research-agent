@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
 import { killChromeForProfile } from '../../utils/killChrome.js';
+import { blockHeavyResources } from '../../utils/blockResources.js';
 
 const NOTION_ACCOUNTS_FILE = '.accounts/accounts-notion.json';
 const SESSION_ROOT = path.resolve('.sessions/notion');
@@ -110,6 +111,7 @@ export async function loginToNotion(options?: { nickname?: string }): Promise<Pa
     ],
   });
 
+  await blockHeavyResources(browserContext, 'notion');
   await browserContext.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => false });
     (window as any).chrome = (window as any).chrome || { runtime: {} };
