@@ -4,6 +4,7 @@ import fs from 'fs';
 import 'dotenv/config';
 import { killChromeForProfile } from '../../utils/killChrome.js';
 import { getChromeLaunchArgs } from '../../utils/chromeArgs.js';
+import { identityLaunchOverrides } from '../../health/proxyPool.js';
 
 const NOTE_ACCOUNTS_FILE = '.accounts/accounts-note.json';
 const SESSION_ROOT = path.resolve('.sessions/note');
@@ -120,6 +121,9 @@ export async function loginToNote(options?: {
     slowMo: 120,
     ignoreDefaultArgs: ['--enable-automation'],
     args: getChromeLaunchArgs({ extra: ['--window-size=1366,768'] }),
+    // New accounts only: stable per-account fingerprint (+ proxy once configured).
+    // Established sessions untouched (returns {}) to avoid device-change checkpoints.
+    ...identityLaunchOverrides(sessionDir, options?.nickname || account?.nickname || email),
   });
 
   await browserContext.addInitScript(() => {

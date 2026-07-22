@@ -2,6 +2,7 @@
 import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
+import { identityLaunchOverrides } from '../../health/proxyPool.js';
 
 const AMEBA_ACCOUNTS_FILE = '.accounts/accounts-ameba.json';
 const SESSION_ROOT = path.resolve('.sessions/ameba');
@@ -98,6 +99,9 @@ export async function loginToAmeba(options?: {
       '--disable-session-crashed-bubble',
       '--disable-infobars',
     ],
+    // New accounts only: stable per-account fingerprint (+ proxy once configured).
+    // Established sessions untouched (returns {}) to avoid device-change checkpoints.
+    ...identityLaunchOverrides(sessionDir, options?.nickname || (email as string)),
   });
 
   await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);
