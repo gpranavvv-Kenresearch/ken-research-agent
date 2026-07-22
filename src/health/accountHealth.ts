@@ -262,6 +262,11 @@ export function reactivate(platform: string, nickname: string): void {
   persist();
 }
 
+/** All ledger entries (for reports / A-B comparisons). */
+export function allAccounts(): AccountHealth[] {
+  return Object.values(load());
+}
+
 /** Snapshot for a dashboard / sheet / CLI. */
 export function summary(): { total: number; byStatus: Record<Status, number>; needsAttention: AccountHealth[] } {
   const l = load();
