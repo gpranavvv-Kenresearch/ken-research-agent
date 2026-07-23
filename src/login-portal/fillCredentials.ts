@@ -28,13 +28,14 @@ interface LoginForm {
 // calisthenics) are intentionally absent — they fall through to manual.
 const FORMS: Record<string, LoginForm> = {
   x: {
-    user: 'input[name="text"], input[autocomplete="username"]',
+    // X serves TWO login forms depending on client: the modern multi-step flow
+    // (input[name="text"] → Next → password) AND a legacy single-page form
+    // (input[name="username_or_email"] + password together). Match both.
+    user: 'input[name="username_or_email"], input[name="text"], input[autocomplete="username"]',
     userValue: c => c.username || c.handle,
-    // X shows either the /login "Next" step OR the "See what's happening" modal
-    // whose button says "Continue" — match both.
     next: 'button:has-text("Next"), button:has-text("Continue"), div[role="button"]:has-text("Next"), div[role="button"]:has-text("Continue")',
     pass: 'input[name="password"], input[autocomplete="current-password"]',
-    submit: 'div[data-testid="LoginForm_Login_Button"], div[role="button"]:has-text("Log in"), button:has-text("Log in")',
+    submit: 'div[data-testid="LoginForm_Login_Button"], input[type="submit"], div[role="button"]:has-text("Log in"), button:has-text("Log in")',
   },
   facebook: {
     user: 'input#email, input[name="email"]',
@@ -117,9 +118,12 @@ export async function fillCredentials(page: Page, platform: string, creds: Fleet
     await userEl.fill(user);
     log('username filled');
 
-    // Advance to the password step: click the Next/Continue button if present,
-    // else press Enter in the username field (X/most flows accept this).
-    if (form.next) {
+    const passEl = page.locator(form.pass).first();
+    // Only advance a step if the password field isn't already on the page. Some
+    // forms (X's legacy single-page form, most blog logins) show user+pass
+    // together; others (X multi-step, Notion) reveal the password after a click.
+    const passAlreadyThere = await passEl.isVisible().catch(() => false);
+    if (!passAlreadyThere && form.next) {
       const nextBtn = page.locator(form.next).first();
       if (await nextBtn.isVisible().catch(() => false)) {
         await nextBtn.click({ timeout: STEP_MS }).catch(() => userEl.press('Enter').catch(() => {}));
@@ -129,7 +133,6 @@ export async function fillCredentials(page: Page, platform: string, creds: Fleet
       await page.waitForTimeout(2500); // let the password step render
     }
 
-    const passEl = page.locator(form.pass).first();
     await passEl.waitFor({ state: 'visible', timeout: FIELD_MS });
     await passEl.fill(creds.password);
     log('password filled');
