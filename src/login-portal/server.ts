@@ -25,7 +25,7 @@ import {
 import {
   agentSessionDir, registerFleetAccount, listAgentStatus, nextIndex, sessionReadyForDir,
 } from './sessionResolver.js';
-import { startLogin, teardown, getLogin, sweepExpired, poolStatus, loginQueue } from './cdpLoginPool.js';
+import { startLogin, teardown, getLogin, sweepExpired, poolStatus, loginQueue } from './displayPool.js';
 import { verifyOrSetPin, mintToken, requireAgentToken } from './agentAuth.js';
 import { startCycle, stopCycle, cycleStatus } from './blogCycle.js';
 import { startPostCycle, stopPostCycle, postCycleStatus } from './postCycle.js';

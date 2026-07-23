@@ -14,7 +14,10 @@ import { spawn } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { DISPLAY_POOL, DisplaySlotDef, TOKEN_DIR, LOGIN_TTL_MS, CHROME_PATH } from './config.js';
+import { DISPLAY_POOL, DisplaySlotDef, TOKEN_DIR, LOGIN_TTL_MS, CHROME_PATH, PUBLIC_BASE_URL } from './config.js';
+import { tryAcquireBrowserSlot } from '../utils/browserSlots.js';
+import { STEALTH_USER_AGENT } from '../utils/stealth.js';
+import { isLoggedIn, fleetNickname } from './sessionResolver.js';
 
 interface ActiveLogin {
   token: string;
@@ -25,6 +28,21 @@ interface ActiveLogin {
   sessionDir: string;
   pids: number[];      // spawned process group leaders (Xvfb, x11vnc, chrome)
   expiresAt: number;
+  release: () => void; // frees the box-wide browser slot (see tryAcquireBrowserSlot)
+}
+
+/**
+ * The dashboard runs in the operator's browser, so the noVNC client URL must go
+ * through the public HTTPS tunnel (Tailscale Funnel → Nginx → shared websockify
+ * on 6090), never a bare localhost. websockify's TokenFile plugin routes the
+ * WebSocket to this login's private x11vnc port by the ?token= we wrote to
+ * TOKEN_DIR. Real VNC input (not synthetic CDP events) is what makes CAPTCHAs
+ * and every login behave exactly as on a normal machine.
+ */
+function buildNovncUrl(token: string): string {
+  const base = (PUBLIC_BASE_URL || 'http://localhost:6090').replace(/\/$/, '');
+  const wsPath = encodeURIComponent(`websockify?token=${token}`);
+  return `${base}/vnc.html?autoconnect=1&resize=scale&reconnect=1&path=${wsPath}`;
 }
 
 // This browser is a plain, raw Chrome process (spawned directly, no CDP/Playwright
@@ -101,8 +119,12 @@ function removeTokenFile(token: string): void {
 export interface StartedLogin {
   token: string;
   display: string;
+  viewerUrl: string;  // noVNC client URL the dashboard embeds/opens
   expiresAt: number;
   reused?: boolean;
+  // displayPool has no auto-fill (raw Chrome, no CDP), so a human always drives
+  // the login — kept for interface parity with the dashboard's queue.
+  state: 'needs-human';
 }
 
 /** Find an already-active login for this exact account (same profile dir), if any. */
@@ -132,11 +154,21 @@ export async function startLogin(params: {
   const existing = findActiveFor(params.agent, params.platform, params.index);
   if (existing) {
     existing.expiresAt = Date.now() + LOGIN_TTL_MS; // renew TTL on reuse
-    return { token: existing.token, display: existing.slot.display, expiresAt: existing.expiresAt, reused: true };
+    return {
+      token: existing.token, display: existing.slot.display,
+      viewerUrl: buildNovncUrl(existing.token), expiresAt: existing.expiresAt,
+      reused: true, state: 'needs-human',
+    };
   }
 
   const slot = freeSlot();
   if (!slot) throw new Error('POOL_EXHAUSTED');
+
+  // Respect the box-wide browser cap shared with the posting scheduler: refuse
+  // fast if a posting session holds the slot(s), so the portal can say "posting
+  // in progress, try again" instead of piling Chromes on and OOMing the box.
+  const release = await tryAcquireBrowserSlot(`login:${params.agent}/${params.platform}`);
+  if (!release) throw new Error('BOX_BUSY');
 
   busy.add(slot.display);
   const token = crypto.randomBytes(24).toString('hex');
@@ -172,24 +204,30 @@ export async function startLogin(params: {
     // 3) token routing for the shared websockify
     writeTokenFile(token, slot.vncPort);
 
-    // 4) real Chrome pointed at the login URL, using this account's profile dir
+    // 4) real Chrome pointed at the login URL, using this account's profile dir.
+    // Match the poster's user-agent so the session this login creates doesn't
+    // read as a "new device" when the poster later reuses the same profile
+    // (login + posting share the box/IP; UA is the cheap, high-value tell to
+    // align). Raw Chrome already has navigator.webdriver=false, so no CDP-side
+    // stealth patch is needed here.
     pids.push(spawnDetached(
       CHROME_PATH,
-      [...CHROME_ARGS, `--user-data-dir=${params.sessionDir}`, params.loginUrl],
+      [...CHROME_ARGS, `--user-agent=${STEALTH_USER_AGENT}`, `--user-data-dir=${params.sessionDir}`, params.loginUrl],
       { ...process.env, DISPLAY: slot.display },
     ));
 
     active.set(token, {
       token, slot, agent: params.agent, platform: params.platform,
-      index: params.index, sessionDir: params.sessionDir, pids, expiresAt,
+      index: params.index, sessionDir: params.sessionDir, pids, expiresAt, release,
     });
 
-    return { token, display: slot.display, expiresAt };
+    return { token, display: slot.display, viewerUrl: buildNovncUrl(token), expiresAt, state: 'needs-human' };
   } catch (err) {
     // best-effort cleanup on partial failure
     for (const pid of pids) killGroup(pid);
     removeTokenFile(token);
     busy.delete(slot.display);
+    release();
     throw err;
   }
 }
@@ -217,12 +255,45 @@ export async function teardown(token: string): Promise<boolean> {
 
   removeTokenFile(token);
   busy.delete(login.slot.display);
+  login.release(); // free the box-wide browser slot only after Chrome is dead
   active.delete(token);
   return true;
 }
 
 export function getLogin(token: string): ActiveLogin | undefined {
   return active.get(token);
+}
+
+export interface LoginQueueEntry {
+  token: string;
+  platform: string;
+  index: number;
+  nickname: string;
+  /** 'ready' = session is logged in on disk (safe to finish); 'needs-human' =
+   *  operator still has to type creds / clear a challenge over the VNC screen. */
+  status: 'ready' | 'needs-human';
+  novncUrl: string;
+  expiresAt: number;
+}
+
+/** Snapshot of this agent's live logins for the dashboard's "needs you" queue.
+ *  No auto-fill here, so each login is 'needs-human' until the on-disk session
+ *  actually shows logged-in, at which point it flips to 'ready'. */
+export function loginQueue(agent: string): LoginQueueEntry[] {
+  const out: LoginQueueEntry[] = [];
+  for (const login of active.values()) {
+    if (login.agent !== agent) continue;
+    out.push({
+      token: login.token,
+      platform: login.platform,
+      index: login.index,
+      nickname: fleetNickname(login.agent, login.index),
+      status: isLoggedIn(login.sessionDir, login.platform) ? 'ready' : 'needs-human',
+      novncUrl: buildNovncUrl(login.token),
+      expiresAt: login.expiresAt,
+    });
+  }
+  return out.sort((a, b) => a.platform.localeCompare(b.platform) || a.index - b.index);
 }
 
 /** Force-teardown any login past its TTL. Called on an interval by the server. */
