@@ -51,6 +51,10 @@ function buildNovncUrl(token: string): string {
 // here except trigger Chrome's own "unsupported command-line flag" warning bar.
 // Dropped so the login browser looks like a completely normal Chrome window.
 const CHROME_ARGS = [
+  // This VPS's Chrome sandbox doesn't initialize (every poster runs --no-sandbox
+  // for the same reason); without it Chrome exits immediately and the operator
+  // connects to a blank VNC desktop. Also matches the poster's fingerprint.
+  '--no-sandbox',
   '--no-first-run',
   '--no-default-browser-check',
   '--disable-gpu',
