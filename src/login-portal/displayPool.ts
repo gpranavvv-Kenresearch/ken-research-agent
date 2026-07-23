@@ -178,6 +178,15 @@ export async function startLogin(params: {
   try {
     fs.mkdirSync(params.sessionDir, { recursive: true });
 
+    // Clear any stale X lock/socket for this slot before spawning. teardown()
+    // SIGKILLs Xvfb (fast, but it leaves /tmp/.X<n>-lock behind), so a reused
+    // slot would otherwise hit "server already active for display" — Xvfb exits
+    // instantly and x11vnc/Chrome die with it, surfacing as noVNC's "Failed to
+    // connect". The slot is marked free here, so removing its lock is safe.
+    const dn = slot.display.replace(':', '');
+    fs.rmSync(`/tmp/.X${dn}-lock`, { force: true });
+    fs.rmSync(`/tmp/.X11-unix/X${dn}`, { force: true });
+
     // 1) virtual display — 1024x768 instead of 1280x900: ~32% fewer pixels for
     // x11vnc to scan/encode/transmit each frame, meaningfully snappier over the
     // tunnel on a 2-vCPU VPS, while still plenty readable for login flows.
