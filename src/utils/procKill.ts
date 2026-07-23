@@ -58,6 +58,10 @@ export function killPostingChrome(): void {
   const roots = [
     path.join(cwd, '.sessions') + path.sep,
     path.join(cwd, `.sessions-${worker}`) + path.sep,
+    // LinkedIn's persistent profiles live under their own root ('li-sessions',
+    // see browser/linkedin/login.ts) — NOT under .sessions/, so the two roots
+    // above never reap a hung LinkedIn Chrome. Sweep it explicitly.
+    path.join(cwd, 'li-sessions') + path.sep,
   ];
   for (const root of roots) {
     gracefulKillByNeedle(`--user-data-dir=${root}`);

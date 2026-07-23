@@ -73,10 +73,11 @@ function healthGate(platform: string, nickname: string): boolean {
   try {
     const g = healthCanPost(platform, nickname);
     if (g.ok) return true;
-    // Observe mode (default): log what WOULD be skipped but still post, so the
-    // ledger can be validated against real traffic first. Set HEALTH_ENFORCE=true
-    // to actually bench flagged accounts.
-    const enforce = process.env.HEALTH_ENFORCE === 'true';
+    // Enforce by default (production): an account over its daily cap or
+    // quarantined is actually skipped — this is the account-protection that lets
+    // volume scale without bans. Set HEALTH_ENFORCE=false to fall back to observe
+    // mode (log what WOULD be skipped but still post) when validating the ledger.
+    const enforce = process.env.HEALTH_ENFORCE !== 'false';
     console.log(`    ⏭ [health] ${enforce ? 'SKIP' : 'would-skip (observe)'} ${platform}/${nickname}: ${g.reason}`);
     return !enforce;
   } catch { return true; }
@@ -652,7 +653,9 @@ export async function runMediumBatch(batchNum: number = 1): Promise<void> {
         throw new Error(`Row ${row.rowIndex}: "New Name" column is empty — cannot post to Medium`);
       }
       console.log(`    Posting to Medium (account: ${mediumNickname})...`);
+      if (!healthGate('Medium', mediumNickname)) continue;
       const postResult = await retryOnSelectorTimeout(() => postToMediumAccount(mediumNickname, row.title || '', mediumPost), { label: 'Medium post' });
+      healthRecordSafe('Medium', mediumNickname, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
 
       if (postResult.success) {
 
@@ -774,7 +777,9 @@ export async function runLinkmateBatch(batchNum: number = 1): Promise<void> {
 
       // Post to Linkmate
       console.log(`    Posting to Linkmate (account: ${row.name})...`);
+      if (!healthGate('Linkmate', row.name)) continue;
       const postResult = await retryOnSelectorTimeout(() => postToLinkmateAccount(row.name, row.title || '', linkMateContent, row.seedKeyword), { label: 'Linkmate post' });
+      healthRecordSafe('Linkmate', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
 
       if (postResult.success) {
         await saveLinkmateBatchResult(row, {
@@ -893,7 +898,9 @@ export async function runGoogleSiteBatch(batchNum: number = 1): Promise<void> {
         throw new Error(`Row ${row.rowIndex}: "New Name" column is empty — cannot post to Google Sites`);
       }
       console.log(`    Posting to Google Sites (account: ${googleSiteNickname})...`);
+      if (!healthGate('Google Sites', googleSiteNickname)) continue;
       const postResult = await retryOnSelectorTimeout(() => postToGoogleSiteAccount(googleSiteNickname, row.title || '', googleSitePost, row.seedKeyword), { label: 'Google Sites post' });
+      healthRecordSafe('Google Sites', googleSiteNickname, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
 
       if (postResult.success) {
         await saveGoogleSiteBatchResult(row, {
@@ -1006,7 +1013,9 @@ export async function runDevtoBatch(batchNum: number = 1): Promise<void> {
 
       // 3. Post to Dev.to
       console.log(`    Posting to Dev.to (account: ${row.name})...`);
+      if (!healthGate('Dev.to', row.name)) continue;
       const postResult = await retryOnSelectorTimeout(() => postToDevtoAccount(row.name, row.title || '', devtoPost), { label: 'Dev.to post' });
+      healthRecordSafe('Dev.to', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
 
       if (postResult.success) {
         await saveDevtoBatchResult(row, {
@@ -1133,6 +1142,7 @@ export async function runLinkedinPulseBatch(batchNum: number = 1): Promise<void>
 
         // 3. Post to LinkedIn Pulse
         console.log(`      Posting to LinkedIn Pulse...`);
+        if (!healthGate('LinkedIn Pulse', accountName)) continue;
         const postResult = await retryOnSelectorTimeout(() => postToPulseAccount(
           accountName,
           pulseTitle,
@@ -1141,6 +1151,7 @@ export async function runLinkedinPulseBatch(batchNum: number = 1): Promise<void>
           pulseContent.seoDescription,
           pulseCaption
         ), { label: 'LinkedIn Pulse post' });
+        healthRecordSafe('LinkedIn Pulse', accountName, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
 
         if (postResult.success) {
           await saveLinkedinPulseBatchResult(row, {
@@ -1268,7 +1279,9 @@ export async function runCalisthenicsNBatch(batchNum: number = 1): Promise<void>
 
       // 3. Post to Calisthenics
       console.log(`    Posting to Calisthenics (account: ${row.name})...`);
+      if (!healthGate('Calisthenics', row.name)) continue;
       const postResult = await retryOnSelectorTimeout(() => postToCalisthenicsAccount(row.name, row.title || '', calisthenicsContent, row.seedKeyword), { label: 'Calisthenics post' });
+      healthRecordSafe('Calisthenics', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
 
       if (postResult.success) {
         await saveCalisthenicsResultBatch(row, {
@@ -1345,7 +1358,9 @@ export async function runSubstackBatch(batchNum: number = 1): Promise<void> {
       let substackContent = await generateSubstackPost(row);
       substackContent = ensureTargetUrl(substackContent, row.targetUrl);
       console.log(`    Posting to Substack (account: ${row.name})...`);
+      if (!healthGate('Substack', row.name)) continue;
       const postResult = await retryOnSelectorTimeout(() => postToSubstackAccount(row.name, row.title || '', substackContent), { label: 'Substack post' });
+      healthRecordSafe('Substack', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
 
       if (postResult.success) {
         await saveSubstackBatchResult(row, {
@@ -1412,7 +1427,9 @@ export async function runWordpressBatch(batchNum: number = 1): Promise<void> {
       let content = row.blogContent || await generateHackmdPost(row);
       content = ensureTargetUrl(content, row.targetUrl);
       const title = row.title;
+      if (!healthGate('WordPress', row.name)) continue;
       const r = await retryOnSelectorTimeout(() => postToWordpressAccount(row.name, title, content), { label: 'WordPress post' });
+      healthRecordSafe('WordPress', row.name, { success: r.success, error: r.error, reason: (r as any).reason });
       if (r.success) {
         await saveUnifiedWordpressResult(row, { postUrl: r.postUrl || '', status: 'Posted', batch: batchLabel });
         console.log(`    ✅ Posted → ${r.postUrl}`);
@@ -1461,7 +1478,9 @@ export async function runBloggerBatch(batchNum: number = 1): Promise<void> {
       if (row.targetUrl && !content.includes(row.targetUrl)) {
         content += `\n\n<p><a href="${row.targetUrl}">Read the full report on Ken Research</a></p>`;
       }
+      if (!healthGate('Blogger', row.name)) continue;
       const r = await retryOnSelectorTimeout(() => postToBloggerAccount(row.name, title, content), { label: 'Blogger post' });
+      healthRecordSafe('Blogger', row.name, { success: r.success, error: r.error, reason: (r as any).reason });
       if (r.success) {
         await saveUnifiedBloggerResult(row, { postUrl: r.postUrl || '', status: 'Posted', batch: batchLabel });
         console.log(`    ✅ Posted → ${r.postUrl}`);
@@ -1518,7 +1537,9 @@ export async function runHackmdBatch(batchNum: number = 1): Promise<void> {
       let hackmdContent = await generateHackmdPost(row);
       hackmdContent = ensureTargetUrl(hackmdContent, row.targetUrl);
       console.log(`    Posting to HackMD (account: ${row.name})...`);
+      if (!healthGate('HackMD', row.name)) continue;
       const postResult = await retryOnSelectorTimeout(() => postToHackmdAccount(row.title || '', hackmdContent, row.name, row.description || ''), { label: 'HackMD post' });
+      healthRecordSafe('HackMD', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
 
       if (postResult.success) {
         await saveHackmdBatchResult(row, {
@@ -1944,11 +1965,13 @@ export async function runPatreonBatch(batchNum: number = 1): Promise<void> {
         continue;
       }
       content = ensureTargetUrl(content, row.targetUrl);
+      if (!healthGate('Patreon', row.name)) continue;
       const postResult = await retryOnSelectorTimeout(async () => {
         const loginResult = await executeBrowserTool('login_patreon', { nickname: row.name });
         if (!loginResult.success) throw new Error(loginResult.error || 'Login failed');
         return executeBrowserTool('post_patreon', { title, htmlContent: content });
       }, { label: 'Patreon post' });
+      healthRecordSafe('Patreon', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
       if (postResult.success) {
         await saveUnifiedPatreonResult(row, { postUrl: postResult.postUrl || '', status: 'Posted', batch: batchLabel });
         console.log(`    ✅ Posted → ${postResult.postUrl}`);
@@ -1992,11 +2015,13 @@ export async function runNotionBatch(batchNum: number = 1): Promise<void> {
         continue;
       }
       content = ensureTargetUrl(content, row.targetUrl);
+      if (!healthGate('Notion', row.name)) continue;
       const postResult = await retryOnSelectorTimeout(async () => {
         const loginResult = await executeBrowserTool('login_notion', { nickname: row.name });
         if (!loginResult.success) throw new Error(loginResult.error || 'Login failed');
         return executeBrowserTool('post_notion', { title, htmlContent: content });
       }, { label: 'Notion post' });
+      healthRecordSafe('Notion', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
       if (postResult.success) {
         await saveUnifiedNotionResult(row, { postUrl: postResult.postUrl || '', status: 'Posted', batch: batchLabel });
         console.log(`    ✅ Posted → ${postResult.postUrl}`);
@@ -2040,11 +2065,13 @@ export async function runNoteBatch(batchNum: number = 1): Promise<void> {
         continue;
       }
       content = ensureTargetUrl(content, row.targetUrl);
+      if (!healthGate('Note', row.name)) continue;
       const postResult = await retryOnSelectorTimeout(async () => {
         const loginResult = await executeBrowserTool('login_note', { nickname: row.name });
         if (!loginResult.success) throw new Error(loginResult.error || 'Login failed');
         return executeBrowserTool('post_note', { title, htmlContent: content });
       }, { label: 'Note post' });
+      healthRecordSafe('Note', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
       if (postResult.success) {
         await saveUnifiedNoteResult(row, { postUrl: postResult.postUrl || '', status: 'Posted', batch: batchLabel });
         console.log(`    ✅ Posted → ${postResult.postUrl}`);
@@ -2089,6 +2116,7 @@ export async function runAmebaBatch(batchNum: number = 1): Promise<void> {
       content = ensureTargetUrl(content, row.targetUrl);
       const title = row.title || row.descriptionTitle || '';
 
+      if (!healthGate('Ameba', row.name)) continue;
       const r = await retryOnSelectorTimeout(async () => {
         const page = await loginToAmeba({ nickname: row.name });
         try {
@@ -2099,6 +2127,7 @@ export async function runAmebaBatch(batchNum: number = 1): Promise<void> {
           await closeAmebaBrowser();
         }
       }, { label: 'Ameba post' });
+      healthRecordSafe('Ameba', row.name, { success: r.success, error: (r as any).error, reason: (r as any).reason });
 
       if (r.success) {
         await saveUnifiedAmebaResult(row, { postUrl: r.postUrl || '', status: 'Posted', batch: batchLabel });
@@ -2490,11 +2519,13 @@ export async function runParagraphBatch(batchNum: number = 1): Promise<void> {
         continue;
       }
       content = ensureTargetUrl(content, row.targetUrl);
+      if (!healthGate('Paragraph', row.name)) continue;
       const postResult = await retryOnSelectorTimeout(async () => {
         const loginResult = await executeBrowserTool('login_paragraph', { nickname: row.name });
         if (!loginResult.success) throw new Error(loginResult.error || 'Login failed');
         return executeBrowserTool('post_paragraph', { title, htmlContent: content });
       }, { label: 'Paragraph post' });
+      healthRecordSafe('Paragraph', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
       if (postResult.success) {
         await saveUnifiedParagraphResult(row, { postUrl: postResult.postUrl || '', status: 'Posted', batch: batchLabel });
         console.log(`    ✅ Posted → ${postResult.postUrl}`);

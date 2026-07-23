@@ -15,7 +15,7 @@
  * Stage 2 (13): drop LinkedIn Pulse, Medium
  * Stage 3 (8):  drop Note, Blogger, WordPress, Paragraph, Ameba
  * Stage 4 (5):  drop LinkedIn (post), Linkmate, Calisthenics
- * Stage 5 (2):  drop Google Sites, HackMD, Notion  →  X + Facebook only
+ * Stage 5 (3):  drop HackMD, Notion  →  X + Facebook + Google Sites
  *
  * The moment a posting session finishes (Stage 5 done), continuous blog
  * generation starts automatically (the same "Blog Cycle" loop the dashboard's
@@ -47,6 +47,7 @@ import {
 import { startCycle, stopCycle } from './login-portal/blogCycle.js';
 import { closeAllBrowsers } from './tools/browserTools.js';
 import { killPostingChrome } from './utils/procKill.js';
+import { acquireBrowserSlot } from './utils/browserSlots.js';
 
 // Which agent's blog-generation session runs during the posting gaps.
 const BLOG_GEN_AGENT = process.env.WORKER_NAME || 'abhinav';
@@ -83,8 +84,8 @@ const STAGES: PlatformDef[][] = [
   [X, FB, LI, GOOGLESITE, HACKMD, LINKMATE, CALISTHENICS, NOTION],
   // Stage 4 — drop LinkedIn (post), Linkmate, Calisthenics (5 left)
   [X, FB, GOOGLESITE, HACKMD, NOTION],
-  // Stage 5 — drop Google Sites, HackMD, Notion (2 left)
-  [X, FB],
+  // Stage 5 — drop HackMD, Notion (3 left, Google Sites kept to the end)
+  [X, FB, GOOGLESITE],
 ];
 
 function nowIst(): string {
@@ -132,6 +133,10 @@ async function runStage(stageIndex: number, statusFile: string = STATUS_FILE): P
       phase: 'running', lap: lapNum, stage: stageIndex + 1,
       platforms: stage.map(p => p.label), currentPlatform: platform.label,
     }, statusFile);
+    // Cross-process browser cap: wait for a free slot before launching this
+    // platform's Chrome, so the scheduler and the login portal never overload the
+    // box with concurrent headed browsers. Released after teardown below.
+    const releaseSlot = await acquireBrowserSlot(platform.label);
     try {
       await withTimeout(platform.run(lapNum), PLATFORM_TIMEOUT_MS, platform.label);
     } catch (err: any) {
@@ -148,6 +153,7 @@ async function runStage(stageIndex: number, statusFile: string = STATUS_FILE): P
         console.error(`[Stage ${stageIndex + 1}] closeAllBrowsers after ${platform.label}: ${e.message}`);
       }
       killPostingChrome();
+      releaseSlot(); // free the slot only after the browser is actually dead
     }
   }
   console.log(`[${nowIst()}] ◀ Stage ${stageIndex + 1}/5 complete.`);
