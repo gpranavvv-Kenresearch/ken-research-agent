@@ -65,16 +65,17 @@ export const PLATFORM_KEYS = Object.keys(PLATFORMS);
  * Cap = 5 simultaneous logins (see plan). Each slot gets its own x11vnc port.
  */
 export interface DisplaySlotDef {
-  display: string;  // e.g. ":100"
-  vncPort: number;  // x11vnc rfbport, localhost-only
+  display: string;   // e.g. ":100"
+  vncPort: number;   // x11vnc rfbport, localhost-only
+  debugPort: number; // Chrome --remote-debugging-port for one-shot credential auto-fill, localhost-only
 }
 
 export const DISPLAY_POOL: DisplaySlotDef[] = [
-  { display: ':100', vncPort: 5910 },
-  { display: ':101', vncPort: 5911 },
-  { display: ':102', vncPort: 5912 },
-  { display: ':103', vncPort: 5913 },
-  { display: ':104', vncPort: 5914 },
+  { display: ':100', vncPort: 5910, debugPort: 9310 },
+  { display: ':101', vncPort: 5911, debugPort: 9311 },
+  { display: ':102', vncPort: 5912, debugPort: 9312 },
+  { display: ':103', vncPort: 5913, debugPort: 9313 },
+  { display: ':104', vncPort: 5914, debugPort: 9314 },
 ];
 
 /**

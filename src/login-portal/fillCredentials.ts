@@ -113,8 +113,23 @@ async function firstVisible(page: Page, selector: string, timeoutMs: number): Pr
   return null;
 }
 
-/** Returns true if it filled+submitted a form, false if it left the login to the human. */
-export async function fillCredentials(page: Page, platform: string, creds: FleetCredentials): Promise<boolean> {
+/**
+ * Fill the login form's user+password fields. Returns true if it got them in.
+ *
+ * `opts.submit` (default true): press Enter / click the submit button. Pass
+ * false when CDP is only attached briefly to type creds and will DETACH before
+ * the human acts — then the human does the submit + any challenge over real VNC,
+ * so no anti-bot check (Arkose etc.) ever runs while CDP is attached. Any
+ * multi-step "Next" click needed to reveal the password field still happens
+ * regardless (that's part of filling, not the final submit).
+ */
+export async function fillCredentials(
+  page: Page,
+  platform: string,
+  creds: FleetCredentials,
+  opts: { submit?: boolean } = {},
+): Promise<boolean> {
+  const submit = opts.submit ?? true;
   const form = FORMS[platform];
   if (!form) return false;                 // platform not auto-fillable
   const user = form.userValue(creds);
@@ -151,6 +166,11 @@ export async function fillCredentials(page: Page, platform: string, creds: Fleet
     if (!passEl) { log('password field never appeared — manual takeover'); return false; }
     await passEl.fill(creds.password);
     log('password filled');
+
+    if (!submit) {
+      log('creds filled, submit left to the human (VNC) — CDP detaching');
+      return true;
+    }
 
     // Submit. Enter in the password field reliably submits single-page login
     // forms; also click a visible submit button if present.

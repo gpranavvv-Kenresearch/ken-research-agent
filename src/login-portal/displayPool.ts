@@ -13,11 +13,14 @@
 import { spawn } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
+import net from 'net';
 import path from 'path';
+import { chromium } from 'playwright';
 import { DISPLAY_POOL, DisplaySlotDef, TOKEN_DIR, LOGIN_TTL_MS, CHROME_PATH, PUBLIC_BASE_URL } from './config.js';
 import { tryAcquireBrowserSlot } from '../utils/browserSlots.js';
 import { STEALTH_USER_AGENT } from '../utils/stealth.js';
-import { isLoggedIn, fleetNickname } from './sessionResolver.js';
+import { isLoggedIn, fleetNickname, getFleetCredentials } from './sessionResolver.js';
+import { fillCredentials } from './fillCredentials.js';
 
 interface ActiveLogin {
   token: string;
@@ -79,6 +82,56 @@ function spawnDetached(cmd: string, args: string[], env: NodeJS.ProcessEnv): num
   const child = spawn(cmd, args, { detached: true, stdio: 'ignore', env });
   child.unref();
   return child.pid as number;
+}
+
+/** Poll until a file exists (Xvfb ready = its /tmp/.X11-unix socket appears),
+ *  instead of a fixed sleep. Returns false on timeout (caller falls back). */
+async function waitForFile(p: string, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (fs.existsSync(p)) return true;
+    await sleep(50);
+  }
+  return false;
+}
+
+/** Poll until a localhost TCP port accepts a connection (x11vnc / Chrome debug
+ *  port is up), instead of a fixed sleep. */
+async function waitForPort(port: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ok = await new Promise<boolean>((resolve) => {
+      const sock = net.connect({ host: '127.0.0.1', port }, () => { sock.destroy(); resolve(true); });
+      sock.on('error', () => { sock.destroy(); resolve(false); });
+    });
+    if (ok) return true;
+    await sleep(80);
+  }
+  return false;
+}
+
+/**
+ * One-shot credential auto-fill over CDP, then DETACH — so the operator only
+ * solves the challenge (real VNC mouse), never types email/password over the
+ * laggy tunnel. Safe against anti-bot detection: we attach only long enough to
+ * type the two fields (no submit), then disconnect, so no Arkose/MatchKey check
+ * ever runs while CDP is attached — the submit + challenge are all real input.
+ * Best-effort and fire-and-forget: any failure just leaves the form for the human.
+ */
+async function autofillOverCdp(debugPort: number, platform: string, agent: string, index: number): Promise<void> {
+  const creds = getFleetCredentials(platform, fleetNickname(agent, index));
+  if (!creds) return; // no stored creds → human types them
+  try {
+    if (!(await waitForPort(debugPort, 12000))) return;
+    const browser = await chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`);
+    try {
+      const ctx = browser.contexts()[0];
+      const page = ctx?.pages()[0];
+      if (page) await fillCredentials(page, platform, creds, { submit: false });
+    } finally {
+      await browser.close().catch(() => {}); // disconnect only — Chrome keeps running on the display
+    }
+  } catch { /* best-effort: human finishes over VNC */ }
 }
 
 function killGroup(pid: number): void {
@@ -191,28 +244,29 @@ export async function startLogin(params: {
     fs.rmSync(`/tmp/.X${dn}-lock`, { force: true });
     fs.rmSync(`/tmp/.X11-unix/X${dn}`, { force: true });
 
-    // 1) virtual display — 1024x768 instead of 1280x900: ~32% fewer pixels for
-    // x11vnc to scan/encode/transmit each frame, meaningfully snappier over the
-    // tunnel on a 2-vCPU VPS, while still plenty readable for login flows.
-    pids.push(spawnDetached('Xvfb', [slot.display, '-screen', '0', '1024x768x24'], process.env));
-    await sleep(600);
+    // 1) virtual display. 1024x768 (readable for logins, ~32% fewer pixels than
+    // 1280x900) at 16-bit depth instead of 24 — a login form needs no true-color,
+    // and 16bpp is ~⅓ less colour data for x11vnc to encode/ship each frame, so
+    // it feels snappier over the tunnel. Poll the X socket for readiness instead
+    // of a blind sleep (Xvfb is usually up in <250ms, not 600).
+    pids.push(spawnDetached('Xvfb', [slot.display, '-screen', '0', '1024x768x16'], process.env));
+    await waitForFile(`/tmp/.X11-unix/X${dn}`, 5000);
 
     // 2) VNC server bound to localhost only (Nginx/websockify terminate outward).
     // -threads: use both vCPUs for scan/poll work instead of one.
-    // -defer 10: push updates every 10ms instead of x11vnc's slower default batching.
-    // -noshm: use plain X11 GetImage instead of the MIT-SHM extension. x11vnc's
-    // default SHM path draws from a small, fixed system-wide pool of SysV shared
-    // memory segments (shmmni) that isn't reliably freed when a display is
-    // SIGKILL'd — repeated logins exhausted it entirely (hit 4096/4096, every
-    // new x11vnc failed with "shmget: No space left on device", silently, since
-    // stdio is ignored). -noshm sidesteps that pool completely; slightly more
-    // CPU per frame, but immune to this failure mode.
+    // -defer 5: coalesce updates over 5ms instead of 10 — lower input-to-paint
+    // latency (the interactive feel) at a small extra frame cost, fine on a login.
+    // -noshm: plain X11 GetImage instead of MIT-SHM. x11vnc's default SHM path
+    // draws from a small, fixed system-wide SysV shared-memory pool (shmmni) that
+    // isn't reliably freed when a display is SIGKILL'd — repeated logins exhausted
+    // it (4096/4096, every new x11vnc then failed "shmget: No space left on
+    // device", silently, stdio ignored). -noshm sidesteps that pool entirely.
     pids.push(spawnDetached(
       'x11vnc',
-      ['-display', slot.display, '-rfbport', String(slot.vncPort), '-localhost', '-nopw', '-forever', '-shared', '-quiet', '-threads', '-defer', '10', '-noshm'],
+      ['-display', slot.display, '-rfbport', String(slot.vncPort), '-localhost', '-nopw', '-forever', '-shared', '-quiet', '-threads', '-defer', '5', '-noshm'],
       process.env,
     ));
-    await sleep(500);
+    await waitForPort(slot.vncPort, 5000);
 
     // 3) token routing for the shared websockify
     writeTokenFile(token, slot.vncPort);
@@ -223,9 +277,13 @@ export async function startLogin(params: {
     // (login + posting share the box/IP; UA is the cheap, high-value tell to
     // align). Raw Chrome already has navigator.webdriver=false, so no CDP-side
     // stealth patch is needed here.
+    // --remote-debugging-port (localhost only) lets us attach CDP once to type
+    // the credentials, then detach (see autofillOverCdp). It does NOT set
+    // navigator.webdriver — that tell comes from Playwright's own launch flags,
+    // which we don't use here — so the browser still looks like a normal Chrome.
     pids.push(spawnDetached(
       CHROME_PATH,
-      [...CHROME_ARGS, `--user-agent=${STEALTH_USER_AGENT}`, `--user-data-dir=${params.sessionDir}`, params.loginUrl],
+      [...CHROME_ARGS, `--remote-debugging-port=${slot.debugPort}`, `--user-agent=${STEALTH_USER_AGENT}`, `--user-data-dir=${params.sessionDir}`, params.loginUrl],
       { ...process.env, DISPLAY: slot.display },
     ));
 
@@ -233,6 +291,11 @@ export async function startLogin(params: {
       token, slot, agent: params.agent, platform: params.platform,
       index: params.index, sessionDir: params.sessionDir, pids, expiresAt, release,
     });
+
+    // Fire-and-forget: fill the creds in the background so the noVNC URL returns
+    // immediately (screen opens fast) and the operator watches the fields fill,
+    // then just solves the challenge. Never blocks or fails the login.
+    void autofillOverCdp(slot.debugPort, params.platform, params.agent, params.index);
 
     return { token, display: slot.display, viewerUrl: buildNovncUrl(token), expiresAt, state: 'needs-human' };
   } catch (err) {
