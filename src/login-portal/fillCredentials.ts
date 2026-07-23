@@ -137,11 +137,13 @@ export async function fillCredentials(page: Page, platform: string, creds: Fleet
     await passEl.fill(creds.password);
     log('password filled');
 
+    // Submit. Enter in the password field reliably submits single-page login
+    // forms (X's legacy form, most blog logins); also click an explicit submit
+    // button if one is present (harmless once the form is already navigating).
+    await passEl.press('Enter').catch(() => {});
     const submitBtn = page.locator(form.submit).first();
     if (await submitBtn.isVisible().catch(() => false)) {
-      await submitBtn.click({ timeout: STEP_MS }).catch(() => passEl.press('Enter').catch(() => {}));
-    } else {
-      await passEl.press('Enter').catch(() => {});
+      await submitBtn.click({ timeout: STEP_MS }).catch(() => {});
     }
     log('submitted — credentials in, any challenge is now the human\'s to finish');
     return true;
