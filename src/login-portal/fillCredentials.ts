@@ -30,9 +30,11 @@ const FORMS: Record<string, LoginForm> = {
   x: {
     user: 'input[name="text"], input[autocomplete="username"]',
     userValue: c => c.username || c.handle,
-    next: 'button:has-text("Next"), div[role="button"]:has-text("Next")',
+    // X shows either the /login "Next" step OR the "See what's happening" modal
+    // whose button says "Continue" — match both.
+    next: 'button:has-text("Next"), button:has-text("Continue"), div[role="button"]:has-text("Next"), div[role="button"]:has-text("Continue")',
     pass: 'input[name="password"], input[autocomplete="current-password"]',
-    submit: 'div[role="button"]:has-text("Log in"), button:has-text("Log in")',
+    submit: 'div[data-testid="LoginForm_Login_Button"], div[role="button"]:has-text("Log in"), button:has-text("Log in")',
   },
   facebook: {
     user: 'input#email, input[name="email"]',
@@ -99,36 +101,51 @@ export async function fillCredentials(page: Page, platform: string, creds: Fleet
   if (!user || !creds.password) return false; // credentials not populated → manual
   const log = (m: string) => console.log(`   [autofill:${platform}] ${m}`);
 
+  // Patient by default — on a loaded 2-vCPU box the login page can render slowly,
+  // and a short timeout was silently giving up ("no response"). A little delay is
+  // acceptable; a dead form is not.
+  const FIELD_MS = 25000; // wait for a field to appear
+  const STEP_MS = 10000;  // wait for a click/step
+
   try {
+    log('starting auto-fill…');
+    await page.waitForLoadState('domcontentloaded').catch(() => {});
+    await page.waitForTimeout(1200); // let the login widget mount
+
     const userEl = page.locator(form.user).first();
-    await userEl.waitFor({ state: 'visible', timeout: 8000 });
+    await userEl.waitFor({ state: 'visible', timeout: FIELD_MS });
     await userEl.fill(user);
     log('username filled');
 
+    // Advance to the password step: click the Next/Continue button if present,
+    // else press Enter in the username field (X/most flows accept this).
     if (form.next) {
-      try {
-        await page.locator(form.next).first().click({ timeout: 4000 });
-        await page.waitForTimeout(1500); // let the password step render
-      } catch { /* single-page form — password already present */ }
+      const nextBtn = page.locator(form.next).first();
+      if (await nextBtn.isVisible().catch(() => false)) {
+        await nextBtn.click({ timeout: STEP_MS }).catch(() => userEl.press('Enter').catch(() => {}));
+      } else {
+        await userEl.press('Enter').catch(() => {});
+      }
+      await page.waitForTimeout(2500); // let the password step render
     }
 
     const passEl = page.locator(form.pass).first();
-    await passEl.waitFor({ state: 'visible', timeout: 8000 });
+    await passEl.waitFor({ state: 'visible', timeout: FIELD_MS });
     await passEl.fill(creds.password);
     log('password filled');
 
-    try {
-      await page.locator(form.submit).first().click({ timeout: 4000 });
-      log('submitted');
-    } catch {
-      await passEl.press('Enter').catch(() => {}); // fallback: Enter in the password field
-      log('submitted (Enter)');
+    const submitBtn = page.locator(form.submit).first();
+    if (await submitBtn.isVisible().catch(() => false)) {
+      await submitBtn.click({ timeout: STEP_MS }).catch(() => passEl.press('Enter').catch(() => {}));
+    } else {
+      await passEl.press('Enter').catch(() => {});
     }
+    log('submitted — credentials in, any challenge is now the human\'s to finish');
     return true;
   } catch (e: any) {
-    // Any miss (selector changed, extra step, challenge already up) → hand off to
-    // the human on the screencast. Never throw.
-    log(`stopped, manual takeover: ${e?.message?.slice(0, 80)}`);
+    // Couldn't complete (selector changed, extra step, challenge already up) →
+    // the human finishes on the screencast. Never throw.
+    log(`could not complete auto-fill, manual takeover: ${e?.message?.slice(0, 80)}`);
     return false;
   }
 }
