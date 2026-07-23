@@ -46,6 +46,18 @@ const PLATFORMS: Record<string, PlatformCfg> = {
       };
     },
   },
+  facebook: {
+    tab: 'Facebook',
+    registryFile: '.accounts/facebook-accounts.json',
+    sessionSub: 'facebook',
+    build: (agent, index, r) => ({
+      nickname: `${agent.toLowerCase()} ${index}`,
+      email: (r['Email'] || '').trim(),
+      password: (r['Password'] || '').trim(),
+      sessionDir: `.sessions-${agent.toLowerCase()}/facebook-${index}`,
+      active: true,
+    }),
+  },
 };
 
 function sheetId(): string {
