@@ -46,19 +46,24 @@ const PLATFORMS: Record<string, PlatformCfg> = {
       };
     },
   },
-  facebook: {
+  // Key MUST be the login-portal/config.ts platform key so session dirs and the
+  // registry line up: Facebook is 'fb' (→ .sessions-<agent>/fb-<index>).
+  fb: {
     tab: 'Facebook',
     registryFile: '.accounts/facebook-accounts.json',
-    sessionSub: 'facebook',
+    sessionSub: 'fb',
     build: (agent, index, r) => ({
       nickname: `${agent.toLowerCase()} ${index}`,
       email: (r['Email'] || '').trim(),
       password: (r['Password'] || '').trim(),
-      sessionDir: `.sessions-${agent.toLowerCase()}/facebook-${index}`,
+      sessionDir: `.sessions-${agent.toLowerCase()}/fb-${index}`,
       active: true,
     }),
   },
 };
+
+// Friendly aliases → real config keys, so a user can type the platform's name.
+const ALIASES: Record<string, string> = { facebook: 'fb', twitter: 'x', linkedin: 'li' };
 
 function sheetId(): string {
   const txt = fs.readFileSync('.accounts/Credentials.txt', 'utf8');
@@ -84,7 +89,8 @@ function isRealRow(r: Row): boolean {
 
 async function main() {
   const args = process.argv.slice(2);
-  const platform = (args[args.indexOf('--platform') + 1] || 'x').toLowerCase();
+  const rawPlatform = (args[args.indexOf('--platform') + 1] || 'x').toLowerCase();
+  const platform = ALIASES[rawPlatform] || rawPlatform;
   const dryRun = args.includes('--dry-run');
   const cfg = PLATFORMS[platform];
   if (!cfg) throw new Error(`Unsupported platform "${platform}". Known: ${Object.keys(PLATFORMS).join(', ')}`);

@@ -37,13 +37,15 @@ const FORMS: Record<string, LoginForm> = {
     pass: 'input[name="password"], input[autocomplete="current-password"]',
     submit: 'div[data-testid="LoginForm_Login_Button"], input[type="submit"], div[role="button"]:has-text("Log in"), button:has-text("Log in")',
   },
-  facebook: {
+  // NOTE: keys MUST match the platform keys in login-portal/config.ts — the portal
+  // calls fillCredentials(page, <configKey>, …). Facebook is 'fb', LinkedIn is 'li'.
+  fb: {
     user: 'input#email, input[name="email"]',
     userValue: c => c.email,
     pass: 'input#pass, input[name="pass"]',
     submit: 'button[name="login"], button[type="submit"]',
   },
-  linkedin: {
+  li: {
     user: 'input#username, input[name="session_key"]',
     userValue: c => c.email,
     pass: 'input#password, input[name="session_password"]',
