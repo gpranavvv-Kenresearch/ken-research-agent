@@ -157,6 +157,47 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
+  // ── Bulk login + live "needs you" queue ────────────────────────────────────
+  const [queue, setQueue] = useState<Array<{ token: string; platform: string; index: number; nickname: string; status: string; novncUrl: string }>>([]);
+  const [batchBusy, setBatchBusy] = useState<string | null>(null);
+
+  async function refreshQueue() {
+    if (!token) return;
+    try {
+      const res = await fetch(`/api/agent/${agentId}/login-queue`, { headers: { 'X-Agent-Token': token } }).then((r) => r.json());
+      setQueue(res.queue || []);
+    } catch { /* transient — next poll retries */ }
+  }
+
+  // Poll the live login queue so the operator sees which bulk logins need a human.
+  useEffect(() => {
+    if (!token) return;
+    refreshQueue();
+    const id = setInterval(refreshQueue, 3000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, agentId]);
+
+  async function startLoginBatch(platform: string, count = 5) {
+    if (!token) return;
+    setBatchBusy(platform);
+    try {
+      const res = await fetch(`/api/agent/${agentId}/login-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Agent-Token': token },
+        body: JSON.stringify({ platform, count }),
+      }).then((r) => r.json());
+      if (res.error) alert(res.error);
+      else {
+        const busy = (res.results || []).filter((r: { reason?: string }) => r.reason === 'box-busy' || r.reason === 'slots-full').length;
+        if (busy) alert(`Started ${res.started}. ${busy} could not start (box/slots full — pause the scheduler and set MAX_BROWSERS=5 for bulk onboarding).`);
+        refreshQueue();
+      }
+    } finally {
+      setBatchBusy(null);
+    }
+  }
+
   const [showGen, setShowGen] = useState(false);
   const [genBusy, setGenBusy] = useState(false);
   async function submitGenerate(count: number, format: string, sample: string) {
@@ -347,6 +388,33 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
         </div>
       )}
 
+      {!isLoading && !data?.error && queue.length > 0 && (
+        <div className="bg-card border border-border rounded-xl p-4 mb-6">
+          <h2 className="text-xs uppercase tracking-wide text-slate-500 font-semibold mb-3">
+            Live logins · <span className="text-amber-400">{queue.filter((q) => q.status === 'needs-human').length} need you</span>
+            {' · '}<span className="text-green-400">{queue.filter((q) => q.status === 'ready').length} ready</span>
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {queue.map((q) => (
+              <div key={q.token} className="border border-border rounded-lg p-2 flex flex-col gap-1 bg-slate-900/40">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-white truncate" title={q.nickname}>{q.nickname} · {platformLabel(q.platform)}</span>
+                  <span className={`text-[10px] font-semibold shrink-0 ${q.status === 'ready' ? 'text-green-400' : q.status === 'needs-human' ? 'text-amber-400' : 'text-blue-400'}`}>
+                    {q.status === 'ready' ? '● ready' : q.status === 'needs-human' ? '○ needs you' : '… auto'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setModal({ token: q.token, novncUrl: q.novncUrl, label: `${q.nickname} · ${platformLabel(q.platform)}`, mode: 'login' })}
+                  className="text-[11px] px-2 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white"
+                >
+                  {q.status === 'ready' ? 'Finish' : 'Open'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {!isLoading && !data?.error && (
         <div className="space-y-8">
           {(['engine', 'social', 'blog'] as const).map((grp) => (
@@ -379,13 +447,25 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => startLogin(p.key)}
-                    disabled={busyKey === `${p.key}-new`}
-                    className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors"
-                  >
-                    {busyKey === `${p.key}-new` ? 'Opening…' : '+ Add account'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {grp !== 'engine' && (
+                      <button
+                        onClick={() => startLoginBatch(p.key)}
+                        disabled={batchBusy === p.key}
+                        title="Start 5 logins at once, auto-filled from stored credentials. Only the ones that hit a challenge appear in the queue above."
+                        className="text-sm bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        {batchBusy === p.key ? 'Starting…' : '+ Bulk (5)'}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => startLogin(p.key)}
+                      disabled={busyKey === `${p.key}-new`}
+                      className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      {busyKey === `${p.key}-new` ? 'Opening…' : '+ Add account'}
+                    </button>
+                  </div>
                 </div>
 
                 {accounts.length > 0 && (

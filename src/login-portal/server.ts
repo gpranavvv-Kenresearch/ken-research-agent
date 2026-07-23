@@ -25,7 +25,7 @@ import {
 import {
   agentSessionDir, registerFleetAccount, listAgentStatus, nextIndex, sessionReadyForDir,
 } from './sessionResolver.js';
-import { startLogin, teardown, getLogin, sweepExpired, poolStatus } from './cdpLoginPool.js';
+import { startLogin, teardown, getLogin, sweepExpired, poolStatus, loginQueue } from './cdpLoginPool.js';
 import { verifyOrSetPin, mintToken, requireAgentToken } from './agentAuth.js';
 import { startCycle, stopCycle, cycleStatus } from './blogCycle.js';
 import { startPostCycle, stopPostCycle, postCycleStatus } from './postCycle.js';
@@ -123,6 +123,10 @@ app.post('/api/agent/:agent/login', requireAgentToken, async (req: Request, res:
       res.status(503).json({ error: 'all login slots are busy — try again shortly' });
       return;
     }
+    if (err?.message === 'BOX_BUSY') {
+      res.status(503).json({ error: 'a posting session is running right now — try again in a few minutes' });
+      return;
+    }
     console.error('[login-api] start-login failed:', err);
     res.status(500).json({ error: 'failed to start login' });
   }
@@ -145,6 +149,55 @@ app.post('/api/agent/:agent/login/:token/finish', requireAgentToken, async (req:
   await teardown(token);
   const ready = sessionReadyForDir(sessionDir, platform);
   res.json({ ok: true, platform, index, ready });
+});
+
+// POST /api/agent/:agent/login-batch { platform, indices?[], count? } — start many
+// logins at once. Each is auto-filled (if credentials are populated); the operator
+// then only handles the ones that land in the "needs-human" queue below.
+// NOTE: bounded by the box-wide MAX_BROWSERS cap — for a bulk onboarding session,
+// pause the scheduler and set MAX_BROWSERS=5 so 5 logins can run in parallel.
+app.post('/api/agent/:agent/login-batch', requireAgentToken, async (req: Request, res: Response) => {
+  const agent = req.params.agent.toLowerCase();
+  const platform = String(req.body?.platform || '').toLowerCase();
+  if (!PLATFORMS[platform]) {
+    res.status(400).json({ error: `unknown platform "${platform}"` });
+    return;
+  }
+  let indices: number[] = Array.isArray(req.body?.indices)
+    ? req.body.indices.map(Number).filter((n: number) => n > 0)
+    : [];
+  if (!indices.length) {
+    // No explicit indices → allocate `count` fresh sequential ones (default 5).
+    const count = Math.max(1, Math.min(10, Number(req.body?.count) || 5));
+    const start = nextIndex(agent, platform);
+    indices = Array.from({ length: count }, (_, i) => start + i);
+  }
+
+  const results: Array<{ index: number; ok: boolean; token?: string; novncUrl?: string; state?: string; reason?: string }> = [];
+  for (const index of indices) {
+    try {
+      registerFleetAccount(agent, platform, index);
+      const started = await startLogin({
+        agent, platform, index, sessionDir: agentSessionDir(agent, platform, index),
+        loginUrl: PLATFORMS[platform].loginUrl,
+      });
+      results.push({ index, ok: true, token: started.token, novncUrl: started.viewerUrl, state: started.state });
+    } catch (err: any) {
+      // Slots/box full → stop starting more; the operator raises MAX_BROWSERS or
+      // finishes some first. Report the remaining as skipped, don't 500 the batch.
+      const reason = err?.message === 'POOL_EXHAUSTED' ? 'slots-full'
+        : err?.message === 'BOX_BUSY' ? 'box-busy' : (err?.message || 'error');
+      results.push({ index, ok: false, reason });
+      if (reason === 'slots-full' || reason === 'box-busy') break;
+    }
+  }
+  res.json({ ok: true, agent, platform, started: results.filter(r => r.ok).length, results });
+});
+
+// GET /api/agent/:agent/login-queue — live logins for this agent with per-login
+// state, so the dashboard can show only the ones that still need a human.
+app.get('/api/agent/:agent/login-queue', requireAgentToken, (req: Request, res: Response) => {
+  res.json({ ok: true, queue: loginQueue(req.params.agent.toLowerCase()) });
 });
 
 // POST /api/agent/:agent/generate-blogs { count } — on-demand: generate N blogs now.

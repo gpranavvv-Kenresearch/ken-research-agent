@@ -170,6 +170,36 @@ export function listAgentStatus(agent: string): AgentStatus {
   return { agent: a, platforms };
 }
 
+export interface FleetCredentials {
+  email?: string;
+  username?: string;
+  handle?: string;
+  password?: string;
+}
+
+/**
+ * Read the stored credentials for a fleet account from the platform's registry,
+ * so the portal can auto-fill the login form instead of making a human type over
+ * the screencast. Returns undefined if the account/registry is missing; empty
+ * password means "not populated" — the caller falls back to manual login.
+ */
+export function getFleetCredentials(platform: string, nickname: string): FleetCredentials | undefined {
+  const plat = PLATFORMS[platform];
+  if (!plat) return undefined;
+  const file = path.resolve(plat.registryFile);
+  if (!fs.existsSync(file)) return undefined;
+  try {
+    const list = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    if (!Array.isArray(list)) return undefined;
+    const nick = nickname.toLowerCase();
+    const e = list.find((x: any) => (x?.nickname || '').toLowerCase() === nick);
+    if (!e) return undefined;
+    return { email: e.email, username: e.username, handle: e.handle, password: e.password };
+  } catch {
+    return undefined;
+  }
+}
+
 /** Next free index for a platform (max existing + 1, else 1). */
 export function nextIndex(agent: string, platform: string): number {
   const status = listAgentStatus(agent);

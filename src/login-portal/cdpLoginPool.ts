@@ -17,6 +17,16 @@ import fs from 'fs';
 import { chromium, Browser } from 'playwright';
 import { SCREENCAST_PORT_POOL, ScreencastPortSlot, LOGIN_TTL_MS, CHROME_PATH, PUBLIC_BASE_URL } from './config.js';
 import { startScreencastServer, ScreencastServerHandle } from '../screencast/screencastServer.js';
+import { tryAcquireBrowserSlot } from '../utils/browserSlots.js';
+import { getChromeLaunchArgs } from '../utils/chromeArgs.js';
+import { STEALTH_USER_AGENT, installStealth } from '../utils/stealth.js';
+import { fillCredentials } from './fillCredentials.js';
+import { getFleetCredentials, fleetNickname, isLoggedIn } from './sessionResolver.js';
+
+// 'auto' = credentials auto-filled and submitted, no human needed yet (poll for
+// readiness); 'needs-human' = auto-fill couldn't complete (no creds, a challenge,
+// or an unknown platform) → operator must finish it on the screencast.
+type LoginState = 'auto' | 'needs-human';
 
 interface ActiveLogin {
   token: string;
@@ -29,10 +39,12 @@ interface ActiveLogin {
   browser: Browser;
   screencast: ScreencastServerHandle;
   expiresAt: number;
+  state: LoginState;
 }
 
 const active = new Map<string, ActiveLogin>();
 const busy = new Set<number>(); // by debugPort
+const slotReleases = new Map<string, () => void>(); // token → cross-process browser-slot release
 
 function freeSlot(): ScreencastPortSlot | null {
   for (const slot of SCREENCAST_PORT_POOL) {
@@ -100,6 +112,7 @@ export interface StartedLogin {
   viewerUrl: string;
   expiresAt: number;
   reused?: boolean;
+  state?: LoginState; // 'auto' = filled+submitted; 'needs-human' = operator must finish
 }
 
 /** Find an already-active login for this exact account (same profile dir), if any. */
@@ -134,14 +147,22 @@ export async function startLogin(params: {
       viewerUrl: buildViewerUrl(existing.slot.viewerPort, existing.token),
       expiresAt: existing.expiresAt,
       reused: true,
+      state: existing.state,
     };
   }
 
   const slot = freeSlot();
   if (!slot) throw new Error('POOL_EXHAUSTED');
 
+  // Respect the box-wide browser cap shared with the posting scheduler: if a
+  // posting session is holding the slot(s), refuse fast so the portal can tell
+  // the user "posting in progress, try again shortly" instead of hanging.
+  const releaseSlot = await tryAcquireBrowserSlot(`login:${params.agent}/${params.platform}`);
+  if (!releaseSlot) throw new Error('BOX_BUSY');
+
   busy.add(slot.debugPort);
   const token = crypto.randomBytes(24).toString('hex');
+  slotReleases.set(token, releaseSlot);
   const expiresAt = Date.now() + LOGIN_TTL_MS;
 
   let chromeProc: ChildProcess | undefined;
@@ -158,24 +179,42 @@ export async function startLogin(params: {
     // it), which silently streamed a blank page in testing. Navigating
     // ourselves after attaching guarantees we know exactly which page we're
     // streaming.
+    // Fingerprint MUST match the posting path, or the session this login creates
+    // reads as a "new device" when the poster later reuses the same profile →
+    // re-challenge / session death (login + posting run on the same box/IP, so
+    // fingerprint mismatch — not an IP jump — is the fixable cause). Reuse the
+    // poster's exact launch args + UA + stealth (see chromeArgs.ts / stealth.ts).
+    // Headless follows the same HEADLESS env the posters honour: if the box runs
+    // posters headed on the virtual display (:99), login runs headed too so the
+    // headless-vs-headed tell doesn't differ between session create and reuse.
+    const headless = process.env.HEADLESS !== 'false';
     chromeProc = spawn(CHROME_PATH, [
-      '--headless=new',
+      ...(headless ? ['--headless=new'] : []),
       `--remote-debugging-port=${slot.debugPort}`,
       `--user-data-dir=${params.sessionDir}`,
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--disable-gpu',
-      '--disable-dev-shm-usage',
+      `--user-agent=${STEALTH_USER_AGENT}`,
+      ...getChromeLaunchArgs({ minimized: true }),
       'about:blank',
-    ], { detached: true, stdio: 'ignore' });
+    ], { detached: true, stdio: 'ignore', env: process.env });
     chromeProc.unref();
 
     await waitForDebugPort(slot.debugPort);
 
     browser = await chromium.connectOverCDP(`http://localhost:${slot.debugPort}`);
     const context = browser.contexts()[0];
+    // Patch the static automation tells (navigator.webdriver, window.chrome,
+    // plugins, WebGL vendor, …) exactly as the poster does — same identity end
+    // to end. Must run before navigation so the login page sees the real values.
+    await context.addInitScript(installStealth);
     const page = context.pages()[0] ?? await context.newPage();
     await page.goto(params.loginUrl, { waitUntil: 'domcontentloaded' });
+
+    // Auto-fill the form so the operator doesn't type over the screencast. Best
+    // effort: if creds aren't populated or the platform isn't auto-fillable, this
+    // returns false and the login waits for the human (unchanged behaviour).
+    const creds = getFleetCredentials(params.platform, fleetNickname(params.agent, params.index));
+    const autofilled = creds ? await fillCredentials(page, params.platform, creds) : false;
+    const state: LoginState = autofilled ? 'auto' : 'needs-human';
 
     // Smaller/lower-quality frames than the default — this session is viewed
     // over the real internet (via Tailscale Funnel), not localhost, and a
@@ -189,15 +228,17 @@ export async function startLogin(params: {
 
     active.set(token, {
       token, slot, agent: params.agent, platform: params.platform, index: params.index,
-      sessionDir: params.sessionDir, chromePid: chromeProc.pid!, browser, screencast, expiresAt,
+      sessionDir: params.sessionDir, chromePid: chromeProc.pid!, browser, screencast, expiresAt, state,
     });
 
-    return { token, viewerUrl: buildViewerUrl(slot.viewerPort, token), expiresAt };
+    return { token, viewerUrl: buildViewerUrl(slot.viewerPort, token), expiresAt, state };
   } catch (err) {
     if (screencast) await (screencast as ScreencastServerHandle).stop().catch(() => {});
     if (browser) await browser.close().catch(() => {});
     if (chromeProc?.pid) killGroup(chromeProc.pid);
     busy.delete(slot.debugPort);
+    releaseSlot();
+    slotReleases.delete(token);
     throw err;
   }
 }
@@ -219,12 +260,50 @@ export async function teardown(token: string): Promise<boolean> {
   await login.screencast.stop().catch(() => {});
 
   busy.delete(login.slot.debugPort);
+  slotReleases.get(token)?.(); // free the box-wide browser slot only after Chrome is dead
+  slotReleases.delete(token);
   active.delete(token);
   return true;
 }
 
 export function getLogin(token: string): ActiveLogin | undefined {
   return active.get(token);
+}
+
+export interface LoginQueueEntry {
+  token: string;
+  platform: string;
+  index: number;
+  nickname: string;
+  /** 'ready' = session logged in (auto-fill worked, safe to finish); 'auto' =
+   *  filled+submitted, not yet confirmed; 'needs-human' = operator must act. */
+  status: 'ready' | 'auto' | 'needs-human';
+  novncUrl: string; // screencast viewer, so the operator can open a needs-human login
+  expiresAt: number;
+}
+
+/**
+ * Snapshot of this agent's live logins for the dashboard's "needs you" queue.
+ * Upgrades an 'auto' login to 'ready' by re-checking the on-disk session, so an
+ * operator running a bulk batch only has to touch the ones still needing a human.
+ */
+export function loginQueue(agent: string): LoginQueueEntry[] {
+  const out: LoginQueueEntry[] = [];
+  for (const login of active.values()) {
+    if (login.agent !== agent) continue;
+    let status: LoginQueueEntry['status'] = login.state;
+    if (login.state === 'auto' && isLoggedIn(login.sessionDir, login.platform)) status = 'ready';
+    out.push({
+      token: login.token,
+      platform: login.platform,
+      index: login.index,
+      nickname: fleetNickname(login.agent, login.index),
+      status,
+      novncUrl: buildViewerUrl(login.slot.viewerPort, login.token),
+      expiresAt: login.expiresAt,
+    });
+  }
+  return out.sort((a, b) => a.platform.localeCompare(b.platform) || a.index - b.index);
 }
 
 /** Force-teardown any login past its TTL. Called on an interval by the server. */
