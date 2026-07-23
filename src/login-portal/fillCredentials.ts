@@ -12,7 +12,7 @@
  * mirror the ones already used in the matching src/browser/<platform>/login.ts.
  */
 
-import { Page } from 'playwright';
+import { Page, Locator } from 'playwright';
 import { FleetCredentials } from './sessionResolver.js';
 
 interface LoginForm {
@@ -94,6 +94,23 @@ const FORMS: Record<string, LoginForm> = {
   },
 };
 
+/** First VISIBLE element matching selector, polling up to timeoutMs. Null if none.
+ *  Pages like X render duplicate hidden forms; .first() can grab the hidden one,
+ *  so the human sees an empty field. Always act on what's actually on screen. */
+async function firstVisible(page: Page, selector: string, timeoutMs: number): Promise<Locator | null> {
+  const loc = page.locator(selector);
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const n = await loc.count().catch(() => 0);
+    for (let i = 0; i < n; i++) {
+      const el = loc.nth(i);
+      if (await el.isVisible().catch(() => false)) return el;
+    }
+    await page.waitForTimeout(400);
+  } while (Date.now() < deadline);
+  return null;
+}
+
 /** Returns true if it filled+submitted a form, false if it left the login to the human. */
 export async function fillCredentials(page: Page, platform: string, creds: FleetCredentials): Promise<boolean> {
   const form = FORMS[platform];
@@ -113,38 +130,31 @@ export async function fillCredentials(page: Page, platform: string, creds: Fleet
     await page.waitForLoadState('domcontentloaded').catch(() => {});
     await page.waitForTimeout(1200); // let the login widget mount
 
-    const userEl = page.locator(form.user).first();
-    await userEl.waitFor({ state: 'visible', timeout: FIELD_MS });
+    const userEl = await firstVisible(page, form.user, FIELD_MS);
+    if (!userEl) { log('username field never appeared — manual takeover'); return false; }
     await userEl.fill(user);
     log('username filled');
 
-    const passEl = page.locator(form.pass).first();
-    // Only advance a step if the password field isn't already on the page. Some
-    // forms (X's legacy single-page form, most blog logins) show user+pass
-    // together; others (X multi-step, Notion) reveal the password after a click.
-    const passAlreadyThere = await passEl.isVisible().catch(() => false);
-    if (!passAlreadyThere && form.next) {
-      const nextBtn = page.locator(form.next).first();
-      if (await nextBtn.isVisible().catch(() => false)) {
-        await nextBtn.click({ timeout: STEP_MS }).catch(() => userEl.press('Enter').catch(() => {}));
-      } else {
-        await userEl.press('Enter').catch(() => {});
-      }
+    // Advance a step only if the password field isn't already visible. Some forms
+    // (most blog logins) show user+pass together; X's modal reveals password after
+    // clicking "Continue"/"Next" (or Enter in the username field).
+    let passEl = await firstVisible(page, form.pass, 1500);
+    if (!passEl && form.next) {
+      const nextBtn = await firstVisible(page, form.next, 2500);
+      if (nextBtn) await nextBtn.click({ timeout: STEP_MS }).catch(() => userEl.press('Enter').catch(() => {}));
+      else await userEl.press('Enter').catch(() => {});
       await page.waitForTimeout(2500); // let the password step render
+      passEl = await firstVisible(page, form.pass, FIELD_MS);
     }
-
-    await passEl.waitFor({ state: 'visible', timeout: FIELD_MS });
+    if (!passEl) { log('password field never appeared — manual takeover'); return false; }
     await passEl.fill(creds.password);
     log('password filled');
 
     // Submit. Enter in the password field reliably submits single-page login
-    // forms (X's legacy form, most blog logins); also click an explicit submit
-    // button if one is present (harmless once the form is already navigating).
+    // forms; also click a visible submit button if present.
     await passEl.press('Enter').catch(() => {});
-    const submitBtn = page.locator(form.submit).first();
-    if (await submitBtn.isVisible().catch(() => false)) {
-      await submitBtn.click({ timeout: STEP_MS }).catch(() => {});
-    }
+    const submitBtn = await firstVisible(page, form.submit, 2000);
+    if (submitBtn) await submitBtn.click({ timeout: STEP_MS }).catch(() => {});
     log('submitted — credentials in, any challenge is now the human\'s to finish');
     return true;
   } catch (e: any) {
