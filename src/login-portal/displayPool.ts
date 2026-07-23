@@ -244,18 +244,19 @@ export async function startLogin(params: {
     fs.rmSync(`/tmp/.X${dn}-lock`, { force: true });
     fs.rmSync(`/tmp/.X11-unix/X${dn}`, { force: true });
 
-    // 1) virtual display. 1024x768 (readable for logins, ~32% fewer pixels than
-    // 1280x900) at 16-bit depth instead of 24 — a login form needs no true-color,
-    // and 16bpp is ~⅓ less colour data for x11vnc to encode/ship each frame, so
-    // it feels snappier over the tunnel. Poll the X socket for readiness instead
-    // of a blind sleep (Xvfb is usually up in <250ms, not 600).
-    pids.push(spawnDetached('Xvfb', [slot.display, '-screen', '0', '1024x768x16'], process.env));
+    // 1) virtual display — 1024x768x24. 16-bit depth + -defer 5 were tried as a
+    // "snappier VNC" tweak but caused the screen to repeatedly go BLACK under
+    // Arkose/MatchKey's heavy animated canvas (x11vnc struggling to encode a
+    // constantly-repainting surface at 2 vCPU) — the operator had to cancel and
+    // redo the CAPTCHA. Reverted to the proven-stable 24-bit here. Poll the X
+    // socket for readiness instead of a blind sleep (still the #3 spawn speedup).
+    pids.push(spawnDetached('Xvfb', [slot.display, '-screen', '0', '1024x768x24'], process.env));
     await waitForFile(`/tmp/.X11-unix/X${dn}`, 5000);
 
     // 2) VNC server bound to localhost only (Nginx/websockify terminate outward).
     // -threads: use both vCPUs for scan/poll work instead of one.
-    // -defer 5: coalesce updates over 5ms instead of 10 — lower input-to-paint
-    // latency (the interactive feel) at a small extra frame cost, fine on a login.
+    // -defer 10: batch updates every 10ms — the stable default; 5 destabilized
+    // the animated-canvas CAPTCHA (see above).
     // -noshm: plain X11 GetImage instead of MIT-SHM. x11vnc's default SHM path
     // draws from a small, fixed system-wide SysV shared-memory pool (shmmni) that
     // isn't reliably freed when a display is SIGKILL'd — repeated logins exhausted
@@ -263,7 +264,7 @@ export async function startLogin(params: {
     // device", silently, stdio ignored). -noshm sidesteps that pool entirely.
     pids.push(spawnDetached(
       'x11vnc',
-      ['-display', slot.display, '-rfbport', String(slot.vncPort), '-localhost', '-nopw', '-forever', '-shared', '-quiet', '-threads', '-defer', '5', '-noshm'],
+      ['-display', slot.display, '-rfbport', String(slot.vncPort), '-localhost', '-nopw', '-forever', '-shared', '-quiet', '-threads', '-defer', '10', '-noshm'],
       process.env,
     ));
     await waitForPort(slot.vncPort, 5000);
