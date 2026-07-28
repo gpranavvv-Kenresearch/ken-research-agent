@@ -46,7 +46,7 @@ import {
   runRetryRow,
 } from './coordinator/masterCoordinator.js';
 import { startCycle, stopCycle } from './login-portal/blogCycle.js';
-import { rebalanceFleetNames, getFailedSocialRows } from './sheets/sheets.js';
+import { rebalanceFleetNames, getFailedSocialRows, assignPendingRowsToLiveAccounts } from './sheets/sheets.js';
 import { canPost } from './health/accountHealth.js';
 import { closeAllBrowsers } from './tools/browserTools.js';
 import { killPostingChrome } from './utils/procKill.js';
@@ -349,6 +349,14 @@ export async function startCoordinatorDaemon(immediate: boolean = false): Promis
 export async function runCoordinatorOnce(statusFile?: string): Promise<void> {
   console.log(`Running the full ${STAGES.length}-cycle sequence once (30 min between each, then stopping)...\n`);
   try { await rebalanceFleetNames(); } catch (err: any) { console.warn(`Fleet rebalance failed (non-fatal): ${err.message}`); }
+  // Per-agent "Post Now" only (this function is never called by the main
+  // scheduler daemon) — spread any row this agent can't otherwise resolve
+  // (bare name, or a number pointing at a dead/deleted account) across
+  // whatever accounts this agent has ACTUALLY logged in right now. Built for
+  // agents like vansh/sanya with a small, evolving account count — no fixed
+  // cap assumed, unlike the strict fixed-slot rules kept for the main fleet.
+  try { await assignPendingRowsToLiveAccounts(process.env.WORKER_NAME || 'abhinav'); }
+  catch (err: any) { console.warn(`Live-account assignment failed (non-fatal): ${err.message}`); }
   lapNum = 1;
   for (let i = 0; i < STAGES.length; i++) {
     await runStage(i, statusFile);
