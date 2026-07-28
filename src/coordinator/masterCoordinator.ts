@@ -64,6 +64,39 @@ import { ensureTargetUrl } from '../utils/utm.js';
 import { retryOnSelectorTimeout } from '../utils/retry.js';
 import { canPost as healthCanPost, record as healthRecord } from '../health/accountHealth.js';
 import { proxyDispatcher } from '../health/proxyPool.js';
+import { listAgentStatus } from '../login-portal/sessionResolver.js';
+
+/**
+ * Cap a platform's row-pull limit to how many accounts the CURRENT agent
+ * (process.env.WORKER_NAME) actually has logged in for that platform, instead
+ * of always pulling the fixed default. Built for a small, evolving fleet
+ * (vansh, sanya) by explicit instruction: never pull more rows than there are
+ * real, live accounts to post them from — no fixed cap assumed, whatever's
+ * logged in right now IS the fleet. One post per live account, then done for
+ * that platform this stage. Mirrors the same principle as
+ * assignPendingRowsToLiveAccounts() in sheets.ts, applied here at pull time too.
+ *
+ * abhinav is EXPLICITLY EXCLUDED, by direct instruction — his flow (main
+ * scheduler daemon AND his own "Post Now") must stay byte-for-byte on the
+ * proven, fixed default limit, untouched by this new small-fleet logic, no
+ * matter what his live count happens to be for any platform.
+ *
+ * Zero live accounts for a platform means this agent doesn't have that
+ * platform at all — pull 0 rows, skip it entirely, don't even attempt a
+ * login. By explicit instruction: "check the available accounts and do
+ * posting, simple" — a platform the agent never logged into should never show
+ * up in the log trying (and failing) to log in as someone else's leftover
+ * account. Only a genuine ERROR reading live status (not "confirmed zero")
+ * falls back to the default, since that's real uncertainty, not a known zero.
+ */
+function capToLiveAccounts(defaultLimit: number, platformKey: string): number {
+  const agent = (process.env.WORKER_NAME || 'abhinav').toLowerCase();
+  if (agent === 'abhinav') return defaultLimit;
+  try {
+    const live = (listAgentStatus(agent).platforms[platformKey] || []).filter(a => a.ready).length;
+    return Math.min(defaultLimit, live); // 0 accounts → 0 rows pulled → platform skipped
+  } catch { return defaultLimit; }
+}
 
 /**
  * Ban-avoidance gate: skip an account that is dead/quarantined/cooling-down or
@@ -282,7 +315,7 @@ async function diagnoseError(
  * SERP check disabled — re-enable by uncommenting runSeoAnalysis calls
  */
 export async function runXBatch(batchNum: number = 1): Promise<void> {
-  const batchUrls = await getRowsForContinuousXPosting(12);
+  const batchUrls = await getRowsForContinuousXPosting(capToLiveAccounts(12, 'x'));
 
   if (batchUrls.length === 0) {
     console.log('[X BATCH] No rows available');
@@ -377,7 +410,7 @@ export async function runXBatch(batchNum: number = 1): Promise<void> {
  * Run FB batch: pick rows → SEO check → generate FB post → post → save all
  */
 export async function runFbBatch(batchNum: number = 1): Promise<void> {
-  const rows = await getRowsForContinuousFbPosting(12);
+  const rows = await getRowsForContinuousFbPosting(capToLiveAccounts(12, 'fb'));
 
   if (rows.length === 0) {
     console.log('[FB BATCH] No rows available');
@@ -497,7 +530,7 @@ async function postToFbAccount(accountName: string, postText: string): Promise<{
  * Run LI batch: pick rows → SEO check → generate LI post → post → save all
  */
 export async function runLiBatch(options?: { manual?: boolean }, batchNum: number = 1): Promise<void> {
-  const rows = await getRowsForContinuousLiPosting(12);
+  const rows = await getRowsForContinuousLiPosting(capToLiveAccounts(12, 'li'));
 
   if (rows.length === 0) {
     console.log('[LI BATCH] No rows available');
@@ -627,7 +660,7 @@ export async function runMediumBatch(batchNum: number = 1): Promise<void> {
   // Medium uses BLOG sheet
   console.log(`\n[MEDIUM BATCH] Checking for rows ready to post...`);
 
-  const rows = await getRowsForContinuousMediumPosting(12);
+  const rows = await getRowsForContinuousMediumPosting(capToLiveAccounts(12, 'medium'));
 
   if (rows.length === 0) {
     console.log('[MEDIUM BATCH] No rows available (all posted recently, no new rows)');
@@ -754,7 +787,7 @@ async function postToMediumAccount(accountName: string, title: string, htmlConte
 export async function runLinkmateBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[LINKMATE BATCH] Starting...`);
 
-  const rows = await getRowsForContinuousLinkmatePosting(12);
+  const rows = await getRowsForContinuousLinkmatePosting(capToLiveAccounts(12, 'linkmate'));
 
   if (rows.length === 0) {
     console.log('[LINKMATE BATCH] No rows available (all posted recently, no new rows)');
@@ -871,7 +904,7 @@ async function postToLinkmateAccount(accountName: string, title: string, htmlCon
 export async function runGoogleSiteBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[GOOGLE SITES BATCH] Starting...`);
 
-  const rows = await getRowsForContinuousGoogleSitePosting(12);
+  const rows = await getRowsForContinuousGoogleSitePosting(capToLiveAccounts(12, 'googlesite'));
 
   if (rows.length === 0) {
     console.log('[GOOGLE SITES BATCH] No rows available (all posted recently, no new rows)');
@@ -992,7 +1025,7 @@ async function postToGoogleSiteAccount(accountName: string, title: string, htmlC
 export async function runDevtoBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[DEV.TO BATCH] Starting...`);
 
-  const rows = await getRowsForContinuousDevtoPosting(12);
+  const rows = await getRowsForContinuousDevtoPosting(capToLiveAccounts(12, 'devto'));
 
   if (rows.length === 0) {
     console.log('[DEV.TO BATCH] No rows available (all posted recently, no new rows)');
@@ -1101,7 +1134,7 @@ async function postToDevtoAccount(accountName: string, title: string, htmlConten
 export async function runLinkedinPulseBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[LINKEDIN PULSE BATCH] Starting...`);
 
-  const rows = await getRowsForContinuousLinkedinPulsePosting(12);
+  const rows = await getRowsForContinuousLinkedinPulsePosting(capToLiveAccounts(12, 'li')); // Pulse reuses the LinkedIn session/login
 
   if (rows.length === 0) {
     console.log('[LINKEDIN PULSE BATCH] No rows available (all posted recently, no new rows)');
@@ -1263,7 +1296,7 @@ async function postToPulseAccount(
 export async function runCalisthenicsNBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[CALISTHENICS BATCH] Starting...`);
 
-  const rows = await getRowsForContinuousCalisthenicsPosting(12);
+  const rows = await getRowsForContinuousCalisthenicsPosting(capToLiveAccounts(12, 'calisthenics'));
 
   if (rows.length === 0) {
     console.log('[CALISTHENICS BATCH] No rows available');
@@ -1348,7 +1381,7 @@ export async function runCalisthenicsNBatch(batchNum: number = 1): Promise<void>
 export async function runSubstackBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[SUBSTACK BATCH] Starting...`);
 
-  const rows = await getRowsForContinuousSubstackPosting(12);
+  const rows = await getRowsForContinuousSubstackPosting(capToLiveAccounts(12, 'substack'));
 
   if (rows.length === 0) {
     console.log('[SUBSTACK BATCH] No rows available');
@@ -1428,7 +1461,7 @@ export async function runWordpressBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[WORDPRESS BATCH] Starting...`);
   const progress = getBlogRowProgress();
   console.log(`  [WordPress] Last posted row index: ${progress.wordpress}`);
-  const rows = await getRowsForContinuousWordpressPosting(12, progress.wordpress);
+  const rows = await getRowsForContinuousWordpressPosting(capToLiveAccounts(12, 'wordpress'), progress.wordpress);
   if (rows.length === 0) { console.log('[WORDPRESS BATCH] No rows available'); return; }
   const batchLabel = `Batch ${batchNum}`;
   console.log(`  Found ${rows.length} rows ready for WordPress posting (${batchLabel})`);
@@ -1527,7 +1560,7 @@ export async function runBloggerBatch(batchNum: number = 1): Promise<void> {
 export async function runHackmdBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[HACKMD BATCH] Starting...`);
 
-  const rows = await getRowsForContinuousHackmdPosting(12);
+  const rows = await getRowsForContinuousHackmdPosting(capToLiveAccounts(12, 'hackmd'));
 
   if (rows.length === 0) {
     console.log('[HACKMD BATCH] No rows available');
@@ -1965,7 +1998,7 @@ async function saveWordpressBatchResult(
 
 export async function runPatreonBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[PATREON BATCH] Starting...`);
-  const rows = await getRowsForContinuousPatreonPosting(12);
+  const rows = await getRowsForContinuousPatreonPosting(capToLiveAccounts(12, 'patreon'));
   if (rows.length === 0) { console.log('[PATREON BATCH] No rows available'); return; }
   const batchLabel = `Batch ${batchNum}`;
   console.log(`  Found ${rows.length} rows ready for Patreon (${batchLabel})`);
@@ -2015,7 +2048,7 @@ export async function runPatreonBatch(batchNum: number = 1): Promise<void> {
 
 export async function runNotionBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[NOTION BATCH] Starting...`);
-  const rows = await getRowsForContinuousNotionPosting(12);
+  const rows = await getRowsForContinuousNotionPosting(capToLiveAccounts(12, 'notion'));
   if (rows.length === 0) { console.log('[NOTION BATCH] No rows available'); return; }
   const batchLabel = `Batch ${batchNum}`;
   console.log(`  Found ${rows.length} rows ready for Notion (${batchLabel})`);
@@ -2065,7 +2098,7 @@ export async function runNotionBatch(batchNum: number = 1): Promise<void> {
 
 export async function runNoteBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[NOTE BATCH] Starting...`);
-  const rows = await getRowsForContinuousNotePosting(12);
+  const rows = await getRowsForContinuousNotePosting(capToLiveAccounts(12, 'note'));
   if (rows.length === 0) { console.log('[NOTE BATCH] No rows available'); return; }
   const batchLabel = `Batch ${batchNum}`;
   console.log(`  Found ${rows.length} rows ready for Note (${batchLabel})`);
@@ -2118,7 +2151,7 @@ export async function runAmebaBatch(batchNum: number = 1): Promise<void> {
   const { loginToAmeba, closeAmebaBrowser } = await import('../browser/ameba/login.js');
   const { postToAmeba } = await import('../browser/ameba/poster.js');
 
-  const rows = await getRowsForContinuousAmebaPosting(12);
+  const rows = await getRowsForContinuousAmebaPosting(capToLiveAccounts(12, 'ameba'));
   if (rows.length === 0) { console.log('[AMEBA BATCH] No rows available'); return; }
 
   const batchLabel = `Batch ${batchNum}`;
@@ -2519,7 +2552,7 @@ export async function saveNoteSession(nickname: string): Promise<void> {
 
 export async function runParagraphBatch(batchNum: number = 1): Promise<void> {
   console.log(`\n[PARAGRAPH BATCH] Starting...`);
-  const rows = await getRowsForContinuousParagraphPosting(12);
+  const rows = await getRowsForContinuousParagraphPosting(capToLiveAccounts(12, 'paragraph'));
   if (rows.length === 0) { console.log('[PARAGRAPH BATCH] No rows available'); return; }
   const batchLabel = `Batch ${batchNum}`;
   console.log(`  Found ${rows.length} rows ready for Paragraph (${batchLabel})`);

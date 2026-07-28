@@ -10,6 +10,7 @@
 import { google } from 'googleapis';
 import fsSync from 'fs';
 import 'dotenv/config';
+import { listAgentStatus } from '../login-portal/sessionResolver.js';
 
 // ──── History-safe helpers ──────────────────────────────────────────────────
 
@@ -2498,6 +2499,108 @@ export async function rebalanceFleetNames(): Promise<void> {
       console.log(`   ⚖️  [rebalance] ${cfg.name}: ${pos} untouched fleet rows, ${updates.length} renamed (${agents.map(a => `${a.agent}:${a.count}`).join(', ')})`);
     } catch (err: any) {
       console.warn(`   ⚠️ [rebalance] ${cfg.name} failed (non-fatal): ${err.message}`);
+    }
+  }
+}
+
+/**
+ * For ONE agent's own tabs — used by the per-agent "Post Now" cycle only, never
+ * the main scheduler daemon (which keeps its stricter, abhinav-focused rules
+ * exactly as locked in: no substitution, fixed numbered slots). Reassigns any
+ * pending row whose Name does NOT resolve to an account this agent has
+ * ACTUALLY LOGGED IN right now, round-robin across whichever accounts are live.
+ *
+ * rebalanceFleetNames() only touches rows already in "agent N" format and
+ * weights by registered X-account COUNT, not live login state — so a bare name
+ * ("Vansh", no number) or a number pointing at a deleted/dead account is
+ * skipped forever, never fixed. This is for agents like vansh/sanya whose real
+ * account count is small and grows as they log in — there is no fixed "N cap"
+ * assumed; whatever is logged in right now IS the fleet.
+ *
+ * A number beyond one specific platform's own real count (e.g. assigned "vansh
+ * 2" but Facebook only has "vansh 1") still fails cleanly and individually on
+ * THAT platform via the existing no-substitution account lookup — this only
+ * ensures the shared Name column points at some real, live account instead of
+ * nothing at all.
+ *
+ * abhinav is EXPLICITLY EXCLUDED, by direct instruction — even if he ever
+ * triggers his own "Post Now", his rows must never be auto-reassigned by this
+ * small-fleet mechanism; his sheet stays exactly as fixed-slot rules manage it.
+ */
+export async function assignPendingRowsToLiveAccounts(agent: string): Promise<void> {
+  const a = agent.toLowerCase().trim();
+  if (a === 'abhinav') return;
+  const status = listAgentStatus(a);
+  const liveIndices = new Set<number>();
+  for (const list of Object.values(status.platforms)) {
+    for (const acc of list) if (acc.ready) liveIndices.add(acc.index);
+  }
+  const live = [...liveIndices].sort((x, y) => x - y);
+  if (!live.length) {
+    console.log(`   ⚠️ [live-assign] ${a}: no logged-in accounts on any platform — nothing to assign`);
+    return;
+  }
+
+  const sheets = await getSheetsClient();
+  const capA = a.charAt(0).toUpperCase() + a.slice(1);
+  const tabs = [
+    { id: SOCIAL_SHEET_ID, name: `${capA} Social` },
+    { id: BLOG_SHEET_ID, name: `${capA} Blog` },
+  ];
+
+  for (const cfg of tabs) {
+    try {
+      const res = await withRetry(() => sheets.spreadsheets.values.get({
+        spreadsheetId: cfg.id, range: `${cfg.name}!A:ZZ`,
+      }), 'assignPendingRowsToLiveAccounts');
+      const rows: string[][] = res.data.values ?? [];
+      if (rows.length < 2) continue;
+      const hdr = rows[0];
+      const nameIdx = hdr.findIndex(h => h.trim().toLowerCase() === 'name');
+      if (nameIdx < 0) continue;
+      const urlIdx = hdr.findIndex(h => /^(targeturl|report url|download report url)$/.test(h.trim().toLowerCase()));
+      const touchIdx = hdr.map((h, i) => {
+        const k = h.trim().toLowerCase().replace(/\s+/g, '');
+        return (k.includes('status') || k.includes('posturl') || k.includes('lastposted')) ? i : -1;
+      }).filter(i => i >= 0);
+
+      // Cap how many rows get unlocked per cycle — exactly ONE per live account,
+      // by explicit instruction: "one one post and done." A small fleet (e.g. 2
+      // accounts) must never have all 55 broken rows fixed in one shot: the
+      // row-pickers would then try to push all of them through in a single
+      // batch, hammering 2 real accounts with far more than one post each. Leave
+      // the rest bare — they get unlocked one more each on the NEXT cycle's run.
+      const MAX_PER_CYCLE = live.length;
+      const updates: { range: string; values: string[][] }[] = [];
+      let cursor = 0;
+      for (let r = 1; r < rows.length && updates.length < MAX_PER_CYCLE; r++) {
+        const row = rows[r];
+        if (urlIdx >= 0 && !(row[urlIdx] ?? '').trim()) continue;
+        if (touchIdx.some(i => (row[i] ?? '').trim())) continue; // touched → leave alone
+        const cur = (row[nameIdx] ?? '').trim();
+        const m = /^([a-z]+)\s*(\d+)$/i.exec(cur);
+        const curAgent = m ? m[1].toLowerCase() : '';
+        const curIdx = m ? Number(m[2]) : -1;
+        if (curAgent === a && liveIndices.has(curIdx)) continue; // already valid — leave alone
+
+        const idx = live[cursor % live.length];
+        cursor++;
+        updates.push({
+          range: `${cfg.name}!${colToLetter(nameIdx)}${r + 1}`,
+          values: [[`${a} ${idx}`]],
+        });
+      }
+      if (updates.length) {
+        for (let i = 0; i < updates.length; i += 500) {
+          await withRetry(() => sheets.spreadsheets.values.batchUpdate({
+            spreadsheetId: cfg.id,
+            requestBody: { valueInputOption: 'RAW', data: updates.slice(i, i + 500) },
+          }), 'assignPendingRowsToLiveAccounts-write');
+        }
+      }
+      console.log(`   🔀 [live-assign] ${cfg.name}: ${updates.length} unresolvable row(s) assigned to live accounts (${live.map(i => `${a} ${i}`).join(', ')})`);
+    } catch (err: any) {
+      console.warn(`   ⚠️ [live-assign] ${cfg.name} failed (non-fatal): ${err.message}`);
     }
   }
 }
