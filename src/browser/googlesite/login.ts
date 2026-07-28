@@ -2,7 +2,6 @@
 import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
-import { blockHeavyResources } from '../../utils/blockResources.js';
 
 const GOOGLESITE_ACCOUNTS_FILE = '.accounts/accounts-googlesite.json';
 const SESSION_ROOT = path.resolve('.sessions/googlesite');
@@ -110,7 +109,10 @@ export async function loginToGoogleSite(options?: {
     ],
   });
 
-  await blockHeavyResources(browserContext, 'googlesite');
+  // NO blockHeavyResources here: Google Sites is navigated BY images — the
+  // "create blank site" tile is located via img[src*="sites-blank-googlecolors.png"],
+  // so blocking images makes it invisible and kills every post (regression 679ca82,
+  // GS went 187/day → 0 at that deploy). Font/media savings aren't worth it here.
   await browserContext.addInitScript(() => {
     Object.defineProperty((globalThis as any).navigator, 'webdriver', { get: () => false });
     (globalThis as any).window.chrome = (globalThis as any).window.chrome || { runtime: {} };
@@ -176,7 +178,7 @@ export async function loginToGoogleSite(options?: {
   // In batch mode, don't wait — fail fast so the batch moves to the next account
   if (options?.batchMode) {
     await closeGoogleSiteBrowser();
-    throw new Error(`Google Sites session expired for ${email} — re-run save-googlesite-session`);
+    throw new Error(`Google Sites session expired for ${options?.nickname || account?.nickname || email} — re-run save-googlesite-session`);
   }
 
   // If not logged in, wait indefinitely for manual login

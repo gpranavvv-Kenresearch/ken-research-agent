@@ -4,6 +4,7 @@ import fs from 'fs';
 import 'dotenv/config';
 import { killChromeForProfile } from '../../utils/killChrome.js';
 import { getChromeLaunchArgs } from '../../utils/chromeArgs.js';
+import { identityLaunchOverrides } from '../../health/proxyPool.js';
 
 const HACKMD_ACCOUNTS_FILE = '.accounts/accounts-hackmd.json';
 const SESSION_ROOT = path.resolve('.sessions/hackmd');
@@ -126,6 +127,9 @@ export async function loginToHackMD(options?: {
     slowMo: 120,
     ignoreDefaultArgs: ['--enable-automation'],
     args: getChromeLaunchArgs({ extra: ['--window-size=1366,768'] }),
+    // Per-(user,platform) static IP for the browser-fallback path; proxy applies to
+    // existing sessions too, fingerprint only to fresh ones (see identityLaunchOverrides).
+    ...identityLaunchOverrides(sessionDir, account?.nickname || options?.nickname || label, 'hackmd'),
   });
 
   await browserContext.addInitScript(() => {

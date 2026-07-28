@@ -26,6 +26,7 @@ import {
   agentSessionDir, registerFleetAccount, listAgentStatus, nextIndex, sessionReadyForDir,
 } from './sessionResolver.js';
 import { startLogin, teardown, getLogin, sweepExpired, poolStatus, loginQueue } from './displayPool.js';
+import { deleteFleetAccount } from './sessionDelete.js';
 import { verifyOrSetPin, mintToken, requireAgentToken } from './agentAuth.js';
 import { startCycle, stopCycle, cycleStatus } from './blogCycle.js';
 import { startPostCycle, stopPostCycle, postCycleStatus } from './postCycle.js';
@@ -192,6 +193,24 @@ app.post('/api/agent/:agent/login-batch', requireAgentToken, async (req: Request
     }
   }
   res.json({ ok: true, agent, platform, started: results.filter(r => r.ok).length, results });
+});
+
+// DELETE /api/agent/:agent/session/:platform/:index — fully remove ONE fleet
+// account: session profile, registry entry, health ledger entry, cookies
+// fallback file. Idempotent (deleting an already-gone account is a no-op).
+app.delete('/api/agent/:agent/session/:platform/:index', requireAgentToken, (req: Request, res: Response) => {
+  const agent = req.params.agent.toLowerCase();
+  const platform = req.params.platform.toLowerCase();
+  const index = Number(req.params.index);
+  if (!PLATFORMS[platform]) { res.status(400).json({ error: `unknown platform "${platform}"` }); return; }
+  if (!Number.isFinite(index) || index <= 0) { res.status(400).json({ error: 'invalid index' }); return; }
+  try {
+    const result = deleteFleetAccount(agent, platform, index);
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    console.error('[login-api] session delete failed:', err?.message || err);
+    res.status(500).json({ error: err?.message || 'delete failed' });
+  }
 });
 
 // GET /api/agent/:agent/login-queue — live logins for this agent with per-login

@@ -3,16 +3,30 @@ import path from 'path';
 
 /**
  * Graceful-kill every process whose command line contains `needle` (a fixed
- * string), SIGTERM first then SIGKILL after a short grace, on Linux/macOS.
+ * string), SIGTERM first then SIGKILL only for whatever's still alive after a
+ * real grace window, on Linux/macOS.
  *
  * Implemented with `ps | grep -F | grep -v grep | awk | kill` rather than
  * `pkill -f`, on purpose: `pkill -f <pattern>` also matches the shell running
  * pkill (its own argv contains the pattern) and SIGTERMs it mid-escalation — so
  * the follow-up SIGKILL never fires and a stuck browser survives. Every process
  * in THIS pipeline that carries the needle also carries the literal "grep" and
- * is removed by `grep -v grep`, so the pipeline never signals itself. The sleep
- * is skipped entirely when nothing matched (callers on the happy path pay
- * nothing). SIGTERM-first lets Chrome flush cookies on its normal shutdown path.
+ * is removed by `grep -v grep`, so the pipeline never signals itself.
+ *
+ * Polls for each PID's actual exit (up to 3s) instead of a blind fixed sleep —
+ * this used to sleep exactly 2s then force-kill UNCONDITIONALLY, even a process
+ * that had already exited cleanly, or one that was 200ms from flushing on its
+ * own. Chrome batches cookie writes to its on-disk SQLite DB rather than
+ * flushing on every set, so a forced SIGKILL mid-flush can throw away a
+ * just-completed login's cookies before they ever reach disk. This mirrors the
+ * proven-safe teardown the login portal already uses (displayPool.ts
+ * killChromeGracefully) — poll for real exit, only escalate what's still alive.
+ * Real-world impact: this is the kill used before every posting-time browser
+ * launch (killChromeForProfile), including LinkedIn's fallback-index wrapping
+ * that reuses the same few real accounts across many sheet rows in one batch —
+ * so the SAME session directory could get killed and relaunched repeatedly
+ * within a single run, and every one of those kills used to risk wiping a
+ * session's login cookie via this unsafe force-kill.
  */
 export function gracefulKillByNeedle(needle: string): void {
   if (process.platform === 'win32') return;
@@ -20,9 +34,19 @@ export function gracefulKillByNeedle(needle: string): void {
   try {
     execSync(
       `pids=$(ps -eo pid=,args= | grep -F -- '${q}' | grep -v grep | awk '{print $1}'); ` +
-        `if [ -n "$pids" ]; then echo "$pids" | xargs -r kill -TERM 2>/dev/null; sleep 2; ` +
-        `echo "$pids" | xargs -r kill -KILL 2>/dev/null; fi; true`,
-      { stdio: 'pipe', timeout: 8000, shell: '/bin/bash' }
+        `if [ -n "$pids" ]; then ` +
+        `echo "$pids" | xargs -r kill -TERM 2>/dev/null; ` +
+        `alive="$pids"; ` +
+        `for i in 1 2 3 4 5 6; do ` +
+        `sleep 0.5; ` +
+        `next=""; ` +
+        `for p in $alive; do kill -0 "$p" 2>/dev/null && next="$next $p"; done; ` +
+        `alive="$next"; ` +
+        `[ -z "$alive" ] && break; ` +
+        `done; ` +
+        `if [ -n "$alive" ]; then echo "$alive" | xargs -r kill -KILL 2>/dev/null; fi; ` +
+        `fi; true`,
+      { stdio: 'pipe', timeout: 10000, shell: '/bin/bash' }
     );
   } catch {
     // best-effort — never throw into a caller's control flow

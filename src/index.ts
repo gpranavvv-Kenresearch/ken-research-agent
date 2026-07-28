@@ -886,6 +886,23 @@ async function main() {
     return;
   }
 
+  // The posting daemon is long-lived and drives many browsers. A single Playwright
+  // "Target/context/browser has been closed" surfaces as an unhandledRejection when
+  // a Chrome dies mid-post. Without a guard, Node tears down the WHOLE scheduler →
+  // pm2 restarts it → the running session is abandoned and a fresh one starts (the
+  // fragmented-cycle / ~7-restarts-a-day problem). These are per-session faults, not
+  // process faults: log and carry on so one bad post never kills the daemon. Scoped
+  // to the daemon modes so one-shot CLI commands still exit on error. Mirrors the
+  // guards already on login-api (server.ts).
+  if (mode === 'schedule' || mode === 'schedule-now') {
+    process.on('unhandledRejection', (reason: any) => {
+      console.error('[scheduler] unhandledRejection (ignored):', (reason as any)?.message || reason);
+    });
+    process.on('uncaughtException', (err: any) => {
+      console.error('[scheduler] uncaughtException (ignored):', err?.message || err);
+    });
+  }
+
   // mode === 'schedule-now': cron triggers armed AND a posting session starts
   // right away. mode === 'schedule' (or unspecified): cron-only — register
   // the 11:00 AM/PM triggers and wait for the next one, no immediate run.

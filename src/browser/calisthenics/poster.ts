@@ -63,14 +63,26 @@ async function attemptPost(page: Page, params: CalisthenicsPostParams): Promise<
 
   // ── Step 6: Publish ────────────────────────────────────────────────────────
   console.log('  7️⃣ Publishing...');
+  // Real production logs never show the composer's URL as `/posts/new` — the
+  // `?new_post=true` goto lands (and stays) on `/spaces/9350032/feed` the whole
+  // time the modal editor is open. The old "wait until URL no longer includes
+  // /posts/new" check was therefore already true the instant it ran (the URL
+  // never contained that string to begin with), so it resolved immediately
+  // instead of actually waiting for the post-publish redirect — the function
+  // returned the pre-publish feed URL almost every time, which is exactly the
+  // "Post failed — bad URL after 3 attempts: .../spaces/9350032/feed" failure
+  // seen on ~12-16 posts/day even though title/body fill and the Publish click
+  // all reported success with no errors. Wait for the URL to actually change
+  // away from where the composer opened (a real permalink is `/posts/<slug>`).
+  const preClickUrl = page.url();
   try {
     const postBtn = page.locator('a#post-publish-submit-button:not(.disabled)').first();
     await postBtn.waitFor({ state: 'visible', timeout: 20000 });
-    await postBtn.click({ delay: 150 }).catch(() => {});
-    // Wait for navigation away from the editor (means publish succeeded)
+    await postBtn.click({ delay: 150 });
     await page.waitForFunction(
-      () => !window.location.href.includes('/posts/new'),
-      { timeout: 15000 }
+      (before) => window.location.href !== before && window.location.href.includes('/posts/'),
+      preClickUrl,
+      { timeout: 20000 }
     ).catch(() => {});
   } catch (err) {
     console.warn(`   ⚠️ Could not click publish: ${(err as any).message}`);

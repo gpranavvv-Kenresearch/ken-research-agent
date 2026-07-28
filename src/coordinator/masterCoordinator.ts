@@ -63,6 +63,7 @@ function extractSocialPost(rawContent: string | undefined): string | null {
 import { ensureTargetUrl } from '../utils/utm.js';
 import { retryOnSelectorTimeout } from '../utils/retry.js';
 import { canPost as healthCanPost, record as healthRecord } from '../health/accountHealth.js';
+import { proxyDispatcher } from '../health/proxyPool.js';
 
 /**
  * Ban-avoidance gate: skip an account that is dead/quarantined/cooling-down or
@@ -515,6 +516,13 @@ export async function runLiBatch(options?: { manual?: boolean }, batchNum: numbe
   for (const row of rows) {
     try {
       console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
+      // Rows with an empty "Name" column can't be posted (no account to log in as).
+      // The row picker only requires title+URL, so nameless rows reach here — skip
+      // them instead of launching a browser that fails with "log in as undefined".
+      if (!row.name?.trim()) {
+        console.log(`    ⏭ Skipping — row has no account name (empty "Name" column in sheet)`);
+        continue;
+      }
       if (!healthGate('LinkedIn', row.name)) continue;
 
       // Use sheet content if available, otherwise generate
@@ -1143,14 +1151,19 @@ export async function runLinkedinPulseBatch(batchNum: number = 1): Promise<void>
         // 3. Post to LinkedIn Pulse
         console.log(`      Posting to LinkedIn Pulse...`);
         if (!healthGate('LinkedIn Pulse', accountName)) continue;
-        const postResult = await retryOnSelectorTimeout(() => postToPulseAccount(
+        // NO retry wrapper here: retryOnSelectorTimeout re-runs the whole login+post,
+        // which force-kills and relaunches the SAME LinkedIn Chrome profile up to 3×.
+        // Repeated unclean profile kills corrupt the session and LOG THE ACCOUNT OUT
+        // (observed 2026-07-28: 5 LinkedIn accounts logged out mid-batch). One clean
+        // attempt only — a composer timeout must never churn a live logged-in profile.
+        const postResult = await postToPulseAccount(
           accountName,
           pulseTitle,
           pulseContent.html,
           pulseTitle,
           pulseContent.seoDescription,
           pulseCaption
-        ), { label: 'LinkedIn Pulse post' });
+        );
         healthRecordSafe('LinkedIn Pulse', accountName, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
 
         if (postResult.success) {
@@ -1680,11 +1693,14 @@ function getHackmdApiKey(accountName: string): string | undefined {
 async function postToHackmdViaApi(
   title: string,
   htmlContent: string,
-  apiKey: string
+  apiKey: string,
+  accountName?: string
 ): Promise<{ success: boolean; postUrl?: string; error?: string }> {
   try {
     const markdown = `# ${title}\n\n${htmlToMarkdownSimple(htmlContent)}`;
-    const res = await fetch('https://api.hackmd.io/v1/notes', {
+    // Route the API call through this user's HackMD static IP (same exit as the browser path).
+    const dispatcher = accountName ? proxyDispatcher(accountName, 'hackmd') : undefined;
+    const init: any = {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -1697,7 +1713,9 @@ async function postToHackmdViaApi(
         writePermission: 'owner',
         commentPermission: 'everyone',
       }),
-    });
+    };
+    if (dispatcher) init.dispatcher = dispatcher;
+    const res = await fetch('https://api.hackmd.io/v1/notes', init);
 
     if (!res.ok) {
       const errText = await res.text().catch(() => res.statusText);
@@ -1723,7 +1741,7 @@ async function postToHackmdAccount(
   if (accountName) {
     const apiKey = getHackmdApiKey(accountName);
     if (apiKey) {
-      const apiResult = await postToHackmdViaApi(title, htmlContent, apiKey);
+      const apiResult = await postToHackmdViaApi(title, htmlContent, apiKey, accountName);
       if (apiResult.success) return apiResult;
       console.log(`    ⚠️ HackMD API failed for ${accountName} (${apiResult.error}) — falling back to browser`);
     }
@@ -1800,14 +1818,14 @@ async function saveLinkmateBatchResult(
   row: SheetRow,
   data: { linkMateContent: string; linkMatePostUrl: string; linkMateStatus: string; linkmateBatch: string; linkMateError?: string }
 ): Promise<void> {
-  const today = new Date().toISOString().split('T')[0];
+  // lastPosted is stamped inside saveUnifiedLinkmateResult via nowStamp() (date+time IST);
+  // do not pass a date-only value here.
   await saveUnifiedLinkmateResult(row, {
     content: data.linkMateContent,
     postUrl: data.linkMatePostUrl,
     status: data.linkMateStatus,
     error: data.linkMateError || '',
     batch: data.linkmateBatch,
-    lastPosted: data.linkMateStatus === 'Posted' ? today : undefined,
   });
 }
 

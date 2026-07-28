@@ -4,6 +4,7 @@ import fs from 'fs';
 import 'dotenv/config';
 import { killChromeForProfile } from '../../utils/killChrome.js';
 import { identityLaunchOverrides } from '../../health/proxyPool.js';
+import { applyStealth } from '../../utils/stealth.js';
 
 const LINKEDIN_ACCOUNTS_FILE = '.accounts/linkedin-accounts.json';
 const SESSION_ROOT = path.resolve('li-sessions');
@@ -110,12 +111,46 @@ async function detectTwoFactorBlock(page: Page, username: string): Promise<boole
 
 async function ensureLoggedIn(page: Page, email: string, password: string): Promise<boolean> {
   try {
-    await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'domcontentloaded' });
+    // A profile with a valid long-lived "remember me" token but an EXPIRED li_at
+    // lands here mid-navigation, not on /feed/ directly — LinkedIn silently
+    // re-authenticates it through a server-side redirect chain
+    // (/ssr-login/remember-me-auto-login?midToken=...) before finally landing on
+    // /feed/. The default 30s goto timeout was too short for that chain on a slow
+    // run, throwing a navigation-timeout that got treated as "not logged in" —
+    // discarding a session that would have recovered on its own. Give it real room.
+    await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
     if (await detectTwoFactorBlock(page, email)) return false;
 
-    const alreadyLoggedIn = await page.locator('a[href*="/mynetwork/"]').first().isVisible().catch(() => false);
+    // Still mid-redirect (auto-relogin in progress) — wait for it to land instead
+    // of judging "logged in?" on an intermediate URL.
+    if (/\/ssr-login\/|remember-me-auto-login|session_mid_token/.test(page.url().toLowerCase())) {
+      console.log(`   ⏳ ${email || 'session account'}: LinkedIn auto-relogin redirect in progress, waiting...`);
+      await page.waitForURL(/linkedin\.com\/feed\/?($|\?)/, { timeout: 20_000 }).catch(() => {});
+    }
+
+    // Robust logged-in detection. The old check did an INSTANT .isVisible() on one
+    // nav link with no wait, so a still-rendering feed read as "logged out" → the
+    // code then demanded email/password these session-only accounts don't have →
+    // "Credentials missing" on accounts the dashboard correctly shows as logged in.
+    // Fix: give the nav time to render, check several signals, and treat staying on
+    // /feed (not redirected to login/authwall/checkpoint) as logged in.
+    await page.waitForTimeout(2500);
+    const url = (page.url() || '').toLowerCase();
+    const kickedOut = /\/login|\/checkpoint|\/authwall|\/signup|\/uas\/|\/ssr-login\//.test(url);
+    const navVisible = await page.locator(
+      'a[href*="/mynetwork/"], img.global-nav__me-photo, .global-nav__me, [data-control-name="identity_welcome_message"], button[aria-label*="settings" i]'
+    ).first().isVisible({ timeout: 8000 }).catch(() => false);
+    // Require the real nav UI, not just a /feed URL — the URL can read /feed while
+    // the page is still a loading shell (slow network, an A/B interstitial, a
+    // restricted-account notice), and that false "logged in" verdict was the thing
+    // sending the poster on to a page with no "Start a post" button to find —
+    // surfacing downstream as "composer textbox never appeared", not as a login
+    // failure. A bare url.includes('/feed') fallback (no nav check at all) is kept
+    // only as a last resort, since some legitimately-logged-in narrow viewports
+    // don't render every nav selector above.
+    const alreadyLoggedIn = !kickedOut && (navVisible || (url.includes('/feed') && await page.locator('div.feed-shared-update-v2, main#main').first().isVisible({ timeout: 5000 }).catch(() => false)));
     if (alreadyLoggedIn) {
-      console.log(`   ✅ ${email}: already logged in`);
+      console.log(`   ✅ ${email || 'session account'}: already logged in`);
       return true;
     }
 
@@ -186,15 +221,25 @@ export async function loginToLinkedIn(options?: {
   password?: string;
   nickname?: string;
 }): Promise<Page> {
-  const account = options?.nickname
-    ? getLinkedInAccountByNickname(options.nickname)
-    : getActiveLinkedInAccount();
-
-  if (options?.nickname && !account) {
-    throw new Error(`LinkedIn account "${options.nickname}" not found in linkedin-accounts.json — refusing to silently fall back to a different account`);
+  // A nickname argument that is present but blank means the sheet "Name" column was
+  // empty for this row. The old code treated "" as falsy and silently fell through to
+  // getActiveLinkedInAccount() — which either posted every nameless row to the SAME
+  // wrong profile, or (with no active account) left `email` undefined and threw the
+  // infamous "Unable to log in to LinkedIn as undefined". Fail clearly instead.
+  const requestedNickname = options?.nickname?.trim();
+  if (options && 'nickname' in options && !requestedNickname) {
+    throw new Error('LinkedIn login skipped: row has no account name (empty "Name" column in sheet) — assign an account before posting');
   }
 
-  const nickname  = (options?.nickname || account?.nickname || 'unknown').toLowerCase();
+  const account = requestedNickname
+    ? getLinkedInAccountByNickname(requestedNickname)
+    : getActiveLinkedInAccount();
+
+  if (requestedNickname && !account) {
+    throw new Error(`LinkedIn account "${requestedNickname}" not found in ${LINKEDIN_ACCOUNTS_FILE} — refusing to silently fall back to a different account`);
+  }
+
+  const nickname  = (requestedNickname || account?.nickname || 'unknown').toLowerCase();
   const email    = options?.email    || account?.email    || process.env.LINKEDIN_EMAIL!;
   const password = options?.password || account?.password || process.env.LINKEDIN_PASSWORD!;
 
@@ -212,6 +257,11 @@ export async function loginToLinkedIn(options?: {
       storageState: cookiesFile,
       viewport: { width: 1366, height: 900 },
     });
+    // FB and X both patch navigator.webdriver/window.chrome before the first
+    // navigation; LinkedIn never did, on either its cookies path or its
+    // persistent-profile path below — the one concrete hardening gap versus the
+    // other two platforms (see applyStealth in ../../utils/stealth.ts).
+    await applyStealth(browserContext);
     await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);
     const page = await browserContext.newPage();
     await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -254,9 +304,12 @@ export async function loginToLinkedIn(options?: {
     ],
     // New accounts only: stable per-account fingerprint (+ proxy once configured).
     // Established sessions are untouched (returns {}) to avoid device-change checkpoints.
-    ...identityLaunchOverrides(sessionDir, nickname),
+    ...identityLaunchOverrides(sessionDir, nickname, 'linkedin'),
   });
 
+  // Same gap as the cookies path above — FB (inline) and X (via
+  // launchPersistentChrome) both apply this before the login flow starts.
+  await applyStealth(browserContext);
   await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);
 
   const page = await browserContext.newPage();

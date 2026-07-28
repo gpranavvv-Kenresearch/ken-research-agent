@@ -37,6 +37,19 @@ export async function postToAmeba(
 
   // Step 2: Fill title
   console.log('   Filling title...');
+  // The most common failure here (39x on a single recent day) is a generic
+  // "Timeout 15000ms exceeded waiting for locator('input[name=\"entry_title\"]')"
+  // with no further context. login.ts's "already logged in" check is a bare URL
+  // substring test (it even has a `// TODO: Update logged-in check with correct
+  // selector` left in it) that can't detect a session that LOOKS like ameba.jp
+  // but isn't actually authenticated any more — so a dead session sails past
+  // login and only fails here, silently, once we're on the composer page that
+  // never loads because we got bounced to a login/signin page instead. Detect
+  // that redirect explicitly so the error says "dead session" instead of a bare
+  // Playwright timeout that's indistinguishable from a real DOM/selector change.
+  if (/\/(login|signin)(\/|$|\?)/i.test(page.url())) {
+    throw new Error(`Ameba session appears dead — composer navigation redirected to ${page.url()} instead of the entry editor. Re-login required.`);
+  }
   await page.waitForSelector('input[name="entry_title"]', { timeout: 15000 });
   await page.click('input[name="entry_title"]');
   await sleep(2000);

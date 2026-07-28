@@ -3,25 +3,37 @@
  */
 
 export const UTM_PARAMS = {
-  X: '?utm_source=X&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  Facebook: '?utm_source=Facebook&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  LinkedIn: '?utm_source=Linkedin&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  Medium: '?utm_source=Medium&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  Linkmate: '?utm_source=Linkmate&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  GoogleSite: '?utm_source=GoogleSites&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  Devto: '?utm_source=Devto&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  Calisthenics: '?utm_source=Calisthenics&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  Substack: '?utm_source=Substack&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  HackMD: '?utm_source=HackMD&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  LinkedinPulse: '?utm_source=LinkedinPulse&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  WordPress: '?utm_source=WordPress&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  Blogger: '?utm_source=Blogger&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  Patreon: '?utm_source=Patreon&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  Notion: '?utm_source=Notion&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  Note: '?utm_source=Note&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  Ameba: '?utm_source=Ameba&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
-  Paragraph: '?utm_source=Paragraph&utm_medium=Referral&utm_campaign=Automation&utm_campaign=AN',
+  X: '?utm_source=X&utm_medium=Referral&utm_campaign=Automation',
+  Facebook: '?utm_source=Facebook&utm_medium=Referral&utm_campaign=Automation',
+  LinkedIn: '?utm_source=Linkedin&utm_medium=Referral&utm_campaign=Automation',
+  Medium: '?utm_source=Medium&utm_medium=Referral&utm_campaign=Automation',
+  Linkmate: '?utm_source=Linkmate&utm_medium=Referral&utm_campaign=Automation',
+  GoogleSite: '?utm_source=GoogleSites&utm_medium=Referral&utm_campaign=Automation',
+  Devto: '?utm_source=Devto&utm_medium=Referral&utm_campaign=Automation',
+  Calisthenics: '?utm_source=Calisthenics&utm_medium=Referral&utm_campaign=Automation',
+  Substack: '?utm_source=Substack&utm_medium=Referral&utm_campaign=Automation',
+  HackMD: '?utm_source=HackMD&utm_medium=Referral&utm_campaign=Automation',
+  LinkedinPulse: '?utm_source=LinkedinPulse&utm_medium=Referral&utm_campaign=Automation',
+  WordPress: '?utm_source=WordPress&utm_medium=Referral&utm_campaign=Automation',
+  Blogger: '?utm_source=Blogger&utm_medium=Referral&utm_campaign=Automation',
+  Patreon: '?utm_source=Patreon&utm_medium=Referral&utm_campaign=Automation',
+  Notion: '?utm_source=Notion&utm_medium=Referral&utm_campaign=Automation',
+  Note: '?utm_source=Note&utm_medium=Referral&utm_campaign=Automation',
+  Ameba: '?utm_source=Ameba&utm_medium=Referral&utm_campaign=Automation',
+  Paragraph: '?utm_source=Paragraph&utm_medium=Referral&utm_campaign=Automation',
 };
+
+/**
+ * Per-agent campaign: base "Automation" becomes "{Agent}Automation" for whichever
+ * agent is running (WORKER_NAME), so traffic can be attributed to the agent in
+ * analytics. e.g. abhinav → AbhinavAutomation, vansh → VanshAutomation. No
+ * WORKER_NAME (generic run) → plain "Automation".
+ */
+function agentCampaign(): string {
+  const w = (process.env.WORKER_NAME || '').trim();
+  if (!w) return 'Automation';
+  return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() + 'Automation';
+}
 
 /**
  * Add UTM parameters to all URLs in text/HTML content
@@ -30,7 +42,10 @@ export const UTM_PARAMS = {
 export function injectUTM(content: string, utmString: string): string {
   if (!content || !utmString) return content;
 
-  const utmParams = utmString.replace(/^\?/, ''); // strip leading ?
+  // Personalize the campaign for the running agent: utm_campaign=Automation → {Agent}Automation.
+  const utmParams = utmString
+    .replace(/^\?/, '') // strip leading ?
+    .replace(/utm_campaign=Automation\b/, `utm_campaign=${agentCampaign()}`);
   const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
 
   return content.replace(urlRegex, (match) => {

@@ -121,7 +121,7 @@ export async function loginToFacebook(options?: {
     viewport: { width: 1280, height: 800 },
     // New accounts only: stable per-account fingerprint (+ proxy once configured).
     // Established sessions are untouched (returns {}) to avoid device-change checkpoints.
-    ...identityLaunchOverrides(sessionDir, nickname),
+    ...identityLaunchOverrides(sessionDir, nickname, 'facebook'),
   });
 
   await blockHeavyResources(browserContext, 'facebook');

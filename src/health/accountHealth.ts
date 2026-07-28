@@ -234,17 +234,18 @@ export function record(
       h.note = `COOLDOWN ${SOFT_COOLDOWN_H}h: ${result.error || 'rate/temp block'}`;
       break;
     case 'RETRYABLE':
+      // RETRYABLE = selector timeout / network / generic code failure — explicitly
+      // NOT an account-ban signal. Benching the account here is counterproductive:
+      // the NEXT account hits the same page/selector bug, so a single platform
+      // regression (e.g. Medium's slow submission page) cascaded into a FLEET-WIDE
+      // cooldown outage — the whole fleet benched for problems that aren't the
+      // account's fault. So we TRACK the flaky failure but never cooldown on it.
+      // Only real ban signals (SOFT/HARD/FATAL — checkpoint / suspended / dead)
+      // bench an account. A genuinely broken account will surface one of those.
       h.totalFails += 1;
       h.consecutiveFails += 1;
-      h.healthScore = Math.max(0, h.healthScore - 5);
-      // 3 flaky failures in a row is itself suspicious → short cooldown, not quarantine.
-      if (h.consecutiveFails >= 3) {
-        h.status = 'cooldown';
-        h.cooldownUntil = new Date(new Date(nowIso).getTime() + 6 * 3_600_000).toISOString();
-        h.note = `COOLDOWN 6h: ${h.consecutiveFails} consecutive failures`;
-      } else {
-        h.note = `fail (${h.consecutiveFails}): ${result.error || 'unknown'}`;
-      }
+      h.healthScore = Math.max(0, h.healthScore - 2);
+      h.note = `flaky fail (${h.consecutiveFails}, no bench): ${result.error || 'unknown'}`;
       break;
   }
   persist();

@@ -1,4 +1,12 @@
 /**
+ * PROXIES DISABLED 2026-07-28 — every proxy-returning export is a no-op; no
+ * proxy/tunnel is ever attached to a browser launch or a network request. Dead
+ * residential/DC proxies were breaking logins (net::ERR_TUNNEL_CONNECTION_FAILED
+ * on x.com/facebook.com/hackmd login pages). getProxy() and proxyDispatcher()
+ * now return undefined unconditionally, so getLaunchIdentity/identityLaunchOverrides
+ * carry no `proxy` field (fingerprint UA/viewport/locale/timezone still work).
+ * Re-enable by reverting this file from git history and restoring .accounts/proxies.json.
+ *
  * proxyPool.ts — sticky per-account proxy + consistent per-account fingerprint.
  *
  * Root cause of most blocks: ~240 accounts all posted from ONE datacenter IP.
@@ -25,6 +33,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { ProxyAgent } from 'undici';
 
 const proxyFilePath = () => process.env.PROXY_POOL_FILE || path.join(process.cwd(), '.accounts', 'proxies.json');
 const rotationFilePath = () => process.env.PROXY_ROTATION_FILE || path.join(process.cwd(), '.accounts', 'proxy-rotation.json');
@@ -47,10 +56,18 @@ interface ProxyFile {
 }
 
 let cache: ProxyFile | null = null;
+let cacheMtime = -1;
 function loadFile(): ProxyFile {
-  if (cache) return cache;
+  // Cache keyed on the file's mtime (-2 = absent) so deleting or editing
+  // proxies.json takes effect on the NEXT launch without a scheduler restart.
+  // A forever-cache here kept a long-running scheduler posting through dead
+  // proxies for hours after the config was removed (Jul 2026 incident).
+  let mtime = -2;
+  try { mtime = fs.statSync(proxyFilePath()).mtimeMs; } catch { /* absent */ }
+  if (cache && mtime === cacheMtime) return cache;
   try { cache = JSON.parse(fs.readFileSync(proxyFilePath(), 'utf8')); }
   catch { cache = {}; }
+  cacheMtime = mtime;
   return cache!;
 }
 
@@ -93,14 +110,17 @@ function subst(entry: ProxyEntry, nick: string, rot = 0): ProxyConfig {
   };
 }
 
-/** Sticky proxy for this account, or undefined if none configured. */
-export function getProxy(nickname: string): ProxyConfig | undefined {
-  const f = loadFile();
-  const n = nickname.toLowerCase().trim();
-  const rot = loadRotation()[n] || 0;
-  if (f.byNickname?.[n]) return subst(f.byNickname[n], n, rot);
-  if (f.sessionTemplate)  return subst(f.sessionTemplate, n, rot);
-  if (f.default)          return subst(f.default, n, rot);
+/**
+ * Sticky proxy for this account, or undefined if none configured.
+ * When `platform` is given, a per-(user,platform) IP `"{nick}:{platform}"` wins
+ * over the per-user key `"{nick}"` — so one user can hold a distinct static IP
+ * per ban-prone platform (X/FB/LinkedIn/HackMD) while everything else shares one.
+ */
+export function getProxy(_nickname: string, _platform?: string): ProxyConfig | undefined {
+  // PROXIES DISABLED 2026-07-28 — always return no proxy. Every browser launch
+  // (via getLaunchIdentity/identityLaunchOverrides) and every fetch (via
+  // proxyDispatcher) routes through this, so nothing can ever attach a tunnel.
+  // Original config-driven lookup lives in git history — revert this file to restore.
   return undefined;
 }
 
@@ -140,16 +160,35 @@ function geoFor(nickname: string): Geo {
  * nickname, so every launch of the same account presents the same device.
  * Timezone/locale come from the proxy's geo when set, so they match the exit IP.
  */
-export function getLaunchIdentity(nickname: string): LaunchIdentity {
+export function getLaunchIdentity(nickname: string, platform?: string): LaunchIdentity {
   const h = hash(nickname.toLowerCase().trim());
   const geo = geoFor(nickname);
   return {
-    proxy: getProxy(nickname),
+    proxy: getProxy(nickname, platform),
     userAgent: UA_POOL[h % UA_POOL.length],
     viewport: VIEWPORTS[(h >> 8) % VIEWPORTS.length],
     locale: geo.locale,
     timezoneId: geo.timezoneId,
   };
+}
+
+/** Marker written into a session dir by the LOGIN flow when it launched Chrome
+ *  through the account's proxy. Its presence tells the poster to keep this
+ *  account on its proxy IP for life; its absence means a legacy box-IP account
+ *  that must never be switched (Option A). */
+export const PROXY_BORN_MARKER = '.proxy-born';
+
+function markerExists(sessionDir: string, marker: string): boolean {
+  try { return fs.existsSync(path.join(sessionDir, marker)); } catch { return false; }
+}
+
+/** Call from the login flow AFTER Chrome was launched through the proxy, so the
+ *  poster will route this account's posts through the same IP. Idempotent. */
+export function markProxyBorn(sessionDir: string): void {
+  try {
+    fs.mkdirSync(sessionDir, { recursive: true });
+    fs.writeFileSync(path.join(sessionDir, PROXY_BORN_MARKER), 'logged in via proxy\n');
+  } catch { /* non-fatal — worst case the poster falls back to box IP */ }
 }
 
 /**
@@ -163,21 +202,35 @@ export function getLaunchIdentity(nickname: string): LaunchIdentity {
  *
  * Spreads directly into launch options: field names match Playwright's.
  */
-export function identityLaunchOverrides(sessionDir: string, nickname: string):
+export function identityLaunchOverrides(sessionDir: string, nickname: string, platform?: string):
   Partial<{ proxy: ProxyConfig; userAgent: string; viewport: { width: number; height: number }; locale: string; timezoneId: string }> {
-  const id = getLaunchIdentity(nickname);
+  const id = getLaunchIdentity(nickname, platform);
   const out: any = {};
-  // PROXY applies to every launch — existing AND new. Routing an already-logged-in
-  // account through its proxy is the intended IP change (that's the whole point of
-  // buying proxies), so it must NOT be gated on a fresh profile.
-  if (id.proxy) out.proxy = id.proxy;
-  // FINGERPRINT (UA/viewport/locale/timezone) only for FRESH profiles. Changing the
-  // DEVICE of an established session can itself trip a "new device" checkpoint, so
-  // logged-in accounts keep their existing fingerprint and only swap IP.
+  // PROXY only for accounts BORN on a proxy — the login writes a `.proxy-born`
+  // marker in the session dir when it launched through the proxy, so the session's
+  // whole lifetime (login + every post) stays on ONE consistent IP. Accounts that
+  // were already logged in on the box IP have no marker → they keep the box IP and
+  // are NEVER switched, avoiding the "new device/location" checkpoint an IP jump
+  // on an established session would trip. (Option A.)
+  const bornOnProxy = markerExists(sessionDir, PROXY_BORN_MARKER);
+  if (bornOnProxy && id.proxy) out.proxy = id.proxy;
+  // FINGERPRINT (UA/viewport/locale/timezone) only for FRESH profiles — same reason:
+  // changing an established session's device can trip a checkpoint.
   let fresh = true;
   try { fresh = !fs.existsSync(sessionDir); } catch { fresh = false; }
   if (fresh) { out.userAgent = id.userAgent; out.viewport = id.viewport; out.locale = id.locale; out.timezoneId = id.timezoneId; }
   return out;
+}
+
+/**
+ * undici dispatcher that routes a native `fetch()` through this account's proxy,
+ * or undefined if none configured. Used by API-based posters (e.g. HackMD) so
+ * their HTTP calls leave from the same static IP as their browser sessions.
+ */
+export function proxyDispatcher(_nickname: string, _platform?: string): ProxyAgent | undefined {
+  // PROXIES DISABLED 2026-07-28 — fetch()/undici always uses no proxy dispatcher.
+  // Original implementation lives in git history — revert this file to restore.
+  return undefined;
 }
 
 /**

@@ -8,6 +8,7 @@
  */
 
 import { google } from 'googleapis';
+import fsSync from 'fs';
 import 'dotenv/config';
 
 // ──── History-safe helpers ──────────────────────────────────────────────────
@@ -26,6 +27,16 @@ function appendValue(existing: string | undefined, newVal: string): string {
 function latestDate(value: string): string {
   const parts = value.split(' | ');
   return (parts[parts.length - 1] ?? '').split('T')[0].trim();
+}
+
+/**
+ * Full IST timestamp "YYYY-MM-DD HH:MM:SS IST" for lastPosted columns.
+ * Second-resolution → every post gets a distinct stamp, so appending never
+ * collapses two same-day posts into one (the old date-only value did).
+ */
+function nowStamp(): string {
+  const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  return ist.toISOString().replace('T', ' ').slice(0, 19) + ' IST';
 }
 
 // Sheet configuration for different platform types
@@ -411,7 +422,7 @@ function mapRow(row: string[], colMap: ColMap, rowIndex: number, sheetType: Shee
     calisthenicsStatus:  g(colMap, 'Calisthenics Status', 'calisthenics status'),
     calisthenicsError:   g(colMap, 'Calisthenics Error', 'calisthenics error'),
     calisthenicsNBatch:  g(colMap, 'calisthenicsNBatch', 'calisthenics batch', 'Calisthenics Batch'),
-    lastPostedCalisthenics: g(colMap, 'lastPostedCalisthenics', 'lastpostedcalisthenics'),
+    lastPostedCalisthenics: g(colMap, 'lastPosted Calisthenics', 'lastPostedCalisthenics', 'lastpostedcalisthenics'),
     // Substack columns
     substackPostUrl: g(colMap, 'Substack Post URL', 'substack post url'),
     substackStatus:  g(colMap, 'Substack Status', 'substack status'),
@@ -501,7 +512,7 @@ export async function savePostingResult(
   const sheets = await getSheetsClient();
   const colMap = await getColumnMap(sheets);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
   const existing = await getRowByIndex(row.rowIndex);
   const newUrl = appendValue(existing?.xPostUrl, result.xPostUrl);
   const newLastPosted = result.xStatus?.toLowerCase() === 'posted'
@@ -599,7 +610,7 @@ export async function saveUnifiedFbResult(
   const sheets = await getSheetsClient();
   const colMap = await getColumnMap(sheets);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
 
   // Re-read live cell values so we always append to current sheet data,
   // not the stale row object fetched at batch-start.
@@ -646,7 +657,7 @@ export async function saveUnifiedLinkedInResult(
   const sheets = await getSheetsClient();
   const colMap = await getColumnMap(sheets);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
 
   let liveLinkedinPostUrl = row.linkedinPostUrl ?? '';
   let liveLastPostedLi = row.lastPostedLi ?? '';
@@ -692,7 +703,7 @@ export async function saveUnifiedMediumResult(
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
   const newUrl = appendValue(row.mediumPostUrl, result.postUrl);
   const newLastPosted = result.status?.toLowerCase() === 'posted'
     ? appendValue(row.lastPostedMedium, today)
@@ -720,7 +731,7 @@ export async function saveUnifiedLinkmateResult(
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
   const newUrl = appendValue(row.linkMatePostUrl, result.postUrl);
   const newLastPosted = result.status?.toLowerCase() === 'posted'
     ? appendValue(row.lastPostedLinkmate, today)
@@ -749,7 +760,7 @@ export async function saveUnifiedGoogleSiteResult(
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
   const newUrl = appendValue(row.googleSitePostUrl, result.postUrl);
   const newLastPosted = result.status?.toLowerCase() === 'posted'
     ? appendValue(row.lastPostedGoogleSite, today)
@@ -799,7 +810,7 @@ export async function saveUnifiedDevtoResult(
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
   const newUrl = appendValue(row.devtoPostUrl, result.postUrl);
   const newLastPosted = result.status?.toLowerCase() === 'posted'
     ? appendValue(row.lastPostedDevto, today)
@@ -827,7 +838,7 @@ export async function saveLinkedinPulseResult(
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
   const newUrl = appendValue(row.linkedinPulsePostUrl, result.postUrl);
   const newLastPosted = result.status?.toLowerCase() === 'posted'
     ? appendValue(row.lastPostedLinkedinPulse, today)
@@ -853,7 +864,7 @@ export async function saveCalisthenicsResult(
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
   const newUrl = appendValue(row.calisthenicsPostUrl, result.postUrl);
   console.log(`   🔍 saveCalisthenicsResult: row=${row.rowIndex} postUrl="${result.postUrl}" existing="${row.calisthenicsPostUrl}" → newUrl="${newUrl}"`);
   const newLastPosted = result.status?.toLowerCase() === 'posted'
@@ -865,7 +876,7 @@ export async function saveCalisthenicsResult(
     { names: ['Calisthenics Status', 'calisthenics status'], value: result.status  },
     { names: ['Calisthenics Error', 'calisthenics error'],    value: result.error ?? '' },
     { names: ['calisthenicsNBatch', 'calisthenics batch', 'Calisthenics Batch'],      value: result.batch ?? '' },
-    { names: ['lastPostedCalisthenics', 'lastpostedcalisthenics'], value: newLastPosted },
+    { names: ['lastPosted Calisthenics', 'lastPostedCalisthenics', 'lastpostedcalisthenics'], value: newLastPosted },
   ], sheetConfig.name);
 
   await batchWrite(sheets, data, sheetConfig.id);
@@ -891,7 +902,7 @@ export async function saveWeeklySerpRecheck(
 ): Promise<void> {
   const sheets = await getSheetsClient();
   const colMap = await getColumnMap(sheets);
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
 
   const indexed = (seoResult.seoRanking ?? -1) >= 0 ? 'yes' : 'no';
   const updates = [
@@ -1070,6 +1081,40 @@ export async function getRowsForContinuousLiPosting(limit: number = 15): Promise
   }), 'getRowsForContinuousLiPosting');
   const rows: string[][] = res.data.values ?? [];
   return pickNextSequentialBlogRows(rows, colMap, ['LinkedIn Status', 'linkedin status', 'liStatus'], limit, 'LI', 'social');
+}
+
+/**
+ * Failed/errored SOCIAL rows for reposting. The social pickers treat any non-empty
+ * status (incl. "Failed"/"Error") as done, so failed X/FB/LI rows are never retried
+ * by the normal batches (blogs self-retry — their pickers key off a posted URL, not
+ * status). This returns those failed rows so the scheduler's gap sweep can repost
+ * them. A row is retryable if status is failed/error AND it has no post URL yet.
+ */
+export async function getFailedSocialRows(platform: 'X' | 'FB' | 'LI', limit: number = 8): Promise<SheetRow[]> {
+  const cols = {
+    X:  { status: ['X Status', 'x status', 'xStatus'],                 url: ['X Post URL', 'x post url', 'xPostUrl'] },
+    FB: { status: ['FB Status', 'fb status', 'fbStatus'],              url: ['FB Post URL', 'fb post url', 'fbPostUrl'] },
+    LI: { status: ['LinkedIn Status', 'linkedin status', 'liStatus'],  url: ['LinkedIn Post URL', 'linkedin post url', 'linkedinPostUrl'] },
+  }[platform];
+  const sheets = await getSheetsClient();
+  const colMap = await getColumnMap(sheets);
+  const res = await withRetry(() => sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID, range: `${SHEET_NAME}!A:AZ`,
+  }), 'getFailedSocialRows');
+  const rows: string[][] = res.data.values ?? [];
+  const statusIdx = col(colMap, ...cols.status) ?? -1;
+  const urlIdx = col(colMap, ...cols.url) ?? -1;
+  if (statusIdx < 0) return [];
+  const out: SheetRow[] = [];
+  for (let i = 1; i < rows.length && out.length < limit; i++) {
+    const row = rows[i];
+    const status = (row[statusIdx] ?? '').trim().toLowerCase();
+    if (status !== 'failed' && status !== 'error') continue;
+    if (urlIdx >= 0 && (row[urlIdx] ?? '').trim()) continue; // has a URL → actually posted, don't repost
+    out.push(mapRow(row, colMap, i + 1, 'social'));
+  }
+  console.log(`   🔁 [retry] ${platform}: found ${out.length} failed rows to repost`);
+  return out;
 }
 
 // ──── Read leftover rows (assigned but unposted from before today) ────────
@@ -2035,7 +2080,7 @@ export async function saveUnifiedSubstackResult(
   const sheets = await getSheetsClient();
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
   const newUrl = appendValue(row.substackPostUrl, result.postUrl);
   const newLastPosted = result.status?.toLowerCase() === 'posted'
     ? appendValue(row.lastPostedSubstack, today)
@@ -2098,7 +2143,7 @@ export async function saveUnifiedWordpressResult(
   const sheets = await getSheetsClient();
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
 
   let liveWordpressPostUrl = row.wordpressPostUrl ?? '';
   let liveLastPostedWordpress = row.lastPostedWordpress ?? '';
@@ -2137,7 +2182,7 @@ export async function saveUnifiedBloggerResult(
   const sheets = await getSheetsClient();
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
 
   let liveBloggerPostUrl = row.bloggerPostUrl ?? '';
   let liveLastPostedBlogger = row.lastPostedBlogger ?? '';
@@ -2176,7 +2221,7 @@ export async function saveUnifiedHackmdResult(
   const sheets = await getSheetsClient();
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
 
   // Re-read live cell values so we always append to the current sheet data,
   // not the stale row object fetched at batch-start.
@@ -2231,7 +2276,7 @@ export async function saveUnifiedPatreonResult(
   const sheets = await getSheetsClient();
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
   const newUrl = appendValue(row.patreonPostUrl, result.postUrl);
   const newLastPosted = result.status?.toLowerCase() === 'posted'
     ? appendValue(row.lastPostedPatreon, today)
@@ -2259,7 +2304,7 @@ export async function saveUnifiedNotionResult(
   const sheets = await getSheetsClient();
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
   const newUrl = appendValue(row.notionPostUrl, result.postUrl);
   const newLastPosted = result.status?.toLowerCase() === 'posted'
     ? appendValue(row.lastPostedNotion, today)
@@ -2287,7 +2332,7 @@ export async function saveUnifiedNoteResult(
   const sheets = await getSheetsClient();
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
   const newUrl = appendValue(row.notePostUrl, result.postUrl);
   const newLastPosted = result.status?.toLowerCase() === 'posted'
     ? appendValue(row.lastPostedNote, today)
@@ -2315,7 +2360,7 @@ export async function saveUnifiedAmebaResult(
   const sheets = await getSheetsClient();
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
   const newUrl = appendValue((row as any).amebaPostUrl, result.postUrl);
   const newLastPosted = result.status?.toLowerCase() === 'posted'
     ? appendValue((row as any).lastPostedAmeba, today)
@@ -2343,7 +2388,7 @@ export async function saveUnifiedParagraphResult(
   const sheets = await getSheetsClient();
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = new Date().toISOString().split('T')[0];
+  const today = nowStamp();
   const newUrl = appendValue(row.paragraphPostUrl, result.postUrl);
   const newLastPosted = result.status?.toLowerCase() === 'posted'
     ? appendValue(row.lastPostedParagraph, today)
@@ -2356,5 +2401,104 @@ export async function saveUnifiedParagraphResult(
     { names: ['Last Posted Paragraph', 'lastPostedParagraph', 'lastpostedparagraph'], value: newLastPosted },
   ], sheetConfig.name);
   await batchWrite(sheets, data, sheetConfig.id);
+}
+
+// ── Fleet name rebalancing ────────────────────────────────────────────────────
+//
+// Sheet rows route to accounts via the Name column verbatim, so an agent's fleet
+// only gets work if rows carry its name. This rebalances UNTOUCHED rows (nothing
+// posted anywhere yet) across all fleet agents, weighted by fleet size, so every
+// logged-in fleet account gets a share of every future session. Runs at session
+// start; deterministic over the same untouched set, so it doesn't flip-flop.
+
+/** Fleet agents and their account counts, derived from the X registry (accounts.json). */
+function fleetAgentsFromRegistry(): Array<{ agent: string; count: number }> {
+  try {
+    const raw = JSON.parse(fsSync.readFileSync('.accounts/accounts.json', 'utf8'));
+    const list: any[] = Array.isArray(raw) ? raw : (raw.accounts ?? []);
+    const counts = new Map<string, number>();
+    for (const a of list) {
+      const m = /^([a-z]+) (\d+)$/.exec((a?.nickname ?? '').toLowerCase().trim());
+      if (m) counts.set(m[1], (counts.get(m[1]) ?? 0) + 1);
+    }
+    // Only agents with a real fleet (2+ indexed accounts) participate.
+    return [...counts.entries()].filter(([, c]) => c >= 2)
+      .map(([agent, count]) => ({ agent, count }))
+      .sort((a, b) => b.count - a.count);
+  } catch { return []; }
+}
+
+/**
+ * Rebalance the Name column of untouched rows in one tab across fleet agents.
+ * Untouched = no status / post-URL / lastPosted value anywhere on the row.
+ * Only rows already carrying a fleet-style name ("agent N") are re-assigned, and
+ * only when the target AGENT differs (index-only churn is skipped).
+ */
+export async function rebalanceFleetNames(): Promise<void> {
+  const agents = fleetAgentsFromRegistry();
+  if (agents.length < 2) return; // one agent = nothing to distribute
+  const total = agents.reduce((s, a) => s + a.count, 0);
+
+  const sheets = await getSheetsClient();
+  for (const cfg of [getSheetConfig('social'), getSheetConfig('blog')]) {
+    try {
+      const res = await withRetry(() => sheets.spreadsheets.values.get({
+        spreadsheetId: cfg.id, range: `${cfg.name}!A:ZZ`,
+      }), 'rebalanceFleetNames');
+      const rows: string[][] = res.data.values ?? [];
+      if (rows.length < 2) continue;
+      const hdr = rows[0];
+      const nameIdx = hdr.findIndex(h => h.trim().toLowerCase() === 'name');
+      if (nameIdx < 0) continue;
+      const urlIdx = hdr.findIndex(h => /^(targeturl|report url|download report url)$/.test(h.trim().toLowerCase()));
+      // Columns that mark a row as touched (any posting activity at all).
+      const touchIdx = hdr.map((h, i) => {
+        const k = h.trim().toLowerCase().replace(/\s+/g, '');
+        return (k.includes('status') || k.includes('posturl') || k.includes('lastposted')) ? i : -1;
+      }).filter(i => i >= 0);
+
+      // Deterministic weighted sequence over untouched fleet rows (Bresenham spread).
+      const updates: { range: string; values: string[][] }[] = [];
+      const seen = new Map<string, number>(); // agent -> occurrences (for index cycling)
+      const acc = agents.map(() => 0);
+      let pos = 0;
+      for (let r = 1; r < rows.length; r++) {
+        const row = rows[r];
+        const cur = (row[nameIdx] ?? '').trim().toLowerCase();
+        if (!/^[a-z]+ \d+$/.test(cur)) continue;              // fleet-style names only
+        if (urlIdx >= 0 && !(row[urlIdx] ?? '').trim()) continue;
+        if (touchIdx.some(i => (row[i] ?? '').trim())) continue; // touched → leave alone
+        // pick the agent whose accumulated share is furthest behind its weight
+        let best = 0;
+        for (let a = 0; a < agents.length; a++) {
+          acc[a] += agents[a].count;
+          if (acc[a] > acc[best]) best = a;
+        }
+        acc[best] -= total;
+        const target = agents[best];
+        pos++;
+        const n = (seen.get(target.agent) ?? 0) + 1;
+        seen.set(target.agent, n);
+        const curAgent = cur.replace(/ \d+$/, '');
+        if (curAgent !== target.agent) {
+          updates.push({
+            range: `${cfg.name}!${colToLetter(nameIdx)}${r + 1}`,
+            values: [[`${target.agent} ${((n - 1) % target.count) + 1}`]],
+          });
+        }
+      }
+      if (updates.length) {
+        for (let i = 0; i < updates.length; i += 500) {
+          await withRetry(() => sheets.spreadsheets.values.batchUpdate({
+            spreadsheetId: cfg.id,
+            requestBody: { valueInputOption: 'RAW', data: updates.slice(i, i + 500) },
+          }), 'rebalanceFleetNames-write');
+        }
+      }
+      console.log(`   ⚖️  [rebalance] ${cfg.name}: ${pos} untouched fleet rows, ${updates.length} renamed (${agents.map(a => `${a.agent}:${a.count}`).join(', ')})`);
+    } catch (err: any) {
+      console.warn(`   ⚠️ [rebalance] ${cfg.name} failed (non-fatal): ${err.message}`);
+    }
+  }
 }
 

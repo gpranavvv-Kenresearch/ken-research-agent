@@ -16,6 +16,7 @@ import path from 'path';
 import { execFileSync } from 'child_process';
 import { PLATFORMS, PLATFORM_KEYS } from './config.js';
 import { isDevtoLoggedInCached } from './devtoDeepCheck.js';
+import { isMediumLoggedInCached } from './mediumDeepCheck.js';
 
 /**
  * ChatGPT (and the image-gen variant) get one profile PER AGENT, not per-index —
@@ -92,12 +93,18 @@ function cookieBasedLoggedIn(dir: string, platform: string): boolean {
  * Best-known "is this account logged in" check. Dev.to (Forem) issues the same
  * session cookie to every visitor — logged in or not — so cookie-presence alone
  * is unreliable there (confirmed: fleet accounts showed "logged in" while
- * actually logged out). For Dev.to specifically, use a cached real browser
- * check instead; every other platform keeps the cheap cookie check.
+ * actually logged out). Medium has the same problem for a different reason: its
+ * homepage never redirects an anonymous visitor to /signin, so `sid`/`uid`
+ * cookie presence doesn't prove a real login either (confirmed via production
+ * logs: session-health reported 12/12 abhinav Medium sessions "logged in" while
+ * several hit "Write button not found" — the logged-out homepage shell — on
+ * every single run). Both get a cached real-browser deep check; every other
+ * platform keeps the cheap cookie check.
  */
 export function isLoggedIn(dir: string, platform: string): boolean {
   const cookieResult = cookieBasedLoggedIn(dir, platform);
   if (platform === 'devto') return isDevtoLoggedInCached(dir, cookieResult);
+  if (platform === 'medium') return isMediumLoggedInCached(dir, cookieResult);
   return cookieResult;
 }
 

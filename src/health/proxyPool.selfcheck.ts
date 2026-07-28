@@ -1,7 +1,7 @@
 /** Run: PROXY_POOL_FILE=/tmp/p.json node --import=tsx src/health/proxyPool.selfcheck.ts */
 import assert from 'assert';
 import fs from 'fs';
-import { getProxy, getLaunchIdentity, identityLaunchOverrides, proxiesConfigured, _resetForTest } from './proxyPool.js';
+import { getProxy, getLaunchIdentity, identityLaunchOverrides, proxiesConfigured, markProxyBorn, _resetForTest } from './proxyPool.js';
 
 const F = '/tmp/proxy-selfcheck.json';
 process.env.PROXY_POOL_FILE = F;
@@ -49,17 +49,23 @@ const ids = ['a', 'b', 'c', 'd', 'e', 'f'].map(getLaunchIdentity);
 assert.ok(new Set(ids.map(i => i.userAgent + JSON.stringify(i.viewport))).size > 1, 'fingerprints should vary across accounts');
 console.log('✓ fingerprints vary across accounts');
 
-// 5. identityLaunchOverrides: proxy applies to EXISTING sessions, fingerprint only to FRESH.
+// 5. identityLaunchOverrides (Option A): proxy ONLY for sessions born on a proxy
+// (.proxy-born marker written by the login flow); fingerprint only for FRESH dirs.
+// Established box-IP sessions are never switched to a proxy (checkpoint risk).
 fs.writeFileSync(F, JSON.stringify({ sessionTemplate: { server: 'http://gate:7000', username: 'u-{nick}', password: 'p' } }));
 _resetForTest();
 const existingDir = '/tmp/pp-existing-session'; fs.mkdirSync(existingDir, { recursive: true });
 const freshDir = '/tmp/pp-fresh-session-does-not-exist'; try { fs.rmSync(freshDir, { recursive: true, force: true }); } catch {}
 const oExisting = identityLaunchOverrides(existingDir, 'aniket');
-assert.ok(oExisting.proxy, 'existing session STILL gets the proxy (the point)');
+assert.equal(oExisting.proxy, undefined, 'box-IP session (no marker) must NOT be switched to a proxy');
 assert.equal(oExisting.userAgent, undefined, 'existing session keeps its device — no UA change');
+markProxyBorn(existingDir);
+const oBorn = identityLaunchOverrides(existingDir, 'aniket');
+assert.ok(oBorn.proxy, 'proxy-born session stays on its proxy for life');
+assert.equal(oBorn.userAgent, undefined, 'proxy-born but existing — fingerprint still untouched');
 const oFresh = identityLaunchOverrides(freshDir, 'aniket');
-assert.ok(oFresh.proxy && oFresh.userAgent, 'fresh session gets proxy + full fingerprint');
+assert.ok(oFresh.userAgent && !oFresh.proxy, 'fresh dir: fingerprint yes; proxy only after login marks it proxy-born');
 fs.rmSync(existingDir, { recursive: true, force: true });
-console.log('✓ existing→proxy-only, fresh→proxy+fingerprint');
+console.log('✓ Option A: marker→proxy, no marker→box IP, fresh→fingerprint only');
 
 console.log('\nALL PROXY-POOL CHECKS PASSED');

@@ -43,8 +43,11 @@ import {
   runWordpressBatch, runBloggerBatch, runHackmdBatch,
   runNotionBatch, runNoteBatch, runParagraphBatch, runAmebaBatch,
   runWeeklySerpRecheck, runSundayExamination, resetBatchCounters,
+  runRetryRow,
 } from './coordinator/masterCoordinator.js';
 import { startCycle, stopCycle } from './login-portal/blogCycle.js';
+import { rebalanceFleetNames, getFailedSocialRows } from './sheets/sheets.js';
+import { canPost } from './health/accountHealth.js';
 import { closeAllBrowsers } from './tools/browserTools.js';
 import { killPostingChrome } from './utils/procKill.js';
 import { acquireBrowserSlot } from './utils/browserSlots.js';
@@ -159,16 +162,70 @@ async function runStage(stageIndex: number, statusFile: string = STATUS_FILE): P
   console.log(`[${nowIst()}] ◀ Stage ${stageIndex + 1}/5 complete.`);
 }
 
+// ── Retry sweep: repost failed SOCIAL rows during the inter-stage gap ─────────
+// Blogs already self-retry (their pickers key off a posted URL, so a failed row
+// with no URL is re-picked next cycle). X/FB/LI do NOT — their pickers treat any
+// non-empty status ("Failed"/"Error") as done, so social failures never come back.
+// So we use the 30-min gaps to repost failed social rows via runRetryRow (which
+// reuses the already-generated content). Bounded per platform + a wall-clock budget
+// so it never eats into the next stage. A dead/quarantined/cap-reached account is
+// skipped so retries can't trigger bans or exceed daily caps.
+const RETRY_PER_PLATFORM = 8;
+const RETRY_SWEEP: Array<{ key: 'x' | 'facebook' | 'linkedin'; short: 'X' | 'FB' | 'LI'; health: string }> = [
+  { key: 'x',        short: 'X',  health: 'X' },
+  { key: 'facebook', short: 'FB', health: 'Facebook' },
+  { key: 'linkedin', short: 'LI', health: 'LinkedIn' },
+];
+
+async function runRetrySweep(myToken: number, budgetMs: number): Promise<void> {
+  const start = Date.now();
+  let reposted = 0;
+  for (const p of RETRY_SWEEP) {
+    if (myToken !== currentRunToken || Date.now() - start > budgetMs) break;
+    let rows;
+    try { rows = await getFailedSocialRows(p.short, RETRY_PER_PLATFORM); }
+    catch (err: any) { console.error(`[${nowIst()}] [retry] ${p.short} lookup failed: ${err.message}`); continue; }
+    for (const row of rows) {
+      if (myToken !== currentRunToken || Date.now() - start > budgetMs) break;
+      let ok = true;
+      try { ok = canPost(p.health, row.name).ok; } catch { /* fail-open */ }
+      if (!ok) continue; // dead / quarantined / at daily cap → don't repost
+      const releaseSlot = await acquireBrowserSlot(`retry:${p.short}`);
+      try {
+        await withTimeout(runRetryRow(row.rowIndex, p.key), PLATFORM_TIMEOUT_MS, `retry ${p.short}`);
+        reposted++;
+      } catch (err: any) {
+        console.error(`[${nowIst()}] [retry] ${p.short} row ${row.rowIndex}: ${err.message}`);
+      } finally {
+        try { await withTimeout(closeAllBrowsers(), 30_000, 'closeAllBrowsers'); } catch { /* noop */ }
+        killPostingChrome();
+        releaseSlot();
+      }
+    }
+  }
+  console.log(`[${nowIst()}] [retry] sweep done — attempted ${reposted} repost(s) in ${Math.round((Date.now() - start) / 60000)} min`);
+}
+
 // A fresh 11:00 AM/PM trigger bumps this token so any still-running loop from
 // the previous session (or a stale earlier lap) recognizes it's superseded
 // and stops itself instead of continuing to run alongside the new one.
 let currentRunToken = 0;
 
+// Whether a posting cycle (Stage 1 → 5) is currently in progress. With only two
+// 12h-apart triggers (11:00/23:00), a cycle should always finish well before the
+// next one fires — but if it somehow doesn't, the next trigger must NOT cut it
+// off mid-stage. startDailyLoop() checks this and skips the new trigger entirely
+// (letting the running cycle finish) instead of superseding it. Reset both on
+// natural completion AND on the (now normally-unreachable, kept as a defensive
+// belt-and-suspenders) superseded-mid-stage paths, so this can never get stuck
+// `true` forever and permanently block every future trigger.
+let sessionActive = false;
+
 async function runLoopFrom(stageIndex: number, myToken: number): Promise<void> {
   while (myToken === currentRunToken) {
     if (stageIndex === 0) lapNum++;
     await runStage(stageIndex);
-    if (myToken !== currentRunToken) return; // superseded mid-stage — stop here, don't schedule the next one
+    if (myToken !== currentRunToken) { sessionActive = false; return; } // superseded mid-stage (defensive — see note above) — stop here
 
     if (stageIndex === STAGES.length - 1) {
       // Stage 5 done — this posting session is complete. Hand off to
@@ -176,6 +233,7 @@ async function runLoopFrom(stageIndex: number, myToken: number): Promise<void> {
       // AM/PM cron trigger will stop it and start a fresh posting session.
       console.log(`[${nowIst()}] ═══ Posting session complete — starting continuous blog generation until the next session ═══`);
       writeStatus({ phase: 'generating-blogs', lap: lapNum, justFinishedStage: stageIndex + 1 });
+      sessionActive = false;
       try {
         startCycle(BLOG_GEN_AGENT);
       } catch (err: any) {
@@ -186,14 +244,29 @@ async function runLoopFrom(stageIndex: number, myToken: number): Promise<void> {
 
     const nextStage = stageIndex + 1;
     const resumesAt = new Date(Date.now() + STAGE_GAP_MS).toISOString();
-    console.log(`[${nowIst()}] Waiting 30 min before Stage ${nextStage + 1}... (safe to deploy/restart now)`);
+    console.log(`[${nowIst()}] Stage gap — reposting failed social rows, then waiting until Stage ${nextStage + 1}... (safe to deploy/restart now)`);
     writeStatus({ phase: 'waiting', lap: lapNum, justFinishedStage: stageIndex + 1, nextStage: nextStage + 1, resumesAt });
-    await new Promise((r) => setTimeout(r, STAGE_GAP_MS));
+    // Use the gap to repost failed X/FB/LI rows (up to ~60% of the gap), then wait
+    // out the remainder so the overall stage cadence stays ~30 min.
+    const gapStart = Date.now();
+    await runRetrySweep(myToken, Math.floor(STAGE_GAP_MS * 0.6));
+    if (myToken !== currentRunToken) { sessionActive = false; return; } // superseded during the sweep (defensive)
+    const remaining = Math.max(0, STAGE_GAP_MS - (Date.now() - gapStart));
+    await new Promise((r) => setTimeout(r, remaining));
     stageIndex = nextStage;
   }
 }
 
 function startDailyLoop(): void {
+  // Never cut off a cycle that's still running — skip this trigger entirely and
+  // let the in-progress cycle finish on its own. With only two 12h-apart
+  // triggers a cycle should always be done well before the next one fires; this
+  // is what makes that a guarantee instead of a hope.
+  if (sessionActive) {
+    console.log(`[${nowIst()}] ⏭ Skipping this trigger — a posting cycle is still running (started this lap: ${lapNum}). It will run to completion; the next trigger after this one will pick up normally.`);
+    return;
+  }
+  sessionActive = true;
   currentRunToken++;
   const myToken = currentRunToken;
   lapNum = 0;
@@ -204,7 +277,11 @@ function startDailyLoop(): void {
   } catch (err: any) {
     console.error(`[${nowIst()}] Could not stop blog generation before posting: ${err.message}`);
   }
-  void runLoopFrom(0, myToken);
+  // Distribute untouched rows across all fleet agents (abhinav/krishi/...) so every
+  // logged-in fleet account gets a share of this session. Non-fatal on error.
+  void rebalanceFleetNames()
+    .catch((err: any) => console.warn(`[${nowIst()}] Fleet rebalance failed (non-fatal): ${err.message}`))
+    .then(() => runLoopFrom(0, myToken));
 }
 
 /**
@@ -234,31 +311,31 @@ export async function startCoordinatorDaemon(immediate: boolean = false): Promis
     try { await runSundayExamination(); } catch (err: any) { console.error(`[Sunday Failed Posts Examination] Error: ${err.message}`); }
   }, { timezone: tz });
 
-  // ── Posting: fresh Stage 1 start THREE times a day — 07:00, 15:00, 23:00 IST
-  // (8h apart). A full 5-stage lap (4×30-min gaps + posting) is ~3-4h, so each
-  // session finishes well inside its 8h window before the next fires. ─────────
-  cron.schedule('0 7 * * *', () => startDailyLoop(), { timezone: tz });
-  cron.schedule('0 15 * * *', () => startDailyLoop(), { timezone: tz });
+  // ── Posting: fresh Stage 1 start TWICE a day — 11:00 and 23:00 IST (12h
+  // apart). A full 5-stage lap (4×30-min gaps + posting) is ~3-4h, so each
+  // session finishes well inside its 12h window before the next fires — and
+  // even if it somehow doesn't, startDailyLoop()'s sessionActive guard skips
+  // the new trigger rather than cutting the running one off. ────────────────
+  cron.schedule('0 11 * * *', () => startDailyLoop(), { timezone: tz });
   cron.schedule('0 23 * * *', () => startDailyLoop(), { timezone: tz });
 
-  // ── Safety-net buffer: stop blog generation 30 min before EACH of the three
-  // posting sessions (06:30, 14:30, 22:30), so a session never has to fight the
+  // ── Safety-net buffer: stop blog generation 30 min before EACH of the two
+  // posting sessions (10:30, 22:30), so a session never has to fight the
   // blog-gen ChatGPT browser for the box. ────────────────────────────────────
   const stopBlogGenBuffer = (label: string) => {
     const result = stopCycle(BLOG_GEN_AGENT);
     if (result.stopped) console.log(`[${nowIst()}] ${label} — stopped blog generation (30 min buffer before next posting session).`);
   };
-  cron.schedule('30 6 * * *', () => stopBlogGenBuffer('06:30'), { timezone: tz });
-  cron.schedule('30 14 * * *', () => stopBlogGenBuffer('14:30'), { timezone: tz });
+  cron.schedule('30 10 * * *', () => stopBlogGenBuffer('10:30'), { timezone: tz });
   cron.schedule('30 22 * * *', () => stopBlogGenBuffer('22:30'), { timezone: tz });
 
-  console.log(`Coordinator Scheduler Started — 5-stage narrowing posting sessions at 07:00, 15:00 and 23:00 IST, 30 min between stages, continuous blog generation fills the gaps.\n`);
+  console.log(`Coordinator Scheduler Started — 5-stage narrowing posting sessions at 11:00 and 23:00 IST, 30 min between stages, continuous blog generation fills the gaps.\n`);
 
   if (immediate) {
-    console.log(`[${nowIst()}] Immediate run requested — starting a posting session now instead of waiting for the next 07:00/15:00/23:00 trigger.`);
+    console.log(`[${nowIst()}] Immediate run requested — starting a posting session now instead of waiting for the next 11:00/23:00 trigger.`);
     startDailyLoop();
   } else {
-    console.log(`[${nowIst()}] Cron-only start — waiting for the next 07:00/15:00/23:00 trigger. No posting session started now.`);
+    console.log(`[${nowIst()}] Cron-only start — waiting for the next 11:00/23:00 trigger. No posting session started now.`);
   }
 }
 
@@ -271,6 +348,7 @@ export async function startCoordinatorDaemon(immediate: boolean = false): Promis
  */
 export async function runCoordinatorOnce(statusFile?: string): Promise<void> {
   console.log(`Running the full ${STAGES.length}-cycle sequence once (30 min between each, then stopping)...\n`);
+  try { await rebalanceFleetNames(); } catch (err: any) { console.warn(`Fleet rebalance failed (non-fatal): ${err.message}`); }
   lapNum = 1;
   for (let i = 0; i < STAGES.length; i++) {
     await runStage(i, statusFile);

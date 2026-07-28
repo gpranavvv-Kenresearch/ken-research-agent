@@ -133,9 +133,16 @@ export async function loginToMedium(options?: {
   console.log('   Waiting 5 seconds for session check...');
   await sleep(5000);
 
-  // Check if already logged in
-  const loggedIn = !(await page.url()).includes('signin');
-  if (loggedIn) {
+  // Check if already logged in. Medium's homepage is public and NEVER redirects an
+  // anonymous visitor to /m/signin, so a URL check (`!url.includes('signin')`) is
+  // always true regardless of auth state — that false signal is exactly why this
+  // used to log "✅ Already logged in" on every run, including on dead sessions,
+  // only for postToMedium() to fail downstream. The header's Write button only
+  // renders for a real authenticated session (poster.ts already gates on the same
+  // selector), so check for that instead.
+  const isLoggedInPage = async () => (await page.locator('[data-testid="headerWriteButton"]').count()) > 0;
+
+  if (await isLoggedInPage()) {
     console.log(`   ✅ Already logged in to Medium (session restored)`);
     return page;
   }
@@ -152,8 +159,7 @@ export async function loginToMedium(options?: {
   await sleep(20000);
 
   // Check again
-  const finalCheck = !(await page.url()).includes('signin');
-  if (!finalCheck) {
+  if (!(await isLoggedInPage())) {
     await closeMediumBrowser();
     throw new Error(`Unable to log in to Medium as ${label}. Session expired or login failed. Please log in manually or update session.`);
   }

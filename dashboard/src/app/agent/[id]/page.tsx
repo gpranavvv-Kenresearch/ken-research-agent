@@ -157,6 +157,26 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
+  async function deleteSession(platform: string, index: number, nickname: string) {
+    if (!token) return;
+    if (!confirm(`Delete "${nickname}" (${platformLabel(platform)})?\n\nThis removes the session, credentials, and posting history for this ONE account. It cannot be undone — you'll need to log in again to reuse it.`)) return;
+    const key = `${platform}-${index}-delete`;
+    setBusyKey(key);
+    try {
+      const res = await fetch(`/api/agent/${agentId}/session/${platform}/${index}`, {
+        method: 'DELETE',
+        headers: { 'X-Agent-Token': token },
+      }).then((r) => r.json());
+      if (res.ok) {
+        void mutate();
+      } else {
+        alert(res.error || 'Failed to delete session');
+      }
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   // ── Bulk login + live "needs you" queue ────────────────────────────────────
   const [queue, setQueue] = useState<Array<{ token: string; platform: string; index: number; nickname: string; status: string; novncUrl: string }>>([]);
   const [batchBusy, setBatchBusy] = useState<string | null>(null);
@@ -500,6 +520,14 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
                           }`}
                         >
                           {busyKey === `${p.key}-${a.index}` ? 'Opening…' : a.ready ? 'Re-login' : 'Log in'}
+                        </button>
+                        <button
+                          onClick={() => deleteSession(p.key, a.index, a.nickname)}
+                          disabled={busyKey === `${p.key}-${a.index}-delete`}
+                          title="Permanently delete this account's session, credentials, and history"
+                          className="text-xs px-2 py-1.5 rounded transition-colors disabled:opacity-50 bg-red-900/60 hover:bg-red-800 text-red-200"
+                        >
+                          {busyKey === `${p.key}-${a.index}-delete` ? 'Deleting…' : '🗑 Delete'}
                         </button>
                       </div>
                     ))}

@@ -97,6 +97,28 @@ export async function postToLinkedIn(
   }
 
   if (!composerReady) {
+    // Both live attempts failed to find any composer button/textbox — the page
+    // itself may be a stale/partial load rather than a real missing-UI case (the
+    // login step can misjudge a still-rendering feed as ready; see login.ts).
+    // One full reload is cheap and recovers exactly that class of failure before
+    // we give up and burn the whole post attempt.
+    console.warn('   ⚠️  Composer still missing after retry — reloading the feed once...');
+    await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => {});
+    await page.waitForSelector('div.feed-shared-update-v2', { timeout: 15_000 }).catch(() => {});
+    for (const selector of startPostSelectors) {
+      const btn = await page.$(selector);
+      if (btn) {
+        await btn.click();
+        await page.waitForTimeout(4000);
+        break;
+      }
+    }
+    composerReady = await page.waitForSelector('div[role="textbox"]', { timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
+  }
+
+  if (!composerReady) {
     throw new Error('LinkedIn post composer textbox never appeared.');
   }
   console.log('   ✅ Composer ready');

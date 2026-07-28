@@ -1,4 +1,5 @@
 'use client';
+import { usePathname, useRouter } from 'next/navigation';
 import { USERS } from '@/lib/userConfig';
 import { useUser } from '@/context/UserContext';
 
@@ -25,6 +26,17 @@ const TEXT_MAP: Record<string, string> = {
 
 export default function UserSelector() {
   const { setUser } = useUser();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Selecting a user must also NAVIGATE. The agent dashboard renders from the URL
+  // param (/agent/[id]), not the context, so updating context alone changed the
+  // chip but left the page on the old user. If we're on a user-specific route,
+  // point it at the new user; other pages read the user from context and refresh.
+  function pick(u: (typeof USERS)[number]) {
+    setUser(u);
+    if (pathname.startsWith('/agent')) router.push(`/agent/${u.id}`);
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-surface flex items-center justify-center px-4">
@@ -41,7 +53,7 @@ export default function UserSelector() {
           {USERS.map((u) => (
             <button
               key={u.id}
-              onClick={() => setUser(u)}
+              onClick={() => pick(u)}
               className="group flex flex-col items-center gap-2 p-4 bg-card border border-border rounded-xl hover:border-slate-500 transition-all hover:scale-105 active:scale-95"
             >
               {/* Avatar */}

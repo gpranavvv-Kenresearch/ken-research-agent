@@ -42,7 +42,7 @@ async function launchPersistentChrome(profileDir: string, nickname?: string): Pr
     args: CHROME_LAUNCH_ARGS,
     // New accounts only: stable per-account fingerprint (+ proxy once configured).
     // Established sessions are untouched (returns {}) to avoid device-change checkpoints.
-    ...identityLaunchOverrides(profileDir, nickname || path.basename(profileDir)),
+    ...identityLaunchOverrides(profileDir, nickname || path.basename(profileDir), 'x'),
   });
 
   await context.addInitScript(() => {
