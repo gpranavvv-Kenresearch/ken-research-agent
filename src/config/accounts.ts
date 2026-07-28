@@ -53,29 +53,10 @@ export function getAccountByHandle(handle: string): XAccount | undefined {
   );
   if (exact) return exact;
 
-  // Fleet nicknames are "{agent} {index}", and the same index is reused across every
-  // platform for a given row — but X may have fewer registered accounts than other
-  // platforms (e.g. a row says "abhinav 12" but X only has 1-11 set up). Confirmed
-  // live: this caused "account not found" for every row assigned an out-of-range
-  // index. Wrap the requested index into whatever range X actually has, same
-  // pattern as the Note/LinkedIn account lookups.
-  const m = handle.trim().match(/^(.+?)\s*(\d+)$/);
-  if (!m) return undefined;
-  const [, agent, idxStr] = m;
-  const agentNorm = normalize(agent);
-  const agentAccounts = accounts
-    .map((a) => {
-      const am = (a.nickname || '').trim().match(/^(.+?)\s*(\d+)$/);
-      return am && normalize(am[1]) === agentNorm ? { account: a, index: Number(am[2]) } : null;
-    })
-    .filter((x): x is { account: XAccount; index: number } => x !== null)
-    .sort((a, b) => a.index - b.index);
-  if (!agentAccounts.length) return undefined;
-
-  const wrappedPos = (((Number(idxStr) - 1) % agentAccounts.length) + agentAccounts.length) % agentAccounts.length;
-  const wrapped = agentAccounts[wrappedPos];
-  console.log(`   ℹ️ X: "${handle}" not registered — wrapped to "${wrapped.account.nickname}" (X only has ${agentAccounts.length} account(s) for "${agent.trim()}")`);
-  return wrapped.account;
+  // No account substitution: a row asking for an unregistered account must fail
+  // with a clear error, never silently reuse a different account's session (see
+  // the identical fix + reasoning in browser/linkedin/login.ts).
+  return undefined;
 }
 
 // ── Write accounts ─────────────────────────────────────────────────────────

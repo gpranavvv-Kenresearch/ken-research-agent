@@ -168,7 +168,10 @@ export function canPost(platform: string, nickname: string, nowIso = new Date().
   if (h.status === 'dead')        return { ok: false, reason: 'account dead (banned/suspended)', cap, used: h.postsToday };
   if (h.status === 'quarantined') return { ok: false, reason: 'quarantined — needs human review', cap, used: h.postsToday };
   if (h.status === 'cooldown')    return { ok: false, reason: `cooling down until ${h.cooldownUntil}`, cap, used: h.postsToday };
-  if (h.postsToday >= cap)        return { ok: false, reason: `daily cap reached (${h.postsToday}/${cap})`, cap, used: h.postsToday };
+  // Daily cap removed by explicit instruction — only real ban signals (dead /
+  // quarantined / cooldown, all above) gate posting now, not an arbitrary
+  // posts-per-day ceiling. postsToday/cap are still tracked and returned for
+  // visibility (dashboard/logs), just no longer enforced here.
   return { ok: true, reason: 'ok', cap, used: h.postsToday };
 }
 

@@ -41,30 +41,13 @@ export function getLinkedInAccountByNickname(nickname: string): LinkedInAccount 
   const exact = accounts.find(a => a.nickname && normalize(a.nickname) === target);
   if (exact) return exact;
 
-  // Fleet nicknames are "{agent} {index}", and the same index is reused across every
-  // platform for a given row — but LinkedIn may have fewer registered accounts than
-  // other platforms (e.g. a row says "abhinav 10" but LinkedIn only has 1-8 set up).
-  // Confirmed live: this caused both regular LinkedIn and LinkedIn Pulse to fail
-  // identically with "account not found" for every row assigned an out-of-range
-  // index. Wrap the requested index into whatever range LinkedIn actually has,
-  // same pattern as the Note account lookup.
-  const m = nickname.trim().match(/^(.+?)\s*(\d+)$/);
-  if (!m) return null;
-  const [, agent, idxStr] = m;
-  const agentNorm = normalize(agent);
-  const agentAccounts = accounts
-    .map((a) => {
-      const am = (a.nickname || '').trim().match(/^(.+?)\s*(\d+)$/);
-      return am && normalize(am[1]) === agentNorm ? { account: a, index: Number(am[2]) } : null;
-    })
-    .filter((x): x is { account: LinkedInAccount; index: number } => x !== null)
-    .sort((a, b) => a.index - b.index);
-  if (!agentAccounts.length) return null;
-
-  const wrappedPos = (((Number(idxStr) - 1) % agentAccounts.length) + agentAccounts.length) % agentAccounts.length;
-  const wrapped = agentAccounts[wrappedPos];
-  console.log(`   ℹ️ LinkedIn: "${nickname}" not registered — wrapped to "${wrapped.account.nickname}" (LinkedIn only has ${agentAccounts.length} account(s) for "${agent.trim()}")`);
-  return wrapped.account;
+  // No account substitution: a row asking for an account that isn't registered
+  // (e.g. "abhinav 12" when only 1-8 exist) must fail with a clear error, never
+  // silently reuse a different account's session. The old wrap-around fallback
+  // was doing exactly that — repeatedly re-launching the SAME session dir under
+  // multiple different requested nicknames within one batch, which is what was
+  // producing the "Credentials missing" / rapid back-to-back-launch failures.
+  return null;
 }
 
 function sessionDirFor(username: string): string {
@@ -134,21 +117,39 @@ async function ensureLoggedIn(page: Page, email: string, password: string): Prom
     // "Credentials missing" on accounts the dashboard correctly shows as logged in.
     // Fix: give the nav time to render, check several signals, and treat staying on
     // /feed (not redirected to login/authwall/checkpoint) as logged in.
+    const checkLoggedIn = async (): Promise<boolean> => {
+      const url = (page.url() || '').toLowerCase();
+      const kickedOut = /\/login|\/checkpoint|\/authwall|\/signup|\/uas\/|\/ssr-login\//.test(url);
+      const navVisible = await page.locator(
+        'a[href*="/mynetwork/"], img.global-nav__me-photo, .global-nav__me, [data-control-name="identity_welcome_message"], button[aria-label*="settings" i]'
+      ).first().isVisible({ timeout: 8000 }).catch(() => false);
+      // Require the real nav UI, not just a /feed URL — the URL can read /feed while
+      // the page is still a loading shell (slow network, an A/B interstitial, a
+      // restricted-account notice), and that false "logged in" verdict was the thing
+      // sending the poster on to a page with no "Start a post" button to find —
+      // surfacing downstream as "composer textbox never appeared", not as a login
+      // failure. A bare url.includes('/feed') fallback (no nav check at all) is kept
+      // only as a last resort, since some legitimately-logged-in narrow viewports
+      // don't render every nav selector above.
+      return !kickedOut && (navVisible || (url.includes('/feed') && await page.locator('div.feed-shared-update-v2, main#main').first().isVisible({ timeout: 5000 }).catch(() => false)));
+    };
+
     await page.waitForTimeout(2500);
-    const url = (page.url() || '').toLowerCase();
-    const kickedOut = /\/login|\/checkpoint|\/authwall|\/signup|\/uas\/|\/ssr-login\//.test(url);
-    const navVisible = await page.locator(
-      'a[href*="/mynetwork/"], img.global-nav__me-photo, .global-nav__me, [data-control-name="identity_welcome_message"], button[aria-label*="settings" i]'
-    ).first().isVisible({ timeout: 8000 }).catch(() => false);
-    // Require the real nav UI, not just a /feed URL — the URL can read /feed while
-    // the page is still a loading shell (slow network, an A/B interstitial, a
-    // restricted-account notice), and that false "logged in" verdict was the thing
-    // sending the poster on to a page with no "Start a post" button to find —
-    // surfacing downstream as "composer textbox never appeared", not as a login
-    // failure. A bare url.includes('/feed') fallback (no nav check at all) is kept
-    // only as a last resort, since some legitimately-logged-in narrow viewports
-    // don't render every nav selector above.
-    const alreadyLoggedIn = !kickedOut && (navVisible || (url.includes('/feed') && await page.locator('div.feed-shared-update-v2, main#main').first().isVisible({ timeout: 5000 }).catch(() => false)));
+    let alreadyLoggedIn = await checkLoggedIn();
+
+    // One retry with a full reload before concluding "not logged in" — confirmed
+    // live: launching 2-3 Chrome instances back-to-back on this box can leave the
+    // feed still mid-render past the checks above even for a genuinely valid,
+    // already-verified session (real li_at cookie present), and session-only fleet
+    // accounts have no password to fall back on — so a slow render was being read
+    // as a dead session and thrown away instantly. Give it one real second look.
+    if (!alreadyLoggedIn && !email && !password) {
+      console.log(`   ⏳ ${email || 'session account'}: not confirmed logged in yet — reloading and giving it one more look...`);
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => {});
+      await page.waitForTimeout(3500);
+      alreadyLoggedIn = await checkLoggedIn();
+    }
+
     if (alreadyLoggedIn) {
       console.log(`   ✅ ${email || 'session account'}: already logged in`);
       return true;
