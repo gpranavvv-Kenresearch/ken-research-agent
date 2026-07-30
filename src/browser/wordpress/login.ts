@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
 import { blockHeavyResources } from '../../utils/blockResources.js';
+import { hasAuthCookie } from '../../utils/authCookieCheck.js';
 
 const WORDPRESS_ACCOUNTS_FILE = '.accounts/accounts-wordpress.json';
 const SESSION_ROOT = path.resolve('.sessions/wordpress');
@@ -129,7 +130,7 @@ export async function loginToWordpress(options?: {
   // TODO: Update this check with the correct logged-in indicator selector
   const currentUrl = await page.url();
   const loggedIn = currentUrl.includes('/home') || currentUrl.includes('/dashboard') || currentUrl.includes('/posts');
-  if (loggedIn) {
+  if (loggedIn || (browserContext && await hasAuthCookie(browserContext, 'wordpress'))) {
     console.log(`   ✅ Already logged in to WordPress (session restored)`);
     return page;
   }
@@ -171,7 +172,7 @@ export async function loginToWordpress(options?: {
 
   const finalUrl = await page.url();
   const finalCheck = finalUrl.includes('/home') || finalUrl.includes('/dashboard') || finalUrl.includes('/posts');
-  if (!finalCheck) {
+  if (!finalCheck && !(browserContext && await hasAuthCookie(browserContext, 'wordpress'))) {
     await closeWordpressBrowser();
     throw new Error(`Unable to log in to WordPress as ${label}.`);
   }

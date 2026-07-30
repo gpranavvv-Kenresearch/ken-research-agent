@@ -5,6 +5,7 @@ import 'dotenv/config';
 import { getChromeLaunchArgs } from '../../utils/chromeArgs.js';
 import { killChromeForProfile } from '../../utils/killChrome.js';
 import { blockHeavyResources } from '../../utils/blockResources.js';
+import { hasAuthCookie } from '../../utils/authCookieCheck.js';
 
 const BLOGGER_ACCOUNTS_FILE = '.accounts/accounts-blogger.json';
 const SESSION_ROOT = path.resolve('.sessions/blogger');
@@ -135,7 +136,7 @@ export async function loginToBlogger(options?: {
   // TODO: Update this check with the correct logged-in indicator
   const currentUrl = await page.url();
   const loggedIn = currentUrl.includes('/blog/') || currentUrl.includes('blogger.com/blog') || !currentUrl.includes('accounts.google.com');
-  if (loggedIn && !currentUrl.includes('accounts.google.com')) {
+  if ((loggedIn && !currentUrl.includes('accounts.google.com')) || (browserContext && await hasAuthCookie(browserContext, 'blogger'))) {
     console.log(`   ✅ Already logged in to Blogger (session restored)`);
     return page;
   }

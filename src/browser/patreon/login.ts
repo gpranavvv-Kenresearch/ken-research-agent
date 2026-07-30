@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
 import { killChromeForProfile } from '../../utils/killChrome.js';
+import { hasAuthCookie } from '../../utils/authCookieCheck.js';
 
 const PATREON_ACCOUNTS_FILE = '.accounts/accounts-patreon.json';
 const SESSION_ROOT = path.resolve('.sessions/patreon');
@@ -140,7 +141,7 @@ export async function loginToPatreon(options?: { nickname?: string }): Promise<P
   await page.goto(checkUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await sleep(3000);
 
-  if (await isLoggedIn(page)) {
+  if (await isLoggedIn(page) || (browserContext && await hasAuthCookie(browserContext, 'patreon'))) {
     console.log(`   ✅ Already logged in to Patreon (${account.nickname})`);
     return page;
   }

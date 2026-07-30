@@ -8,6 +8,7 @@ import { killChromeForProfile } from '../../utils/killChrome.js';
 import { blockHeavyResources } from '../../utils/blockResources.js';
 import { getChromeLaunchArgs } from '../../utils/chromeArgs.js';
 import { identityLaunchOverrides } from '../../health/proxyPool.js';
+import { hasAuthCookie } from '../../utils/authCookieCheck.js';
 
 let browserContext: BrowserContext | null = null;
 let loginPage: Page | null = null;
@@ -132,7 +133,7 @@ async function launchSavedSessionChrome(account: Account | undefined, handle: st
     await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded', timeout: 60000 });
     await humanDelay(3000, 4000);
 
-    if (await hasLoggedInXUi(page)) {
+    if (await hasLoggedInXUi(page) || await hasAuthCookie(ctx, 'x')) {
       console.log(`   ✅ X cookies valid for ${handle}`);
       return page;
     }
@@ -157,7 +158,7 @@ async function launchSavedSessionChrome(account: Account | undefined, handle: st
   await loginPage.goto('https://x.com/home', { waitUntil: 'domcontentloaded', timeout: 60000 });
   await humanDelay(3000, 4000);
 
-  if (await hasLoggedInXUi(loginPage)) {
+  if (await hasLoggedInXUi(loginPage) || await hasAuthCookie(context, 'x')) {
     console.log(`   ✅ X session valid for ${handle}`);
     return loginPage;
   }

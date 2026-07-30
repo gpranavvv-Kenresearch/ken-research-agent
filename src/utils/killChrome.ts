@@ -14,13 +14,27 @@ export function killChromeForProfile(sessionDir: string): void {
   // Kill Chrome/Chromium processes using this profile dir
   try {
     if (process.platform === 'win32') {
+      // Graceful, mirroring the Linux SIGTERM→poll→SIGKILL pattern below
+      // (gracefulKillByNeedle): ask each matching process to close its main
+      // window first (lets Chrome flush its SQLite cookie DB on the way out)
+      // and only Stop-Process -Force the ones still alive after a 3s grace
+      // window. The old version force-killed immediately, which is exactly
+      // the kind of mid-write kill that can corrupt/lose session cookies.
       const script = `
+        $ids = @()
         $procs = Get-WmiObject Win32_Process -Filter "Name='chrome.exe'"
         foreach ($p in $procs) {
           if ($p.CommandLine -and $p.CommandLine -like '*${absDir.replace(/\\/g, '\\\\')}*') {
-            Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+            $ids += $p.ProcessId
+            try { (Get-Process -Id $p.ProcessId -ErrorAction Stop).CloseMainWindow() | Out-Null } catch {}
           }
         }
+        for ($i = 0; $i -lt 6; $i++) {
+          Start-Sleep -Milliseconds 500
+          $ids = $ids | Where-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue }
+          if ($ids.Count -eq 0) { break }
+        }
+        foreach ($procId in $ids) { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue }
       `;
       execSync(`powershell -NoProfile -Command "${script.replace(/\n\s*/g, ' ')}"`, {
         stdio: 'pipe',

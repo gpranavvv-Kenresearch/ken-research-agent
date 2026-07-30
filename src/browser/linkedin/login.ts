@@ -137,17 +137,42 @@ async function ensureLoggedIn(page: Page, email: string, password: string): Prom
     await page.waitForTimeout(2500);
     let alreadyLoggedIn = await checkLoggedIn();
 
-    // One retry with a full reload before concluding "not logged in" — confirmed
-    // live: launching 2-3 Chrome instances back-to-back on this box can leave the
-    // feed still mid-render past the checks above even for a genuinely valid,
-    // already-verified session (real li_at cookie present), and session-only fleet
-    // accounts have no password to fall back on — so a slow render was being read
-    // as a dead session and thrown away instantly. Give it one real second look.
+    // Real polling patience before concluding "not logged in" — a single retry
+    // still wasn't enough: confirmed live on a real, verified-valid session
+    // (li_at cookie present, expires a year out) failing under load anyway.
+    // Session-only fleet accounts have NO password fallback, so a false "not
+    // logged in" here is not recoverable — it's thrown away outright. Worth
+    // being patient. Headed/visual runs (DISPLAY set for a human to watch) are
+    // slower than normal headless production, and multiple Chrome instances
+    // launching back-to-back on this box compounds it — so poll for real,
+    // don't just look twice on a clock.
     if (!alreadyLoggedIn && !email && !password) {
-      console.log(`   ⏳ ${email || 'session account'}: not confirmed logged in yet — reloading and giving it one more look...`);
-      await page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => {});
-      await page.waitForTimeout(3500);
-      alreadyLoggedIn = await checkLoggedIn();
+      for (let attempt = 1; attempt <= 4 && !alreadyLoggedIn; attempt++) {
+        console.log(`   ⏳ ${email || 'session account'}: not confirmed logged in yet — waiting (poll ${attempt}/4)...`);
+        await page.waitForTimeout(2500);
+        alreadyLoggedIn = await checkLoggedIn();
+      }
+      // Last resort: a full reload in case the page itself got stuck, not just slow.
+      if (!alreadyLoggedIn) {
+        console.log(`   ⏳ ${email || 'session account'}: still not confirmed — reloading for one final look...`);
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => {});
+        await page.waitForTimeout(4000);
+        alreadyLoggedIn = await checkLoggedIn();
+      }
+
+      // Final fallback: the nav-render check above is a UI guess and can still
+      // false-negative on a genuinely valid session (confirmed live — a session
+      // with li_at valid a year out failed every poll above on real hardware).
+      // li_at is LinkedIn's actual active-session cookie; its mere presence is a
+      // stronger signal than any UI element rendering in time. Trust it over the
+      // render check rather than throwing away a working session-only account.
+      if (!alreadyLoggedIn) {
+        const cookies = await page.context().cookies('https://www.linkedin.com').catch(() => []);
+        if (cookies.some((c) => c.name === 'li_at')) {
+          console.log(`   ✅ ${email || 'session account'}: li_at cookie present — trusting it over the UI render check`);
+          alreadyLoggedIn = true;
+        }
+      }
     }
 
     if (alreadyLoggedIn) {

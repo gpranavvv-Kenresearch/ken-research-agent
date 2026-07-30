@@ -5,6 +5,7 @@ import 'dotenv/config';
 import { killChromeForProfile } from '../../utils/killChrome.js';
 import { getChromeLaunchArgs } from '../../utils/chromeArgs.js';
 import { identityLaunchOverrides } from '../../health/proxyPool.js';
+import { hasAuthCookie } from '../../utils/authCookieCheck.js';
 
 const HACKMD_ACCOUNTS_FILE = '.accounts/accounts-hackmd.json';
 const SESSION_ROOT = path.resolve('.sessions/hackmd');
@@ -157,7 +158,7 @@ export async function loginToHackMD(options?: {
 
   // Check if already logged in via saved session
   console.log('   Checking saved session...');
-  const loggedIn = await isAlreadyLoggedIn(page);
+  const loggedIn = await isAlreadyLoggedIn(page) || (browserContext && await hasAuthCookie(browserContext, 'hackmd'));
   if (loggedIn) {
     console.log('   ✅ Already logged in to HackMD via saved session');
     return page;

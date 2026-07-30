@@ -92,6 +92,13 @@ import { listAgentStatus } from '../login-portal/sessionResolver.js';
 function capToLiveAccounts(defaultLimit: number, platformKey: string): number {
   const agent = (process.env.WORKER_NAME || 'abhinav').toLowerCase();
   if (agent === 'abhinav') return defaultLimit;
+  // Fleet-style workers keep their session profiles under .sessions-{agent}/
+  // (e.g. .sessions-krishi/x-1). Flat-convention workers (one shared profile
+  // per person, e.g. .sessions/chrome-vishal) have no such directory at all —
+  // for them the live-account scan below always finds 0 and would wrongly cap
+  // every platform to 0 rows regardless of real logins. Skip the cap entirely
+  // when this worker isn't using the fleet convention in the first place.
+  if (!fs.existsSync(`.sessions-${agent}`)) return defaultLimit;
   try {
     const live = (listAgentStatus(agent).platforms[platformKey] || []).filter(a => a.ready).length;
     return Math.min(defaultLimit, live); // 0 accounts → 0 rows pulled → platform skipped

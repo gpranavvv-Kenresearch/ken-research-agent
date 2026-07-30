@@ -2,6 +2,7 @@
 import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
+import { hasAuthCookie } from '../../utils/authCookieCheck.js';
 
 const GOOGLESITE_ACCOUNTS_FILE = '.accounts/accounts-googlesite.json';
 const SESSION_ROOT = path.resolve('.sessions/googlesite');
@@ -170,7 +171,7 @@ export async function loginToGoogleSite(options?: {
   // Check if already logged in — must be on sites.google.com, not accounts.google.com
   const currentUrl = page.url();
   const loggedIn = currentUrl.includes('sites.google.com') && !currentUrl.includes('accounts.google.com');
-  if (loggedIn) {
+  if (loggedIn || await hasAuthCookie(browserContext, 'googlesite')) {
     console.log(`   ✅ Already logged in to Google Sites`);
     return page;
   }

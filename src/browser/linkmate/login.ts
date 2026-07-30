@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import 'dotenv/config';
 import { STEALTH_ARGS, STEALTH_USER_AGENT, applyStealth } from '../../utils/stealth.js';
+import { hasAuthCookie } from '../../utils/authCookieCheck.js';
 
 const LINKMATE_ACCOUNTS_FILE = '.accounts/accounts-linkmate.json';
 const SESSION_ROOT = path.resolve('.sessions/linkmate');
@@ -137,7 +138,7 @@ export async function loginToLinkmate(options?: {
   await page.waitForSelector('button[aria-label="Create content"], a[title="Create"], a[href*="/sign_in"]', { timeout: 30000 }).catch(() => {});
 
   const url = page.url();
-  if (url.includes('/sign_in') || url.includes('/login')) {
+  if ((url.includes('/sign_in') || url.includes('/login')) && !(browserContext && await hasAuthCookie(browserContext, 'linkmate'))) {
     await closeLinkmeateBrowser();
     throw new Error(`No active Linkmate session for "${options?.nickname}". Run: npm run dev -- save-linkmate-session ${options?.nickname}`);
   }

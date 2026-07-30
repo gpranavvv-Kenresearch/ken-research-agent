@@ -2,7 +2,7 @@
  * scheduler-new.ts — 5-Stage Narrowing Coordinator (Asia/Kolkata)
  *
  * Posting runs TWICE a day, starting fresh at Stage 1 (all platforms) at
- * 11:00 AM and 11:00 PM IST, narrowing down through 5 stages (30 min between
+ * 11:00 AM and 11:00 PM IST, narrowing down through 5 stages (1 hour between
  * each), then STOPPING after Stage 5 — no wraparound back to Stage 1 anymore.
  *
  * Two start modes (see `npm run schedule` vs `npm run schedule:now`):
@@ -11,9 +11,9 @@
  *   - Immediate: registers the same triggers AND starts a posting session
  *     right away, for a manual/on-demand restart.
  *
- * Stage 1 (15 platforms): everything
- * Stage 2 (13): drop LinkedIn Pulse, Medium
- * Stage 3 (8):  drop Note, Blogger, WordPress, Paragraph, Ameba
+ * Stage 1 (14 platforms): everything
+ * Stage 2 (12): drop LinkedIn Pulse, Medium
+ * Stage 3 (8):  drop Note, Blogger, WordPress
  * Stage 4 (5):  drop LinkedIn (post), Linkmate, Calisthenics
  * Stage 5 (3):  drop HackMD, Notion  →  X + Facebook + Google Sites
  *
@@ -28,6 +28,8 @@
  * platform's own row-picker in masterCoordinator.ts.
  *
  * Patreon and Substack are intentionally excluded from this rotation.
+ * Ameba and Paragraph removed 2026-07-29 — being replaced, kept out of the
+ * rotation entirely until new accounts/platforms are ready.
  *
  * Unrelated maintenance jobs (midnight counter reset, weekly SERP recheck,
  * Sunday failed-post sweep) keep their own cron schedules, unaffected by this.
@@ -41,7 +43,7 @@ import {
   runMediumBatch, runLinkmateBatch, runGoogleSiteBatch,
   runDevtoBatch, runLinkedinPulseBatch, runCalisthenicsNBatch,
   runWordpressBatch, runBloggerBatch, runHackmdBatch,
-  runNotionBatch, runNoteBatch, runParagraphBatch, runAmebaBatch,
+  runNotionBatch, runNoteBatch,
   runWeeklySerpRecheck, runSundayExamination, resetBatchCounters,
   runRetryRow,
 } from './coordinator/masterCoordinator.js';
@@ -55,7 +57,7 @@ import { acquireBrowserSlot } from './utils/browserSlots.js';
 // Which agent's blog-generation session runs during the posting gaps.
 const BLOG_GEN_AGENT = process.env.WORKER_NAME || 'abhinav';
 
-const STAGE_GAP_MS = 30 * 60 * 1000; // 30 minutes between every stage
+const STAGE_GAP_MS = 60 * 60 * 1000; // 1 hour between every stage
 const PLATFORM_TIMEOUT_MS = 5 * 60 * 1000; // one stuck platform must never block the rest of a stage
 
 interface PlatformDef { label: string; run: (batchNum: number) => Promise<void>; }
@@ -69,9 +71,7 @@ const MEDIUM:       PlatformDef = { label: 'Medium',         run: runMediumBatch
 const WORDPRESS:    PlatformDef = { label: 'WordPress',      run: runWordpressBatch };
 const BLOGGER:      PlatformDef = { label: 'Blogger',        run: runBloggerBatch };
 const GOOGLESITE:   PlatformDef = { label: 'Google Sites',   run: runGoogleSiteBatch };
-const AMEBA:        PlatformDef = { label: 'Ameba',          run: runAmebaBatch };
 const NOTE:         PlatformDef = { label: 'Note',           run: runNoteBatch };
-const PARAGRAPH:    PlatformDef = { label: 'Paragraph',      run: runParagraphBatch };
 const HACKMD:       PlatformDef = { label: 'HackMD',         run: runHackmdBatch };
 const LINKMATE:     PlatformDef = { label: 'Linkmate',       run: runLinkmateBatch };
 const CALISTHENICS: PlatformDef = { label: 'Calisthenics',   run: runCalisthenicsNBatch };
@@ -80,9 +80,9 @@ const NOTION:       PlatformDef = { label: 'Notion',         run: runNotionBatch
 // ── The 5 stages, exactly as agreed ────────────────────────────────────────────
 const STAGES: PlatformDef[][] = [
   // Stage 1 — all 16 (Dev.to included)
-  [X, FB, LI, LI_PULSE, MEDIUM, WORDPRESS, BLOGGER, GOOGLESITE, AMEBA, NOTE, PARAGRAPH, HACKMD, LINKMATE, CALISTHENICS, NOTION, DEVTO],
+  [X, FB, LI, LI_PULSE, MEDIUM, WORDPRESS, BLOGGER, GOOGLESITE, NOTE, HACKMD, LINKMATE, CALISTHENICS, NOTION, DEVTO],
   // Stage 2 — drop LinkedIn Pulse, Medium (14 left, Dev.to still included)
-  [X, FB, LI, WORDPRESS, BLOGGER, GOOGLESITE, AMEBA, NOTE, PARAGRAPH, HACKMD, LINKMATE, CALISTHENICS, NOTION, DEVTO],
+  [X, FB, LI, WORDPRESS, BLOGGER, GOOGLESITE, NOTE, HACKMD, LINKMATE, CALISTHENICS, NOTION, DEVTO],
   // Stage 3 — drop Note, Blogger, WordPress, Paragraph, Ameba, Dev.to (8 left)
   [X, FB, LI, GOOGLESITE, HACKMD, LINKMATE, CALISTHENICS, NOTION],
   // Stage 4 — drop LinkedIn (post), Linkmate, Calisthenics (5 left)

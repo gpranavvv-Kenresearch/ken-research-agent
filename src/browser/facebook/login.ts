@@ -5,6 +5,7 @@ import fs from 'fs';
 import 'dotenv/config';
 import { blockHeavyResources } from '../../utils/blockResources.js';
 import { identityLaunchOverrides } from '../../health/proxyPool.js';
+import { hasAuthCookie } from '../../utils/authCookieCheck.js';
 
 const FACEBOOK_ACCOUNTS_FILE = '.accounts/facebook-accounts.json';
 
@@ -152,6 +153,14 @@ export async function loginToFacebook(options?: {
   const currentUrl = page.url();
   if (currentUrl.includes('/home') || currentUrl.includes('/feed')) {
     console.log('   Already logged in to Facebook!');
+    return page;
+  }
+
+  // URL redirect is a guess about where FB decided to send us; the c_user
+  // cookie is the actual proof of login. Trust it before falling through to
+  // a login-form attempt that would fail anyway on a password-less account.
+  if (await hasAuthCookie(browserContext, 'fb')) {
+    console.log('   ✅ c_user cookie present — already logged in to Facebook (URL check missed it)');
     return page;
   }
 

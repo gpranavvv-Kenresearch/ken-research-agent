@@ -49,6 +49,10 @@ interface LoginModal {
 
 const tokenKey = (agent: string) => `kr_agent_token_${agent}`;
 
+// Shared posting display (Xvfb :99) — every scheduled/one-off posting run opens
+// its browser here. Single fixed target, so no per-agent token is needed.
+const WATCH_LIVE_URL = 'https://agent-login.taildbacce.ts.net/vnc.html?autoconnect=1&resize=scale&reconnect=1&path=websockify%3Ftoken%3Dsharedwatch';
+
 export default function AgentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: agentId } = use(params);
   const user = getUser(agentId);
@@ -152,6 +156,8 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
       } else {
         alert(res.error || 'Failed to start login');
       }
+    } catch (err) {
+      alert(`Could not reach the login server — ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusyKey(null);
     }
@@ -172,6 +178,8 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
       } else {
         alert(res.error || 'Failed to delete session');
       }
+    } catch (err) {
+      alert(`Could not reach the login server — ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusyKey(null);
     }
@@ -398,6 +406,12 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
           {postCycleStatus.log && (
             <pre className="mt-2 text-xs text-slate-400 whitespace-pre-wrap max-h-40 overflow-y-auto font-mono">{postCycleStatus.log}</pre>
           )}
+          <div className="mt-3 text-xs text-sky-300/80 mb-1">👁 Watch live — shared posting screen:</div>
+          <iframe
+            src={WATCH_LIVE_URL}
+            className="w-full h-[420px] rounded-lg bg-black border border-sky-800/40"
+            allow="clipboard-read; clipboard-write"
+          />
         </div>
       )}
 

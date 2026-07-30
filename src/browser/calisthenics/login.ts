@@ -6,6 +6,7 @@ import { chromium, BrowserContext, Page } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 import { STEALTH_ARGS, STEALTH_USER_AGENT, applyStealth } from '../../utils/stealth.js';
+import { hasAuthCookie } from '../../utils/authCookieCheck.js';
 
 interface CalisthenicsAccount {
   username: string;
@@ -116,7 +117,7 @@ export async function loginCalisthenics(nickname: string, manualLogin = false): 
 
   // Check if already logged in
   const loggedIn = !page.url().includes('/sign_in') && !page.url().includes('/login');
-  if (loggedIn) {
+  if (loggedIn || (browserContext && await hasAuthCookie(browserContext, 'calisthenics'))) {
     console.log(`   ✅ Already logged in to Calisthenics (${nickname})`);
     currentNickname = nickname;
     return page;
@@ -135,6 +136,11 @@ export async function loginCalisthenics(nickname: string, manualLogin = false): 
         return page;
       }
       attempts++;
+    }
+    if (browserContext && await hasAuthCookie(browserContext, 'calisthenics')) {
+      console.log(`   ✅ _session_id cookie present — trusting it for Calisthenics (${nickname})`);
+      currentNickname = nickname;
+      return page;
     }
     throw new Error(`Calisthenics session not valid for ${nickname}. Run: npm run dev -- save-calisthenics-session ${nickname}`);
   }

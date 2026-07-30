@@ -38,8 +38,15 @@ let websockifyProc: ChildProcess | null = null;
 /** Agents with a blog-generation run currently in flight (one at a time — shared ChatGPT). */
 const generating = new Set<string>();
 
+// Fixed token for the dashboard's always-on "Watch Live" panel (the shared
+// :99 posting display, not a per-login slot) — same value the dashboard
+// frontend hardcodes into its viewer URL. Re-written on every start so it
+// survives a /tmp clear on reboot.
+const SHARED_WATCH_TOKEN = 'sharedwatch';
+
 function startWebsockify(): void {
   fs.mkdirSync(TOKEN_DIR, { recursive: true });
+  fs.writeFileSync(`${TOKEN_DIR}/${SHARED_WATCH_TOKEN}`, `${SHARED_WATCH_TOKEN}: localhost:5900`);
   // Single shared websockify: serves noVNC static files AND routes by ?token=.
   websockifyProc = spawn('websockify', [
     '--web', NOVNC_WEB_ROOT,
