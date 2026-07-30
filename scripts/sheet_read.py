@@ -65,6 +65,16 @@ _load_env()
 SPREADSHEET_ID = "1ZTgKCRs6Hcmi4pymYa6pZOerxX5cqT23FS1Z8c-RwJU"
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
+# A few workers have their own personal spreadsheet instead of a tab on the
+# combined one — same "{Name} Social"/"{Name} Blog" tab-naming convention,
+# just a different spreadsheet ID. Everyone else stays on the combined sheet.
+PERSONAL_SHEET_ID = {
+    "sanya": "1pP_nr0vSfeyoxboaOSIcKI53URHQ6ii4VhvzsIznqCM",
+    "meenakshi": "1IAI2S1LQJ2opg6zu-Sir7BAC8elHGC9TONLTuhibHKg",
+    "hritika": "1NjOCYlYPV1W-8FYNoLI7m_lqxx5pr5H9xTWu6OvWmcY",
+    "vansh": "1N_hPhtCA9qIVBpeftgxqRc0farsjAKTcZWMgbhJZQHM",
+}
+
 def _find_service_account() -> str:
     # 1. Explicit env var (set in .env as GOOGLE_APPLICATION_CREDENTIALS)
     env_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
@@ -276,6 +286,9 @@ def main():
     parser.add_argument("--row", type=int, default=None, help="Data row number (for --action row)")
     parser.add_argument("--limit", type=int, default=15, help="Max rows to return")
     args = parser.parse_args()
+
+    global SPREADSHEET_ID
+    SPREADSHEET_ID = PERSONAL_SHEET_ID.get(args.name.strip().lower(), SPREADSHEET_ID)
 
     sheet_name = resolve_tab(args.sheet, args.name)
 

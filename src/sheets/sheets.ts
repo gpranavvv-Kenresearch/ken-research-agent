@@ -41,12 +41,26 @@ function nowStamp(): string {
 }
 
 // Sheet configuration for different platform types
-const SOCIAL_SHEET_ID = '1ZTgKCRs6Hcmi4pymYa6pZOerxX5cqT23FS1Z8c-RwJU'; // X, FB, LI — per-person tabs: "{Name} Social"
+const COMBINED_SHEET_ID = '1ZTgKCRs6Hcmi4pymYa6pZOerxX5cqT23FS1Z8c-RwJU'; // X, FB, LI — per-person tabs: "{Name} Social"
+
+// A few workers have their own personal spreadsheet instead of a tab on the
+// combined one — same "{Name} Social"/"{Name} Blog" tab-naming convention,
+// just a different spreadsheetId. Everyone not listed here stays on the
+// combined sheet.
+const PERSONAL_SHEET_ID: Record<string, string> = {
+  sanya: '1pP_nr0vSfeyoxboaOSIcKI53URHQ6ii4VhvzsIznqCM',
+  meenakshi: '1IAI2S1LQJ2opg6zu-Sir7BAC8elHGC9TONLTuhibHKg',
+  hritika: '1NjOCYlYPV1W-8FYNoLI7m_lqxx5pr5H9xTWu6OvWmcY',
+  vansh: '1N_hPhtCA9qIVBpeftgxqRc0farsjAKTcZWMgbhJZQHM',
+};
+const RESOLVED_SHEET_ID = PERSONAL_SHEET_ID[(process.env.WORKER_NAME || '').toLowerCase()] || COMBINED_SHEET_ID;
+
+const SOCIAL_SHEET_ID = RESOLVED_SHEET_ID;
 const SOCIAL_SHEET_NAME = process.env.WORKER_NAME
   ? `${process.env.WORKER_NAME.charAt(0).toUpperCase()}${process.env.WORKER_NAME.slice(1).toLowerCase()} Social`
   : 'Social Media';
 
-const BLOG_SHEET_ID = '1ZTgKCRs6Hcmi4pymYa6pZOerxX5cqT23FS1Z8c-RwJU';
+const BLOG_SHEET_ID = RESOLVED_SHEET_ID;
 const BLOG_SHEET_NAME = process.env.WORKER_NAME
   ? `${process.env.WORKER_NAME.charAt(0).toUpperCase()}${process.env.WORKER_NAME.slice(1).toLowerCase()} Blog`
   : 'Blogs';

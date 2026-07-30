@@ -45,6 +45,16 @@ except ImportError:
     sys.exit(1)
 
 SPREADSHEET_ID = "1ZTgKCRs6Hcmi4pymYa6pZOerxX5cqT23FS1Z8c-RwJU"
+
+# A few workers have their own personal spreadsheet instead of a tab on the
+# combined one — same "{Name} Social"/"{Name} Blog" tab-naming convention,
+# just a different spreadsheet ID. Everyone else stays on the combined sheet.
+PERSONAL_SHEET_ID = {
+    "sanya": "1pP_nr0vSfeyoxboaOSIcKI53URHQ6ii4VhvzsIznqCM",
+    "meenakshi": "1IAI2S1LQJ2opg6zu-Sir7BAC8elHGC9TONLTuhibHKg",
+    "hritika": "1NjOCYlYPV1W-8FYNoLI7m_lqxx5pr5H9xTWu6OvWmcY",
+    "vansh": "1N_hPhtCA9qIVBpeftgxqRc0farsjAKTcZWMgbhJZQHM",
+}
 SERVICE_ACCOUNT_FILE = (
     os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
     or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".accounts", "google-service-account.json")
@@ -283,6 +293,9 @@ def main():
         help="Paint the Rating cell red for this row (used when blog fails QA after max repair attempts)"
     )
     args = parser.parse_args()
+
+    global SPREADSHEET_ID
+    SPREADSHEET_ID = PERSONAL_SHEET_ID.get(args.name.strip().lower(), SPREADSHEET_ID)
 
     if args.flag_red:
         sheet_name = resolve_tab(args.sheet, args.name)
