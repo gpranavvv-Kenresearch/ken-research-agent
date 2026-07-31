@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FORMATS, BLOG_PLATFORMS, SOCIAL_PLATFORMS } from '@/types';
 import { useUser } from '@/context/UserContext';
-import { SHARED_SHEET_ID } from '@/lib/userConfig';
+import { SHARED_SHEET_ID, resolveSheetId } from '@/lib/userConfig';
 
 export default function SubmitForm() {
   const router = useRouter();
@@ -107,7 +107,7 @@ export default function SubmitForm() {
     }
   }
 
-  const sheetUrl = `https://docs.google.com/spreadsheets/d/${SHARED_SHEET_ID}/edit`;
+  const sheetUrl = `https://docs.google.com/spreadsheets/d/${user ? resolveSheetId(user) : SHARED_SHEET_ID}/edit`;
 
   return (
     <div className="space-y-8 max-w-2xl">

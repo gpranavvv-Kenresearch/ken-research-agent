@@ -3,7 +3,7 @@ import { appendBlogRow, appendSocialRow } from '@/lib/sheetClient';
 
 export const dynamic = 'force-dynamic';
 import type { SubmitPayload } from '@/lib/sheetClient';
-import { getUser } from '@/lib/userConfig';
+import { getUser, resolveSheetId } from '@/lib/userConfig';
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
       customPrompt:   body.customPrompt,
       blogTab:        user.blogTab,
       socialTab:      user.socialTab,
+      spreadsheetId:  resolveSheetId(user),
     };
 
     const djangoUrl     = process.env.DJANGO_API_URL;

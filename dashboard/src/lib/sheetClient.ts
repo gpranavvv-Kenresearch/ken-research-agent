@@ -33,11 +33,11 @@ async function getSheetsClient() {
 
 // ── Read ─────────────────────────────────────────────────────────────────────
 
-export async function fetchRows(tabName: string): Promise<RawRow[]> {
+export async function fetchRows(tabName: string, spreadsheetId: string = SHARED_SHEET_ID): Promise<RawRow[]> {
   const sheets = await getSheetsClient();
 
   const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SHARED_SHEET_ID,
+    spreadsheetId,
     range: `'${tabName}'`,
   });
 
@@ -74,14 +74,16 @@ export interface SubmitPayload {
   customPrompt?: string;
   blogTab: string;
   socialTab: string;
+  spreadsheetId?: string; // defaults to the shared sheet if omitted
 }
 
 export async function appendBlogRow(payload: SubmitPayload): Promise<number> {
   const sheets = await getSheetsClient();
+  const spreadsheetId = payload.spreadsheetId || SHARED_SHEET_ID;
 
   // Fetch current headers from the user's Blog tab
   const headerRes = await sheets.spreadsheets.values.get({
-    spreadsheetId: SHARED_SHEET_ID,
+    spreadsheetId,
     range: `'${payload.blogTab}'!1:1`,
   });
   const headers: string[] = (headerRes.data.values?.[0] ?? []) as string[];
@@ -110,7 +112,7 @@ export async function appendBlogRow(payload: SubmitPayload): Promise<number> {
     : [payload.targetUrl, payload.title, payload.name, payload.format, timestamp, payload.description ?? '', payload.platforms.join(', ')];
 
   const appendRes = await sheets.spreadsheets.values.append({
-    spreadsheetId: SHARED_SHEET_ID,
+    spreadsheetId,
     range: `'${payload.blogTab}'!A:A`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [row] },
@@ -124,9 +126,10 @@ export async function appendBlogRow(payload: SubmitPayload): Promise<number> {
 export async function appendSocialRow(payload: SubmitPayload): Promise<number> {
   if (!payload.socialPlatforms.length) return -1;
   const sheets = await getSheetsClient();
+  const spreadsheetId = payload.spreadsheetId || SHARED_SHEET_ID;
 
   const headerRes = await sheets.spreadsheets.values.get({
-    spreadsheetId: SHARED_SHEET_ID,
+    spreadsheetId,
     range: `'${payload.socialTab}'!1:1`,
   });
   const headers: string[] = (headerRes.data.values?.[0] ?? []) as string[];
@@ -150,7 +153,7 @@ export async function appendSocialRow(payload: SubmitPayload): Promise<number> {
     : [payload.targetUrl, payload.title, payload.name, payload.socialPlatforms.join(', '), timestamp];
 
   const appendRes = await sheets.spreadsheets.values.append({
-    spreadsheetId: SHARED_SHEET_ID,
+    spreadsheetId,
     range: `'${payload.socialTab}'!A:A`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [row] },

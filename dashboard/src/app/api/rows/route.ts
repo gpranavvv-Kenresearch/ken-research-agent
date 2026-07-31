@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchRows } from '@/lib/sheetClient';
-import { getUser } from '@/lib/userConfig';
+import { getUser, resolveSheetId } from '@/lib/userConfig';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const tabName = tab === 'social' ? user.socialTab : user.blogTab;
 
   try {
-    const rows = await fetchRows(tabName);
+    const rows = await fetchRows(tabName, resolveSheetId(user));
     return NextResponse.json({ rows, tab, tabName, user: userId, fetchedAt: new Date().toISOString() });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
