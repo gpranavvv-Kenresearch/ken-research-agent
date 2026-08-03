@@ -275,7 +275,13 @@ export async function loginToLinkedIn(options?: {
     console.log(`   Loading LI cookies: ${cookiesFile}`);
     const chromePath = CHROME_PATH && fs.existsSync(CHROME_PATH) ? CHROME_PATH : undefined;
     headlessBrowser = await chromium.launch({
-      headless: process.env.HEADLESS !== 'false',
+      // Forced headed, same reasoning/fix as browser/medium/login.ts: LinkedIn
+      // Pulse sessions were getting server-side killed mid-publish while
+      // running headless (confirmed live via cookie-DB inspection — li_at
+      // selectively revoked, page redirected to /login mid-flow). Runs on the
+      // VPS's persistent virtual display (:99) when no real DISPLAY is set.
+      headless: false,
+      env: { ...process.env, DISPLAY: process.env.DISPLAY || ':99' },
       executablePath: chromePath,
       args: ['--start-minimized', '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-blink-features=AutomationControlled'],
     });
@@ -312,7 +318,9 @@ export async function loginToLinkedIn(options?: {
   console.log('   Launching LinkedIn browser...');
 
   browserContext = await chromium.launchPersistentContext(sessionDir, {
-    headless: process.env.HEADLESS !== 'false',
+    // Forced headed — see the cookies-path launch above for why.
+    headless: false,
+    env: { ...process.env, DISPLAY: process.env.DISPLAY || ':99' },
     executablePath: chromePath,
     viewport: { width: 1366, height: 900 },
     slowMo: 50,
