@@ -809,6 +809,20 @@ export async function saveUnifiedGoogleSiteResult(
 }
 
 /**
+ * Write a single column's value for one row. Generic escape hatch for one-off
+ * data fixes (e.g. backfilling a blank "New Name" column) — most writes should
+ * go through a platform-specific save*Result function instead, this is for
+ * when there isn't one.
+ */
+export async function updateSheetField(rowIndex: number, sheetType: 'blog' | 'social', columnNames: string[], value: string): Promise<void> {
+  const sheets = await getSheetsClient();
+  const config = getSheetConfig(sheetType);
+  const colMap = await getColumnMap(sheets, config.id, config.name);
+  const updates = buildUpdates(colMap, rowIndex, [{ names: columnNames, value }], config.name);
+  await batchWrite(sheets, updates, config.id);
+}
+
+/**
  * Fetch a single row by its Google Sheet row number (1-based, row 1 = header).
  * e.g. rowIndex=15 returns the data in sheet row 15.
  */
