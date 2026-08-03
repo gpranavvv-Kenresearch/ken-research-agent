@@ -36,13 +36,38 @@ export async function postToLinkedinPulse(
     console.log('   Navigating to LinkedIn article composer...');
     await page.goto('https://www.linkedin.com/article/new/', { waitUntil: 'domcontentloaded', timeout: 30000 });
 
+    // LinkedIn shows a first-time "onboarding toolbar" tooltip on the article
+    // editor that sits in #artdeco-modal-outlet and physically intercepts
+    // clicks on the title field — confirmed live: the title click retried
+    // uselessly for a full 30s against "<img alt='Onboarding toolbar image'>
+    // ... subtree intercepts pointer events" and never got through. Dismiss
+    // it before touching anything else.
+    try {
+      const onboardingOverlay = page.locator('#artdeco-modal-outlet img[alt="Onboarding toolbar image"]').first();
+      if (await onboardingOverlay.isVisible({ timeout: 3000 }).catch(() => false)) {
+        console.log('   Dismissing onboarding tooltip...');
+        const dismissBtn = page.locator('#artdeco-modal-outlet button[aria-label*="dismiss" i], #artdeco-modal-outlet button[aria-label*="close" i]').first();
+        if (await dismissBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await dismissBtn.click({ delay: 120 }).catch(() => {});
+        } else {
+          await page.keyboard.press('Escape').catch(() => {});
+        }
+        await page.waitForTimeout(800);
+      }
+    } catch { /* best-effort — never block the real flow on this */ }
+
     // Fill Title
     console.log('   Filling article title...');
     await page.waitForSelector('#article-editor-headline__textarea', { timeout: 20000 }).catch(() => {});
     const titleField = page.locator('#article-editor-headline__textarea').first();
 
     if (await titleField.isVisible().catch(() => false)) {
-      await titleField.click({ delay: 150 });
+      // force:true as a fallback if the overlay dismiss above didn't fully
+      // clear the intercepting element — bypasses the pointer-event check
+      // rather than retrying uselessly for 30s like it did live.
+      await titleField.click({ delay: 150, timeout: 8000 }).catch(() =>
+        titleField.click({ delay: 150, force: true }).catch(() => {})
+      );
       await page.keyboard.press('Control+A').catch(() => {});
       await page.keyboard.press('Delete').catch(() => {});
       await randomDelay(200, 400);
