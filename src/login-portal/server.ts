@@ -32,6 +32,10 @@ import { startCycle, stopCycle, cycleStatus } from './blogCycle.js';
 import { startPostCycle, stopPostCycle, postCycleStatus } from './postCycle.js';
 import { proxySummary, rotateProxy } from '../health/proxyPool.js';
 import { checkProxies } from '../health/proxyCheck.js';
+import { runRetryRow } from '../coordinator/masterCoordinator.js';
+import { acquireBrowserSlot } from '../utils/browserSlots.js';
+import { closeAllBrowsers } from '../tools/browserTools.js';
+import { killPostingChrome } from '../utils/procKill.js';
 
 let websockifyProc: ChildProcess | null = null;
 
@@ -331,6 +335,38 @@ app.post('/api/agent/:agent/post-cycle/stop', requireAgentToken, (req: Request, 
 // GET /api/agent/:agent/post-cycle/status — running? recent log + stage detail, for THIS agent.
 app.get('/api/agent/:agent/post-cycle/status', requireAgentToken, (req: Request, res: Response) => {
   res.json(postCycleStatus(req.params.agent.toLowerCase()));
+});
+
+// POST /api/retry-row { rowIndex, platform } — dashboard's Track page "Post Now"
+// button, direct (no external Django/Celery hop — that path went through a
+// separate backend that kept failing with unrelated errors). Reuses the same
+// runRetryRow() the scheduler's own inter-stage retry sweep calls, so it's the
+// exact same posting logic, account resolution, and sheet writes as automated
+// retries — just triggered on demand for one row. No per-agent token: this
+// isn't scoped to one agent's login session, just an admin action already
+// behind requireDashboardSecret (same trust level as the proxy routes below).
+app.post('/api/retry-row', async (req: Request, res: Response) => {
+  const rowIndex = Number(req.body?.rowIndex);
+  const platform = String(req.body?.platform || '').toLowerCase();
+  if (!Number.isFinite(rowIndex) || rowIndex < 2) {
+    res.status(400).json({ error: 'rowIndex (sheet row number) required' });
+    return;
+  }
+  if (!platform) {
+    res.status(400).json({ error: 'platform required' });
+    return;
+  }
+  const releaseSlot = await acquireBrowserSlot(`retry-row:${platform}`);
+  try {
+    await runRetryRow(rowIndex, platform);
+    res.json({ ok: true, message: 'Retry complete — check the row for the result.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'retry failed' });
+  } finally {
+    try { await closeAllBrowsers(); } catch { /* best-effort */ }
+    killPostingChrome();
+    releaseSlot();
+  }
 });
 
 // ── Proxy management (dashboard test/rotate buttons) ────────────────────────
