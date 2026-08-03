@@ -10,7 +10,7 @@
  *     WORKER_NAME=abhinav npx tsx scripts/run-post-cycle-once.ts
  */
 import fs from 'fs';
-import { runCoordinatorOnce } from '../src/scheduler-new.js';
+import { runCoordinatorOnce, runCountedPostCycle } from '../src/scheduler-new.js';
 
 // Mirror run-blog-generator.ts's pattern: stream progress into a shared log
 // file so the dashboard status endpoint can show live output, not just a
@@ -26,6 +26,14 @@ console.error = (...a: unknown[]) => { const s = a.map(String).join(' '); _origE
 
 const STATUS_FILE = process.env.POST_CYCLE_STATUS;
 
-runCoordinatorOnce(STATUS_FILE)
+// POST_CYCLE_COUNTS, if set, switches to the counted round-based cycle
+// (per-platform post counts from the dashboard form) instead of the fixed
+// 5-stage sequence — see postCycle.ts's startPostCycle().
+const countsJson = process.env.POST_CYCLE_COUNTS;
+const run = countsJson
+  ? runCountedPostCycle(JSON.parse(countsJson), STATUS_FILE)
+  : runCoordinatorOnce(STATUS_FILE);
+
+run
   .then(() => process.exit(0))
   .catch((err) => { console.error(`Post cycle failed: ${err?.message || err}`); process.exit(1); });

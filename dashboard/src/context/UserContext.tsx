@@ -1,6 +1,6 @@
 'use client';
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import type { UserConfig } from '@/lib/userConfig';
+import { getUser, type UserConfig } from '@/lib/userConfig';
 
 interface UserCtx {
   user: UserConfig | null;
@@ -10,7 +10,13 @@ interface UserCtx {
 
 const Ctx = createContext<UserCtx>({ user: null, setUser: () => {}, clearUser: () => {} });
 
-const LS_KEY = 'kr_dashboard_user';
+// Only the user's ID is persisted, never the full config object — that object
+// (tab names, colors, spreadsheetId) can change in future deploys, and a cached
+// stale copy would silently keep serving old data forever (e.g. a spreadsheetId
+// added later would never appear for anyone who picked their user before that
+// deploy). The ID is just a lookup key; the actual config is always re-resolved
+// fresh from userConfig.ts's live USERS list on every load.
+const LS_KEY = 'kr_dashboard_user_id';
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<UserConfig | null>(null);
@@ -18,10 +24,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(LS_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as UserConfig;
-        setUserState(parsed);
+      const id = localStorage.getItem(LS_KEY);
+      if (id) {
+        const fresh = getUser(id);
+        if (fresh) setUserState(fresh);
       }
     } catch {}
     setReady(true);
@@ -29,7 +35,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   function setUser(u: UserConfig | null) {
     setUserState(u);
-    if (u) localStorage.setItem(LS_KEY, JSON.stringify(u));
+    if (u) localStorage.setItem(LS_KEY, u.id);
     else localStorage.removeItem(LS_KEY);
   }
 

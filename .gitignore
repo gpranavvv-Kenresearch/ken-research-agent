@@ -48,6 +48,11 @@ graphify-out/
 .agents/
 .codex/
 pollinations-sample.png
+.obsidian/
+.graphify_python
+scripts/*.log
+scripts/ping-automation/*.log
+scripts/ping-automation/pinged_urls.json
 
 .vercel
 .env*

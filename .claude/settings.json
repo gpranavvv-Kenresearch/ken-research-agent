@@ -102,6 +102,7 @@
     "defaultMode": "bypassPermissions"
   },
   "enabledPlugins": {
-    "superpowers@claude-plugins-official": true
+    "superpowers@claude-plugins-official": true,
+    "ponytail@ponytail": true
   }
 }

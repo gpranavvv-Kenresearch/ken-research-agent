@@ -1,5 +1,7 @@
 import { execSync } from 'child_process';
+import fs from 'fs';
 import path from 'path';
+import { getLinkedInAccounts } from '../browser/linkedin/login.js';
 
 /**
  * Graceful-kill every process whose command line contains `needle` (a fixed
@@ -29,7 +31,24 @@ import path from 'path';
  * session's login cookie via this unsafe force-kill.
  */
 export function gracefulKillByNeedle(needle: string): void {
-  if (process.platform === 'win32') return;
+  if (process.platform === 'win32') {
+    // No SIGTERM/SIGKILL distinction on Windows for a GUI process like Chrome —
+    // this is already a last-resort sweep called after a normal .close() was
+    // tried, so a straight force-kill of every chrome.exe whose command line
+    // carries the needle (its --user-data-dir) is the direct equivalent.
+    const q = needle.replace(/'/g, "''");
+    try {
+      execSync(
+        `Get-CimInstance Win32_Process -Filter "name='chrome.exe'" | ` +
+          `Where-Object { $_.CommandLine -like '*${q}*' } | ` +
+          `ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
+        { stdio: 'pipe', timeout: 10000, shell: 'powershell.exe' }
+      );
+    } catch {
+      // best-effort — never throw into a caller's control flow
+    }
+    return;
+  }
   const q = needle.replace(/'/g, `'\\''`); // safe single-quote for the shell
   try {
     execSync(
@@ -53,6 +72,33 @@ export function gracefulKillByNeedle(needle: string): void {
   }
 }
 
+/** Same sanitization browser/linkedin/login.ts's sessionDirFor() applies to a
+ * username before using it as a folder name — needed here to reconstruct the
+ * exact li-sessions/<safe> path for a nickname's fallback (no explicit
+ * sessionDir) LinkedIn account, without exporting/importing that private helper. */
+function sanitizeForFolder(s: string): string {
+  return String(s || 'default').replace(/[^a-z0-9_-]/gi, '_') || 'default';
+}
+
+/** This worker's own LinkedIn li-sessions/<safe> folders only — never every
+ * agent's. Matches accounts whose nickname is exactly `worker`, or fleet-style
+ * `worker <number>` (e.g. "abhinav 7"), same convention rebalanceFleetNames()
+ * already uses elsewhere in this codebase. Accounts with an explicit sessionDir
+ * (not under li-sessions/) are skipped — this sweep only exists for the legacy
+ * fallback path, so it never even builds a directory for those. */
+function thisWorkersLiSessionDirs(worker: string): string[] {
+  const norm = worker.toLowerCase();
+  try {
+    return getLinkedInAccounts()
+      .filter(a => {
+        const nick = (a.nickname || '').toLowerCase().trim();
+        return nick === norm || new RegExp(`^${norm}\\s*\\d+$`).test(nick);
+      })
+      .filter(a => !a.sessionDir) // only the li-sessions/ fallback path applies here
+      .map(a => path.resolve('li-sessions', sanitizeForFolder(a.email)));
+  } catch { return []; }
+}
+
 /**
  * Stage-boundary safety net for the posting path.
  *
@@ -70,22 +116,32 @@ export function gracefulKillByNeedle(needle: string): void {
  * slash on each root means `.sessions/` won't also match `.sessions-abhinav/`
  * or `.sessions-cookies/`.
  *
- * NOTE (concurrency): this is a whole-worker sweep and is correct only while the
- * posting path is sequential. When Step 4 introduces across-platform concurrency,
- * teardown must become per-platform (kill only the finished platform's profile),
- * or a still-running sibling platform's browser would be killed mid-post.
+ * Agent isolation (needed now that different agents can post concurrently, see
+ * browserSlots.ts's per-agent locking): `.sessions/` is abhinav's OWN
+ * unsuffixed profile root — it must only be swept when THIS worker is the
+ * flat-convention one actually using it, never unconditionally, or a
+ * sanya/vansh teardown would also kill a live flat-worker's Chrome. "Flat
+ * convention" = no `.sessions-{worker}/` directory of its own (same check
+ * masterCoordinator.ts's capToLiveAccounts() uses) — originally only true for
+ * abhinav, but any flat-style worker (e.g. vishal) qualifies the same way, so
+ * this checks directory existence instead of hardcoding a name. LinkedIn's
+ * fallback profiles all live flatly under one shared `li-sessions/` root with
+ * no per-agent subfolder, so a blind sweep of the whole root previously killed
+ * every agent's LinkedIn Chrome, not just this worker's — fixed by killing
+ * only this worker's own resolved li-sessions/<safe> folders
+ * (thisWorkersLiSessionDirs) instead of the root.
  */
 export function killPostingChrome(): void {
-  if (process.platform === 'win32') return;
   const worker = process.env.WORKER_NAME || 'abhinav';
   const cwd = process.cwd();
+  const isFlatConventionWorker = !fs.existsSync(path.join(cwd, `.sessions-${worker}`));
   const roots = [
-    path.join(cwd, '.sessions') + path.sep,
+    ...(isFlatConventionWorker ? [path.join(cwd, '.sessions') + path.sep] : []),
     path.join(cwd, `.sessions-${worker}`) + path.sep,
     // LinkedIn's persistent profiles live under their own root ('li-sessions',
-    // see browser/linkedin/login.ts) — NOT under .sessions/, so the two roots
-    // above never reap a hung LinkedIn Chrome. Sweep it explicitly.
-    path.join(cwd, 'li-sessions') + path.sep,
+    // see browser/linkedin/login.ts) — NOT under .sessions/, so the roots above
+    // never reap a hung LinkedIn Chrome. Sweep only THIS worker's own folders.
+    ...thisWorkersLiSessionDirs(worker).map(d => d + path.sep),
   ];
   for (const root of roots) {
     gracefulKillByNeedle(`--user-data-dir=${root}`);

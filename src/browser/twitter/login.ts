@@ -137,9 +137,10 @@ async function launchSavedSessionChrome(account: Account | undefined, handle: st
       console.log(`   ✅ X cookies valid for ${handle}`);
       return page;
     }
-    console.warn(`   ⚠️ X cookies expired for ${handle}`);
+    console.warn(`   ⚠️ X cookies expired for ${handle} — falling back to the full Chrome profile`);
     await closeBrowser().catch(() => {});
-    return null;
+    // fall through: an expired cookies-only snapshot must not block a valid,
+    // freshly-logged-in full profile from ever being checked (see sessionDir below)
   }
 
   // ── Full Chrome profile path (local Windows) ───────────────────────────────

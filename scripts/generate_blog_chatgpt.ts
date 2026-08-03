@@ -17,6 +17,7 @@
 import { chromium, Page } from 'playwright';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -130,6 +131,8 @@ async function isLoggedIn(page: Page): Promise<boolean> {
 async function waitForCompletion(page: Page): Promise<void> {
   const start = Date.now();
   let goneChecks = 0;
+  let lastLength = -1;
+  let unchangedChecks = 0;
   await page.waitForTimeout(60000); // let generation get underway (~1 min) before first check
   while (Date.now() - start < RESPONSE_TIMEOUT_MS) {
     // Check every ~3.5 min: ChatGPT shows a Stop button while streaming. When the
@@ -146,6 +149,21 @@ async function waitForCompletion(page: Page): Promise<void> {
     } else {
       goneChecks = 0;
     }
+    // Second, independent completion signal: the Stop-button check can get stuck
+    // reporting "still writing" (a UI glitch) even though generation actually
+    // finished. If the character count is IDENTICAL for 3 checks in a row, the
+    // text has genuinely stopped changing — treat that as done regardless of
+    // what the Stop button says, instead of waiting out the full 30 min timeout.
+    if (text.length > 500 && text.length === lastLength) {
+      unchangedChecks++;
+      if (unchangedChecks >= 3) {
+        progress(`  Character count unchanged for 3 checks in a row — treating as finished.`);
+        return;
+      }
+    } else {
+      unchangedChecks = 0;
+    }
+    lastLength = text.length;
     await page.waitForTimeout(POLL_MS);
   }
 }
@@ -241,13 +259,25 @@ async function main() {
     await page.waitForTimeout(4000);
     progress('Opened ChatGPT.');
     if (!(await isLoggedIn(page))) {
-      const loginBtn = await page.locator('button:has-text("Log in"), a:has-text("Log in"), :text("Sign up")').first().isVisible({ timeout: 1000 }).catch(() => false);
-      const bodyPeek = await page.evaluate(() => document.body?.innerText?.slice(0, 300) || '').catch(() => '');
-      try { fs.writeFileSync('/tmp/chatgpt-page.html', await page.content()); } catch {}
-      console.error('[dbg] NOT-LOGGED-IN url=', page.url(), 'loginBtnVisible=', loginBtn, 'bodyPeek=', JSON.stringify(bodyPeek));
-      await page.screenshot({ path: '/tmp/blog-debug.png', fullPage: false }).catch((e) => console.error('[dbg] shot failed', e?.message));
-      await context.close();
-      out({ status: 'error', message: 'ChatGPT session not logged in — log in via the portal (ChatGPT tile) first' });
+      // isLoggedIn()'s own 40s poll isn't a real login window — a first-time
+      // ChatGPT login (email, password, verification) almost never finishes
+      // that fast. Give the human an actual chance: wait here for Enter instead
+      // of closing the browser out from under a login in progress.
+      progress('Not logged in — log in to ChatGPT in the browser window, then press Enter here to continue.');
+      await new Promise<void>((resolve) => {
+        process.stdin.resume();
+        process.stdin.once('data', () => { process.stdin.pause(); resolve(); });
+      });
+      if (!(await isLoggedIn(page))) {
+        const loginBtn = await page.locator('button:has-text("Log in"), a:has-text("Log in"), :text("Sign up")').first().isVisible({ timeout: 1000 }).catch(() => false);
+        const bodyPeek = await page.evaluate(() => document.body?.innerText?.slice(0, 300) || '').catch(() => '');
+        console.error('[dbg] NOT-LOGGED-IN url=', page.url(), 'loginBtnVisible=', loginBtn, 'bodyPeek=', JSON.stringify(bodyPeek));
+        await page.screenshot({ path: path.join(os.tmpdir(), 'blog-debug.png'), fullPage: false }).catch((e) => console.error('[dbg] shot failed', e?.message));
+        await context.close();
+        out({ status: 'error', message: 'Still not logged in to ChatGPT after waiting — try again and make sure the login fully completes before pressing Enter.' });
+        return;
+      }
+      progress('Logged in — continuing.');
     }
 
     const prompt = buildPrompt(loadSample());

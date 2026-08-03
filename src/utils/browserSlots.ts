@@ -13,7 +13,19 @@ import path from 'path';
  * Acquire = atomically create the first free `slot-<i>.lock` (openSync 'wx' is
  * atomic on both Linux and Windows). Release = delete it. A slot whose holder
  * PID is dead, or that is older than TTL, is reclaimed (crash safety). N is
- * `MAX_BROWSERS` (default 1 — never more than one headed Chrome box-wide).
+ * `MAX_BROWSERS` (default 1).
+ *
+ * Agent-scoped pools: pass `{ agent }` and the lock moves to its own
+ * subdirectory (`.sessions/slots/<agent>/`) instead of the flat shared pool —
+ * so two different agents each get their own independent N-slot pool and never
+ * block each other, while MAX_BROWSERS still caps concurrency WITHIN one
+ * agent's pool (default 1 = that agent never has more than one browser open at
+ * once). Callers that omit `agent` keep the original box-wide pool untouched —
+ * this is what the login-portal's bulk-onboarding path still uses on purpose,
+ * since it deliberately caps TOTAL box-wide Chrome regardless of which account
+ * is logging in. IMPORTANT: MAX_BROWSERS' meaning now depends on whether the
+ * caller passes `agent` — "box-wide cap" with no agent, "per-agent cap" with
+ * one. Re-read this note before changing how any caller uses either function.
  *
  * ponytail: hand-rolled lockfile, no dep. Ceiling — the reclaim (rm-then-create)
  * has a small TOCTOU window if two processes reclaim the same stale slot at the
@@ -22,9 +34,12 @@ import path from 'path';
  * lock churn ever shows up in profiling.
  */
 
-const SLOTS_DIR = path.resolve('.sessions/slots');
 const TTL_MS = 15 * 60 * 1000; // a posting platform holds ≤5min + teardown; 15min = safely stale
 const POLL_MS = 2000;
+
+function slotsDir(agent?: string): string {
+  return agent ? path.resolve('.sessions/slots', agent) : path.resolve('.sessions/slots');
+}
 
 function maxSlots(): number {
   const n = parseInt(process.env.MAX_BROWSERS || '1', 10);
@@ -62,13 +77,14 @@ function makeRelease(file: string): () => void {
 }
 
 /** Poll for a free slot until `waitMs` elapses. Returns a release fn or null on timeout. */
-async function poll(waitMs: number): Promise<(() => void) | null> {
-  fs.mkdirSync(SLOTS_DIR, { recursive: true });
+async function poll(waitMs: number, agent?: string): Promise<(() => void) | null> {
+  const dir = slotsDir(agent);
+  fs.mkdirSync(dir, { recursive: true });
   const n = maxSlots();
   const deadline = Date.now() + waitMs;
   for (;;) {
     for (let i = 0; i < n; i++) {
-      const f = path.join(SLOTS_DIR, `slot-${i}.lock`);
+      const f = path.join(dir, `slot-${i}.lock`);
       if (tryTake(f)) return makeRelease(f);
     }
     if (Date.now() > deadline) return null;
@@ -76,16 +92,24 @@ async function poll(waitMs: number): Promise<(() => void) | null> {
   }
 }
 
+export interface BrowserSlotOpts {
+  agent?: string;
+  waitMs?: number;
+}
+
 /**
  * Block until a browser slot is free, then return a release() to call when the
  * browser is fully closed. Fail-OPEN: if no slot frees within `waitMs`, proceed
  * anyway rather than deadlock a posting session (matches the scheduler's "one
  * stuck platform must never block the rest" philosophy). For the scheduler.
+ * Pass `{ agent }` to use that agent's own independent slot pool instead of the
+ * box-wide one — see the file header note on what this does to MAX_BROWSERS.
  */
-export async function acquireBrowserSlot(label = 'browser', waitMs = 20 * 60 * 1000): Promise<() => void> {
-  const release = await poll(waitMs);
+export async function acquireBrowserSlot(label = 'browser', opts?: BrowserSlotOpts): Promise<() => void> {
+  const waitMs = opts?.waitMs ?? 20 * 60 * 1000;
+  const release = await poll(waitMs, opts?.agent);
   if (release) return release;
-  console.warn(`   ⚠️ [slots] no free browser slot after ${Math.round(waitMs / 60000)}m — proceeding without one (${label})`);
+  console.warn(`   ⚠️ [slots] no free browser slot after ${Math.round(waitMs / 60000)}m — proceeding without one (${label}${opts?.agent ? `, agent=${opts.agent}` : ''})`);
   return () => {};
 }
 
@@ -94,6 +118,6 @@ export async function acquireBrowserSlot(label = 'browser', waitMs = 20 * 60 * 1
  * up and return null so the caller can tell the user "box busy, try again"
  * rather than hang an HTTP request. Fail-CLOSED.
  */
-export async function tryAcquireBrowserSlot(_label = 'login', waitMs = 3000): Promise<(() => void) | null> {
-  return poll(waitMs);
+export async function tryAcquireBrowserSlot(_label = 'login', opts?: BrowserSlotOpts): Promise<(() => void) | null> {
+  return poll(opts?.waitMs ?? 3000, opts?.agent);
 }

@@ -88,9 +88,10 @@ export async function loginToFacebook(options?: {
       console.log(`   ✅ FB cookies valid for ${nickname}`);
       return page;
     }
-    console.warn(`   ⚠️ FB cookies expired for ${nickname}`);
+    console.warn(`   ⚠️ FB cookies expired for ${nickname} — falling back to the full Chrome profile`);
     await closeFacebookBrowser();
-    throw new Error(`FB_COOKIES_EXPIRED:${nickname} — re-run npm run extract-cookies`);
+    // fall through: an expired cookies-only snapshot must not block a valid,
+    // freshly-logged-in full profile from ever being checked (see sessionDir below)
   }
 
   // No cookies — need full credential login; accounts file must have this account
@@ -132,7 +133,9 @@ export async function loginToFacebook(options?: {
     Object.defineProperty((globalThis as any).navigator, 'webdriver', { get: () => false });
   });
 
-  const page = await browserContext.newPage();
+  // Same fix as linkedin/login.ts: reuse the persistent context's pre-existing
+  // blank tab instead of opening a second one every run.
+  const page = browserContext.pages()[0] || await browserContext.newPage();
 
   try {
     const cdp = await browserContext.newCDPSession(page);

@@ -257,6 +257,7 @@ app.post('/api/agent/:agent/generate-blogs', requireAgentToken, (req: Request, r
     stdio: 'ignore',
     cwd: process.cwd(),
     env: { ...process.env, DISPLAY: ':99', WORKER_NAME: agent, BLOG_LOG: logFile },
+    shell: process.platform === 'win32', // Windows resolves `npx` to npx.cmd only through a shell
   });
   child.unref();
   const release = () => { generating.delete(agent); if (sampleTmp) { try { fs.rmSync(sampleTmp, { force: true }); } catch { /* noop */ } } };
@@ -302,27 +303,34 @@ app.get('/api/agent/:agent/blog-cycle/status', requireAgentToken, (req: Request,
   res.json(cycleStatus(req.params.agent.toLowerCase()));
 });
 
-// POST /api/agent/:agent/post-cycle/start — one-off "Post Now" run: all 15
-// full 5-cycle narrowing sequence, once through, independent of the live scheduler daemon.
+// POST /api/agent/:agent/post-cycle/start — one-off "Post Now" run.
+// Body { counts: { x: 5, fb: 5, ... } } (optional) switches to the counted,
+// round-based cycle (1 post/platform/round, decrementing every round until
+// all counts hit 0, 30 min between rounds) instead of the fixed 5-stage
+// narrowing sequence — see scheduler-new.ts's runCountedPostCycle.
 app.post('/api/agent/:agent/post-cycle/start', requireAgentToken, (req: Request, res: Response) => {
   const agent = req.params.agent.toLowerCase();
+  const counts = req.body?.counts as Record<string, number> | undefined;
   try {
-    startPostCycle(agent);
-    res.json({ ok: true, message: `Post cycle started for ${agent} — full 5-cycle sequence (15 → 13 → 8 → 5 → 2 platforms, 30 min between each), once through.` });
+    startPostCycle(agent, counts);
+    const message = counts
+      ? `Post cycle started for ${agent} — counted round-based cycle (${Object.entries(counts).filter(([, c]) => c > 0).map(([k, c]) => `${k}:${c}`).join(', ')}), 30 min between rounds.`
+      : `Post cycle started for ${agent} — full 5-cycle sequence (15 → 13 → 8 → 5 → 2 platforms, 30 min between each), once through.`;
+    res.json({ ok: true, message });
   } catch (err: any) {
     res.status(409).json({ error: err.message });
   }
 });
 
-// POST /api/agent/:agent/post-cycle/stop — stop whichever post cycle is running.
-app.post('/api/agent/:agent/post-cycle/stop', requireAgentToken, (_req: Request, res: Response) => {
-  const result = stopPostCycle();
+// POST /api/agent/:agent/post-cycle/stop — stop this agent's post cycle.
+app.post('/api/agent/:agent/post-cycle/stop', requireAgentToken, (req: Request, res: Response) => {
+  const result = stopPostCycle(req.params.agent.toLowerCase());
   res.json({ ok: true, ...result });
 });
 
-// GET /api/agent/:agent/post-cycle/status — running? which agent? recent log + stage detail.
-app.get('/api/agent/:agent/post-cycle/status', requireAgentToken, (_req: Request, res: Response) => {
-  res.json(postCycleStatus());
+// GET /api/agent/:agent/post-cycle/status — running? recent log + stage detail, for THIS agent.
+app.get('/api/agent/:agent/post-cycle/status', requireAgentToken, (req: Request, res: Response) => {
+  res.json(postCycleStatus(req.params.agent.toLowerCase()));
 });
 
 // ── Proxy management (dashboard test/rotate buttons) ────────────────────────

@@ -48,7 +48,7 @@ import {
   runRetryRow,
 } from './coordinator/masterCoordinator.js';
 import { startCycle, stopCycle } from './login-portal/blogCycle.js';
-import { rebalanceFleetNames, getFailedSocialRows, assignPendingRowsToLiveAccounts } from './sheets/sheets.js';
+import { rebalanceFleetNames, getFailedSocialRows, assignPendingRowsToLiveAccounts, pinSessionDate } from './sheets/sheets.js';
 import { canPost } from './health/accountHealth.js';
 import { closeAllBrowsers } from './tools/browserTools.js';
 import { killPostingChrome } from './utils/procKill.js';
@@ -58,14 +58,15 @@ import { acquireBrowserSlot } from './utils/browserSlots.js';
 const BLOG_GEN_AGENT = process.env.WORKER_NAME || 'abhinav';
 
 const STAGE_GAP_MS = 60 * 60 * 1000; // 1 hour between every stage
+const ROUND_GAP_MS = 30 * 60 * 1000; // 30 min between rounds — runCountedPostCycle only
 const PLATFORM_TIMEOUT_MS = 5 * 60 * 1000; // one stuck platform must never block the rest of a stage
 
-interface PlatformDef { label: string; run: (batchNum: number) => Promise<void>; }
+interface PlatformDef { label: string; run: (batchNum: number, limit?: number) => Promise<void>; }
 
 const DEVTO:         PlatformDef = { label: 'Dev.to',         run: runDevtoBatch };
 const X:            PlatformDef = { label: 'X',              run: runXBatch };
 const FB:           PlatformDef = { label: 'Facebook',       run: runFbBatch };
-const LI:           PlatformDef = { label: 'LinkedIn',       run: (n) => runLiBatch(undefined, n) };
+const LI:           PlatformDef = { label: 'LinkedIn',       run: (n, limit) => runLiBatch(undefined, n, limit) };
 const LI_PULSE:     PlatformDef = { label: 'LinkedIn Pulse', run: runLinkedinPulseBatch };
 const MEDIUM:       PlatformDef = { label: 'Medium',         run: runMediumBatch };
 const WORDPRESS:    PlatformDef = { label: 'WordPress',      run: runWordpressBatch };
@@ -76,6 +77,14 @@ const HACKMD:       PlatformDef = { label: 'HackMD',         run: runHackmdBatch
 const LINKMATE:     PlatformDef = { label: 'Linkmate',       run: runLinkmateBatch };
 const CALISTHENICS: PlatformDef = { label: 'Calisthenics',   run: runCalisthenicsNBatch };
 const NOTION:       PlatformDef = { label: 'Notion',         run: runNotionBatch };
+
+// Key map for the counted, round-based "Post Now" cycle (runCountedPostCycle) —
+// the dashboard form's platform keys to the PlatformDef objects above.
+const COUNTED_PLATFORMS: Record<string, PlatformDef> = {
+  x: X, fb: FB, lipost: LI, lipulse: LI_PULSE, medium: MEDIUM,
+  wordpress: WORDPRESS, blogger: BLOGGER, googlepost: GOOGLESITE, note: NOTE,
+  hackmd: HACKMD, linkmate: LINKMATE, calisthenics: CALISTHENICS, notion: NOTION, devto: DEVTO,
+};
 
 // ── The 5 stages, exactly as agreed ────────────────────────────────────────────
 const STAGES: PlatformDef[][] = [
@@ -98,6 +107,11 @@ function nowIst(): string {
     minute: '2-digit',
     hour12: false,
   }) + ' IST';
+}
+
+/** IST calendar date "YYYY-MM-DD" — used to pin a session to its start day. */
+function todayIst(): string {
+  return new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -124,6 +138,31 @@ function writeStatus(status: Record<string, unknown>, statusFile: string = STATU
 let lapNum = 0;
 
 /**
+ * Run one platform's batch, fully torn down afterward — the shared body both
+ * `runStage` (fixed 5-stage sequence) and `runCountedPostCycle` (user-specified
+ * per-platform counts) use. Acquires the cross-process browser slot, runs with
+ * a timeout, then unconditionally closes browsers + sweep-kills any leftover
+ * Chrome + releases the slot, success/error/timeout alike — this is what stops
+ * the zombie pileup between platforms.
+ */
+async function runOnePlatform(platform: PlatformDef, batchNum: number, limit: number | undefined, errorLabel: string): Promise<void> {
+  const releaseSlot = await acquireBrowserSlot(platform.label, { agent: BLOG_GEN_AGENT });
+  try {
+    await withTimeout(platform.run(batchNum, limit), PLATFORM_TIMEOUT_MS, platform.label);
+  } catch (err: any) {
+    console.error(`[${errorLabel}] ${platform.label} error: ${err.message}`);
+  } finally {
+    try {
+      await withTimeout(closeAllBrowsers(), 30_000, 'closeAllBrowsers');
+    } catch (e: any) {
+      console.error(`[${errorLabel}] closeAllBrowsers after ${platform.label}: ${e.message}`);
+    }
+    killPostingChrome();
+    releaseSlot(); // free the slot only after the browser is actually dead
+  }
+}
+
+/**
  * @param statusFile Defaults to the live daemon's shared status file. A manual
  * one-off run (e.g. the dashboard's "Post Now" button) passes its own path so
  * it doesn't clobber the live scheduler's status while both run independently.
@@ -136,30 +175,51 @@ async function runStage(stageIndex: number, statusFile: string = STATUS_FILE): P
       phase: 'running', lap: lapNum, stage: stageIndex + 1,
       platforms: stage.map(p => p.label), currentPlatform: platform.label,
     }, statusFile);
-    // Cross-process browser cap: wait for a free slot before launching this
-    // platform's Chrome, so the scheduler and the login portal never overload the
-    // box with concurrent headed browsers. Released after teardown below.
-    const releaseSlot = await acquireBrowserSlot(platform.label);
-    try {
-      await withTimeout(platform.run(lapNum), PLATFORM_TIMEOUT_MS, platform.label);
-    } catch (err: any) {
-      console.error(`[Stage ${stageIndex + 1}] ${platform.label} error: ${err.message}`);
-    } finally {
-      // Hard teardown after EVERY platform — success, error, or timeout. On a
-      // timeout `withTimeout` only abandoned the promise; the batch's browser
-      // (and any orphan it left) is still alive. Best-effort close the
-      // browserTools singletons, then sweep-kill any Chrome still holding a
-      // posting profile dir. This is what stops the zombie pileup.
-      try {
-        await withTimeout(closeAllBrowsers(), 30_000, 'closeAllBrowsers');
-      } catch (e: any) {
-        console.error(`[Stage ${stageIndex + 1}] closeAllBrowsers after ${platform.label}: ${e.message}`);
-      }
-      killPostingChrome();
-      releaseSlot(); // free the slot only after the browser is actually dead
-    }
+    await runOnePlatform(platform, lapNum, undefined, `Stage ${stageIndex + 1}`);
   }
   console.log(`[${nowIst()}] ◀ Stage ${stageIndex + 1}/5 complete.`);
+}
+
+/**
+ * Counted, round-based "Post Now" cycle — the dashboard's alternative to the
+ * fixed 5-stage sequence. `counts` maps a COUNTED_PLATFORMS key to how many
+ * posts the user wants from that platform this cycle (0 or omitted = skip it
+ * entirely). Each round attempts exactly 1 post on every platform still > 0,
+ * decrementing that platform's count afterward UNCONDITIONALLY — success or
+ * failure — so one broken platform can never keep the whole cycle looping
+ * forever. A platform drops out of the round the moment it hits 0. Stops when
+ * every count is 0, waiting STAGE_GAP_MS between rounds (skipped after the
+ * final round).
+ */
+export async function runCountedPostCycle(counts: Record<string, number>, statusFile?: string): Promise<void> {
+  const remaining: Record<string, number> = {};
+  for (const [key, count] of Object.entries(counts)) {
+    if (COUNTED_PLATFORMS[key] && count > 0) remaining[key] = Math.floor(count);
+  }
+
+  let round = 1;
+  while (Object.values(remaining).some((c) => c > 0)) {
+    const activeKeys = Object.keys(remaining).filter((k) => remaining[k] > 0);
+    const activeLabels = activeKeys.map((k) => COUNTED_PLATFORMS[k].label);
+    console.log(`\n[${nowIst()}] ▶ Round ${round} — ${activeLabels.join(', ')}`);
+    writeStatus({ phase: 'running', round, remainingCounts: { ...remaining }, platforms: activeLabels }, statusFile);
+
+    for (const key of activeKeys) {
+      const platform = COUNTED_PLATFORMS[key];
+      writeStatus({ phase: 'running', round, remainingCounts: { ...remaining }, platforms: activeLabels, currentPlatform: platform.label }, statusFile);
+      await runOnePlatform(platform, round, 1, `Round ${round}`);
+      remaining[key] -= 1;
+    }
+
+    console.log(`[${nowIst()}] ◀ Round ${round} complete.`);
+    round++;
+    if (Object.values(remaining).some((c) => c > 0)) {
+      writeStatus({ phase: 'waiting', round, remainingCounts: { ...remaining }, nextRound: round }, statusFile);
+      await new Promise((r) => setTimeout(r, ROUND_GAP_MS));
+    }
+  }
+  writeStatus({ phase: 'done', round: round - 1, remainingCounts: remaining }, statusFile);
+  console.log(`[${nowIst()}] ═══ Counted post cycle complete after ${round - 1} round(s) ═══`);
 }
 
 // ── Retry sweep: repost failed SOCIAL rows during the inter-stage gap ─────────
@@ -190,7 +250,7 @@ async function runRetrySweep(myToken: number, budgetMs: number): Promise<void> {
       let ok = true;
       try { ok = canPost(p.health, row.name).ok; } catch { /* fail-open */ }
       if (!ok) continue; // dead / quarantined / at daily cap → don't repost
-      const releaseSlot = await acquireBrowserSlot(`retry:${p.short}`);
+      const releaseSlot = await acquireBrowserSlot(`retry:${p.short}`, { agent: BLOG_GEN_AGENT });
       try {
         await withTimeout(runRetryRow(row.rowIndex, p.key), PLATFORM_TIMEOUT_MS, `retry ${p.short}`);
         reposted++;
@@ -225,7 +285,7 @@ async function runLoopFrom(stageIndex: number, myToken: number): Promise<void> {
   while (myToken === currentRunToken) {
     if (stageIndex === 0) lapNum++;
     await runStage(stageIndex);
-    if (myToken !== currentRunToken) { sessionActive = false; return; } // superseded mid-stage (defensive — see note above) — stop here
+    if (myToken !== currentRunToken) { sessionActive = false; pinSessionDate(null); return; } // superseded mid-stage (defensive — see note above) — stop here
 
     if (stageIndex === STAGES.length - 1) {
       // Stage 5 done — this posting session is complete. Hand off to
@@ -234,6 +294,7 @@ async function runLoopFrom(stageIndex: number, myToken: number): Promise<void> {
       console.log(`[${nowIst()}] ═══ Posting session complete — starting continuous blog generation until the next session ═══`);
       writeStatus({ phase: 'generating-blogs', lap: lapNum, justFinishedStage: stageIndex + 1 });
       sessionActive = false;
+      pinSessionDate(null);
       try {
         startCycle(BLOG_GEN_AGENT);
       } catch (err: any) {
@@ -250,7 +311,7 @@ async function runLoopFrom(stageIndex: number, myToken: number): Promise<void> {
     // out the remainder so the overall stage cadence stays ~30 min.
     const gapStart = Date.now();
     await runRetrySweep(myToken, Math.floor(STAGE_GAP_MS * 0.6));
-    if (myToken !== currentRunToken) { sessionActive = false; return; } // superseded during the sweep (defensive)
+    if (myToken !== currentRunToken) { sessionActive = false; pinSessionDate(null); return; } // superseded during the sweep (defensive)
     const remaining = Math.max(0, STAGE_GAP_MS - (Date.now() - gapStart));
     await new Promise((r) => setTimeout(r, remaining));
     stageIndex = nextStage;
@@ -270,6 +331,10 @@ function startDailyLoop(): void {
   currentRunToken++;
   const myToken = currentRunToken;
   lapNum = 0;
+  // Pin every post this session makes to TODAY's date, even if the session
+  // runs past midnight IST — an 11 PM lap that finishes at 12:30 AM must still
+  // stamp as the day it started, not the day it happened to finish.
+  pinSessionDate(todayIst());
   console.log(`\n[${nowIst()}] ═══ Posting session starting — Stage 1 ═══`);
   try {
     const stopped = stopCycle(BLOG_GEN_AGENT);
@@ -294,7 +359,15 @@ export async function startCoordinatorDaemon(immediate: boolean = false): Promis
   const tz = 'Asia/Kolkata';
 
   // ── Daily reset at midnight IST ───────────────────────────────────────────
+  // Skip the reset if an 11 PM session is still running past midnight — resetting
+  // its daily caps mid-lap would both break cap enforcement for the rest of that
+  // lap and mix two calendar days' counts together. The reset just runs at the
+  // next midnight that finds no session active instead of being skipped forever.
   cron.schedule('0 0 * * *', () => {
+    if (sessionActive) {
+      console.log(`\n[${nowIst()}] Midnight — a posting session is still running from yesterday; skipping the counter reset until it finishes.`);
+      return;
+    }
     console.log(`\n[${nowIst()}] Midnight — resetting daily batch counters`);
     resetBatchCounters();
   }, { timezone: tz });

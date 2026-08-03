@@ -17,6 +17,7 @@ import { spawn, spawnSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { acquireBrowserSlot } from '../src/utils/browserSlots.js';
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -26,12 +27,23 @@ const NAME = (arg('--name') || process.env.WORKER_NAME || '').toLowerCase();
 const LOOP = process.argv.includes('--loop');
 const INTERVAL_S = Number(arg('--interval') || 300);
 const LIMIT = Number(arg('--limit') || 3);
-// Use the repo's venv Python (has google-auth/requests); fall back to system python3.
+// Use the repo's venv Python (has google-auth/requests); fall back to system python3,
+// or plain "python" on Windows, where "python3" is often just a broken Microsoft
+// Store app-execution-alias stub rather than a real interpreter.
 const PY = process.env.PYTHON
-  || (fs.existsSync(path.resolve('venv/bin/python3')) ? path.resolve('venv/bin/python3') : 'python3');
+  || (fs.existsSync(path.resolve('venv/bin/python3')) ? path.resolve('venv/bin/python3')
+    : process.platform === 'win32' ? 'python' : 'python3');
 // Batch overrides (from the dashboard Generate modal): one format/sample for every row.
 const FORMAT_OVERRIDE = (arg('--format-override') || '').trim();
 const SAMPLE_OVERRIDE = (arg('--sample-file') || '').trim();
+// spawn('npx', ...) is unreliable on Windows — npx is a .cmd shim (ENOENT
+// without the extension) and even 'npx.cmd' can throw EINVAL depending on how
+// Windows resolves it. Spawn node directly with the same --import=tsx loader
+// used everywhere else in this repo instead, sidestepping .cmd resolution
+// entirely. `tsxArgs` drops the old leading 'tsx' arg that npx used to consume.
+function spawnTsx(tsxArgs: string[], env: NodeJS.ProcessEnv) {
+  return spawn(process.execPath, ['--import=tsx', ...tsxArgs.slice(1)], { env });
+}
 
 if (!NAME) { console.error('--name (or WORKER_NAME) required'); process.exit(1); }
 
@@ -111,7 +123,7 @@ function generate(row: BlogRow): Promise<{ title: string; description: string; h
   if (sampleFile) args.push('--sample-file', sampleFile);
 
   return new Promise((resolve) => {
-    const child = spawn('npx', args, { env: process.env });
+    const child = spawnTsx(args, process.env);
     let stdout = '';
     const to = setTimeout(() => { try { child.kill(); } catch { /* noop */ } }, 35 * 60 * 1000);
     child.stdout?.on('data', (d) => { stdout += d.toString(); });
@@ -142,7 +154,7 @@ function generateImage(marketName: string, reportUrl: string): Promise<string> {
   return new Promise((resolve) => {
     const args = ['tsx', 'scripts/generate_image.ts', '--agent', NAME, '--market-name', marketName];
     if (reportUrl) args.push('--url', reportUrl);
-    const child = spawn('npx', args, { env: process.env });
+    const child = spawnTsx(args, process.env);
     let stdout = '';
     const to = setTimeout(() => { try { child.kill(); } catch { /* noop */ } }, 12 * 60 * 1000);
     child.stdout?.on('data', (d) => { stdout += d.toString(); });
@@ -217,31 +229,40 @@ async function pass() {
         : FORMAT_OVERRIDE)
     : '';
 
-  let done = 0;
-  for (const row of rows) {
-    if (!String(row.targetUrl || '').trim()) continue;
-    if (overrideFmt) writeFormatCol(row._dataRow, overrideFmt);
+  // This agent's own browser slot, held for the whole pass — so this agent's
+  // blog-gen browsers and its own posting browser (index.ts/scheduler-new.ts)
+  // can never be open at the same time, while a DIFFERENT agent's slot is
+  // completely independent and free to run concurrently.
+  const releaseSlot = await acquireBrowserSlot('blog-gen', { agent: NAME });
+  try {
+    let done = 0;
+    for (const row of rows) {
+      if (!String(row.targetUrl || '').trim()) continue;
+      if (overrideFmt) writeFormatCol(row._dataRow, overrideFmt);
 
-    const marketName = rowTitle(row);
-    console.log(`\n🖼️  Generating cover image + article in parallel for: "${marketName}"`);
+      const marketName = rowTitle(row);
+      console.log(`\n🖼️  Generating cover image + article in parallel for: "${marketName}"`);
 
-    // Separate ChatGPT profiles (chatgpt-image-profile vs chatgpt-profile) — safe to run together.
-    const [coverImageUrl, res] = await Promise.all([
-      generateImage(marketName, String(row.targetUrl || '')).then((url) => {
-        if (url) { console.log(`✓ Cover image ready: ${url}`); writeCoverImageUrl(row._dataRow, url); }
-        else console.log('⚠ Continuing without a cover image for this row.');
-        return url;
-      }),
-      generate(row),
-    ]);
+      // Separate ChatGPT profiles (chatgpt-image-profile vs chatgpt-profile) — safe to run together.
+      const [coverImageUrl, res] = await Promise.all([
+        generateImage(marketName, String(row.targetUrl || '')).then((url) => {
+          if (url) { console.log(`✓ Cover image ready: ${url}`); writeCoverImageUrl(row._dataRow, url); }
+          else console.log('⚠ Continuing without a cover image for this row.');
+          return url;
+        }),
+        generate(row),
+      ]);
 
-    if (res && res.html) {
-      const html = injectCoverImage(res.html, coverImageUrl, marketName);
-      writeRow(row._dataRow, { ...res, html }, coverImageUrl);
-      done++;
+      if (res && res.html) {
+        const html = injectCoverImage(res.html, coverImageUrl, marketName);
+        writeRow(row._dataRow, { ...res, html }, coverImageUrl);
+        done++;
+      }
     }
+    console.log(`\n🏁 Finished. ${done} of ${rows.length} blog${rows.length === 1 ? '' : 's'} saved to your sheet.`);
+  } finally {
+    releaseSlot();
   }
-  console.log(`\n🏁 Finished. ${done} of ${rows.length} blog${rows.length === 1 ? '' : 's'} saved to your sheet.`);
 }
 
 async function main() {

@@ -297,9 +297,10 @@ export async function loginToLinkedIn(options?: {
       console.log(`   ✅ LI cookies valid for ${nickname}`);
       return page;
     }
-    console.warn(`   ⚠️ LI cookies expired for ${nickname}`);
+    console.warn(`   ⚠️ LI cookies expired for ${nickname} — falling back to the full Chrome profile`);
     await closeLinkedInBrowser();
-    throw new Error(`LI_COOKIES_EXPIRED:${nickname} — re-run npm run extract-cookies`);
+    // fall through: an expired cookies-only snapshot must not block a valid,
+    // freshly-logged-in full profile from ever being checked (see sessionDir below)
   }
 
   const chromePath = fs.existsSync(CHROME_PATH) ? CHROME_PATH : chromium.executablePath();
@@ -338,7 +339,10 @@ export async function loginToLinkedIn(options?: {
   await applyStealth(browserContext);
   await browserContext.grantPermissions(['clipboard-read', 'clipboard-write']);
 
-  const page = await browserContext.newPage();
+  // A persistent context always starts with one blank tab already open — reuse
+  // it instead of creating a second one (matches twitter/login.ts). Left
+  // unfixed, this stray tab piles up across runs of the same profile.
+  const page = browserContext.pages()[0] || await browserContext.newPage();
 
   try {
     const cdp = await browserContext.newCDPSession(page);

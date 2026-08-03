@@ -30,6 +30,16 @@ function latestDate(value: string): string {
   return (parts[parts.length - 1] ?? '').split('T')[0].trim();
 }
 
+// A posting session (11:00/23:00 cron) can run past midnight IST — a lap
+// started 23:00 on day D can still be posting after 00:00 on day D+1. Pin the
+// calendar date to the session's START day for the whole session, so every
+// post it makes stamps as day D, never rolling over to D+1 mid-session. Set by
+// scheduler-new.ts's startDailyLoop() at session start, cleared at session end.
+let pinnedSessionDate: string | null = null;
+export function pinSessionDate(date: string | null): void {
+  pinnedSessionDate = date;
+}
+
 /**
  * Full IST timestamp "YYYY-MM-DD HH:MM:SS IST" for lastPosted columns.
  * Second-resolution → every post gets a distinct stamp, so appending never
@@ -37,7 +47,10 @@ function latestDate(value: string): string {
  */
 function nowStamp(): string {
   const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
-  return ist.toISOString().replace('T', ' ').slice(0, 19) + ' IST';
+  const stamp = ist.toISOString().replace('T', ' ').slice(0, 19);
+  const timePart = stamp.slice(11); // "HH:MM:SS" — real time-of-day, always
+  const datePart = pinnedSessionDate || stamp.slice(0, 10);
+  return `${datePart} ${timePart} IST`;
 }
 
 // Sheet configuration for different platform types
@@ -368,7 +381,9 @@ function mapRow(row: string[], colMap: ColMap, rowIndex: number, sheetType: Shee
     cagr:            g(colMap, 'cagr') || undefined,
     batch:           Number(g(colMap, 'Batch', 'batch', 'S.No') || -1),
     date:            g(colMap, 'Date to Be Published', 'date to be published', 'date'),
-    name:            g(colMap, 'Name', 'name'),
+    // A blank Name cell defaults to WORKER_NAME — every row in a "{Name} Social"/
+    // "{Name} Blog" tab belongs to that worker even if the cell itself was never filled in.
+    name:            g(colMap, 'Name', 'name') || (process.env.WORKER_NAME || ''),
     newName:         g(colMap, 'New Name', 'new name', 'newName'),
     priority:        g(colMap, 'priority', 'seoRanking', 'seoranking'),
     lastPostedX:     g(colMap, 'lastPostedX', 'lastpostedx'),

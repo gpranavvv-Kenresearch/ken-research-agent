@@ -41,6 +41,7 @@
 import 'dotenv/config';
 import { initErrorInterceptor } from './errorInterceptor.js';
 import { startCoordinatorDaemon } from './scheduler-new.js';
+import { acquireBrowserSlot } from './utils/browserSlots.js';
 
 // Patch console.error/warn to stream to logs/runtime.log for monitor
 initErrorInterceptor();
@@ -729,6 +730,30 @@ async function main() {
       ameba: 'https://www.ameba.jp/home',
       articlescad: 'https://articlescad.com/dashboard',
     };
+    // Same file each platform's real posting/login code reads its sessionDir from
+    // (getAccountByHandle, getFacebookAccountByNickname, getLinkedInAccountByNickname,
+    // etc.) — keyed the same as PLATFORM_URLS so manual-login opens the EXACT profile
+    // posting will use, instead of guessing a fresh ".sessions/chrome-<name>" one.
+    const PLATFORM_ACCOUNTS_FILE: Record<string, string> = {
+      x: '.accounts/accounts.json',
+      fb: '.accounts/facebook-accounts.json',
+      li: '.accounts/linkedin-accounts.json',
+      medium: '.accounts/accounts-medium.json',
+      wordpress: '.accounts/accounts-wordpress.json',
+      blogger: '.accounts/accounts-blogger.json',
+      notion: '.accounts/accounts-notion.json',
+      patreon: '.accounts/accounts-patreon.json',
+      paragraph: '.accounts/accounts-paragraph.json',
+      substack: '.accounts/accounts-substack.json',
+      hackmd: '.accounts/accounts-hackmd.json',
+      devto: '.accounts/accounts-devto.json',
+      googlesite: '.accounts/accounts-googlesite.json',
+      calisthenics: '.accounts/accounts-calisthenics.json',
+      linkmate: '.accounts/accounts-linkmate.json',
+      note: '.accounts/accounts-note.json',
+      ameba: '.accounts/accounts-ameba.json',
+      articlescad: '.accounts/accounts-articlescad.json',
+    };
 
     const nickname = process.argv[3];
     const platformArg = process.argv[4]; // optional: shortcut key above, or a raw URL
@@ -753,29 +778,68 @@ async function main() {
       }
     }
 
-    const { spawn } = await import('child_process');
     const path = await import('path');
     const fs = await import('fs');
+    const { chromium } = await import('playwright');
+    const { killChromeForProfile } = await import('./utils/killChrome.js');
 
-    const resolvedSessionDir = path.default.resolve(`.sessions/chrome-${nickname.toLowerCase()}`);
+    // Look up the real sessionDir from that platform's accounts file (same one the
+    // posting/login code reads), falling back to the shared default only if the
+    // platform has no accounts file or no matching entry for this nickname.
+    function lookupSessionDir(platform: string | undefined, name: string): string | undefined {
+      const file = platform ? PLATFORM_ACCOUNTS_FILE[platform.toLowerCase()] : undefined;
+      if (!file || !fs.default.existsSync(file)) return undefined;
+      try {
+        const list = JSON.parse(fs.default.readFileSync(file, 'utf8'));
+        const norm = (s: string) => s.toLowerCase().replace(/\s+/g, '');
+        const match = (Array.isArray(list) ? list : []).find((a: any) => a.nickname && norm(a.nickname) === norm(name));
+        return match?.sessionDir;
+      } catch { return undefined; }
+    }
+
+    const foundSessionDir = lookupSessionDir(platformArg, nickname);
+    const resolvedSessionDir = path.default.resolve(foundSessionDir || `.sessions/chrome-${nickname.toLowerCase()}`);
+    if (!foundSessionDir && platformArg && PLATFORM_ACCOUNTS_FILE[platformArg.toLowerCase()]) {
+      console.log(`⚠ No "${nickname}" entry found in ${PLATFORM_ACCOUNTS_FILE[platformArg.toLowerCase()]} — falling back to default profile. Posting may use a different session than this login!`);
+    }
     fs.default.mkdirSync(resolvedSessionDir, { recursive: true });
+    // Kill any Chrome still holding this profile (e.g. left open from a prior
+    // manual-login run) BEFORE we launch — otherwise Playwright either fails to
+    // attach or spawns alongside it, and closing later can race a half-written
+    // cookie DB.
+    killChromeForProfile(resolvedSessionDir);
     const chromePath = process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : undefined);
     console.log(`\n🔐 Opening shared Chrome profile for ${nickname}${platformArg ? ` — ${platformArg}` : ''}`);
     console.log(`   Session dir: ${resolvedSessionDir}`);
     if (startUrl) console.log(`   Opening: ${startUrl}`);
     console.log('   Already logged in from a prior session? Great, just press Enter.');
     console.log('   Not logged in? Log in by hand — nothing is auto-filled — then press Enter.\n');
-    const chromeArgs = [`--user-data-dir=${resolvedSessionDir}`, '--new-window'];
-    if (startUrl) chromeArgs.push(startUrl);
-    const chrome = spawn(chromePath as string, chromeArgs, { detached: true, stdio: 'ignore' });
-    chrome.unref();
+
+    // Playwright's launchPersistentContext (not a bare detached spawn) so we can
+    // cleanly .close() it below — a hard "leave Chrome running" leak meant the
+    // NEXT command's killChromeForProfile() could force-kill this window before
+    // the cookie DB was durably flushed, so a completed login could still read
+    // back as logged-out. Matches how save-x-session/save-fb-session/etc. do it.
+    const ctx = await chromium.launchPersistentContext(resolvedSessionDir, {
+      headless: false,
+      executablePath: fs.default.existsSync(chromePath as string) ? chromePath : undefined,
+      channel: fs.default.existsSync(chromePath as string) ? undefined : 'chrome',
+      viewport: { width: 1280, height: 900 },
+      ignoreDefaultArgs: ['--enable-automation'],
+      args: ['--disable-blink-features=AutomationControlled', '--no-first-run', '--no-default-browser-check', '--disable-infobars'],
+    });
+    if (startUrl) {
+      const page = ctx.pages()[0] || await ctx.newPage();
+      await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+    }
     process.stdout.write('✅ Browser open. Done? Press Enter to finish: ');
     await new Promise<void>(resolve => {
       process.stdin.resume();
       process.stdin.setEncoding('utf8');
       process.stdin.once('data', () => { process.stdin.pause(); resolve(); });
     });
-    console.log(`\n✅ Session saved for ${nickname}!`);
+    await ctx.close();
+    console.log(`\n✅ Session saved for ${nickname}! (browser closed & flushed)`);
     return;
   }
 
@@ -912,7 +976,29 @@ async function main() {
   await new Promise(() => {});
 }
 
-main().catch(err => {
+// Modes that either never open a browser, or already manage their own
+// agent-scoped browser slot internally (schedule/schedule-now → runStage() in
+// scheduler-new.ts) — everything else is a one-off command that opens exactly
+// one browser lifecycle and exits, so it gets wrapped in this agent's slot
+// here to guarantee only one browser is ever open for this agent at a time,
+// even across separate manual CLI invocations.
+const NO_SLOT_MODES = new Set([undefined, 'monitor', 'tracker', 'today', 'status', 'schedule', 'schedule-now']);
+
+async function run() {
+  if (NO_SLOT_MODES.has(mode)) {
+    await main();
+    return;
+  }
+  const agent = (process.env.WORKER_NAME || 'abhinav').toLowerCase();
+  const release = await acquireBrowserSlot(mode!, { agent });
+  try {
+    await main();
+  } finally {
+    release();
+  }
+}
+
+run().catch(err => {
   console.error('❌ Fatal error:', err.message);
   console.error(err);
   process.exit(1);

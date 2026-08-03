@@ -28,6 +28,26 @@ const PLATFORMS = [
   { key: 'chatgpt-image', label: 'ChatGPT (image gen)', group: 'engine', icon: '🖼', color: 'bg-fuchsia-700 text-white' },
 ];
 
+// Platforms the counted, round-based "Post Now" cycle can post to — keys match
+// scheduler-new.ts's COUNTED_PLATFORMS exactly (sent straight through as the
+// POST body, no translation).
+const POST_COUNT_PLATFORMS = [
+  { key: 'x', label: 'X (Twitter)' },
+  { key: 'fb', label: 'Facebook' },
+  { key: 'lipost', label: 'LinkedIn (post)' },
+  { key: 'lipulse', label: 'LinkedIn Pulse' },
+  { key: 'medium', label: 'Medium' },
+  { key: 'wordpress', label: 'WordPress' },
+  { key: 'blogger', label: 'Blogger' },
+  { key: 'googlepost', label: 'Google Sites' },
+  { key: 'note', label: 'Note' },
+  { key: 'hackmd', label: 'HackMD' },
+  { key: 'linkmate', label: 'Linkmate' },
+  { key: 'calisthenics', label: 'Calisthenics' },
+  { key: 'notion', label: 'Notion' },
+  { key: 'devto', label: 'Dev.to' },
+];
+
 interface Account {
   platform: string;
   index: number;
@@ -98,7 +118,7 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
     { refreshInterval: 5000, shouldRetryOnError: false }
   );
 
-  const { data: postCycleStatus, mutate: mutatePostCycle } = useSWR<{ running: boolean; agent?: string; startedAt?: number; log?: string; detail?: { stage?: number; currentPlatform?: string; phase?: string } }>(
+  const { data: postCycleStatus, mutate: mutatePostCycle } = useSWR<{ running: boolean; agent?: string; startedAt?: number; log?: string; detail?: { stage?: number; round?: number; currentPlatform?: string; phase?: string; remainingCounts?: Record<string, number> } }>(
     hydrated && token ? `/api/agent/${agentId}/post-cycle/status` : null,
     authedFetcher,
     { refreshInterval: 5000, shouldRetryOnError: false }
@@ -262,16 +282,34 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const [postCycleBusy, setPostCycleBusy] = useState(false);
-  async function togglePostCycle() {
+  const [showPostCounts, setShowPostCounts] = useState(false);
+
+  async function stopPostCycle() {
     if (!token) return;
     setPostCycleBusy(true);
     try {
-      const running = postCycleStatus?.running && postCycleStatus.agent === agentId;
-      const res = await fetch(`/api/agent/${agentId}/post-cycle/${running ? 'stop' : 'start'}`, {
+      const res = await fetch(`/api/agent/${agentId}/post-cycle/stop`, {
         method: 'POST',
         headers: { 'X-Agent-Token': token },
       }).then((r) => r.json());
       if (res.error) alert(res.error);
+      mutatePostCycle();
+    } finally {
+      setPostCycleBusy(false);
+    }
+  }
+
+  async function submitPostCounts(counts: Record<string, number>) {
+    if (!token) return;
+    setPostCycleBusy(true);
+    try {
+      const res = await fetch(`/api/agent/${agentId}/post-cycle/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Agent-Token': token },
+        body: JSON.stringify({ counts }),
+      }).then((r) => r.json());
+      if (res.error) alert(res.error);
+      else setShowPostCounts(false);
       mutatePostCycle();
     } finally {
       setPostCycleBusy(false);
@@ -332,9 +370,9 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
             const othersTurn = postCycleStatus?.running && postCycleStatus.agent !== agentId;
             return (
               <button
-                onClick={togglePostCycle}
+                onClick={() => (mine ? stopPostCycle() : setShowPostCounts(true))}
                 disabled={postCycleBusy || othersTurn}
-                title={othersTurn ? `Running for ${postCycleStatus?.agent}` : 'Runs the full 5-cycle sequence once through (15→13→8→5→2 platforms, 30 min between each), independent of the live scheduler'}
+                title={othersTurn ? `Running for ${postCycleStatus?.agent}` : 'Choose how many posts per platform, then runs in rounds (1 post/platform/round) until every count reaches 0, 30 min between rounds'}
                 className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${
                   mine ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-sky-600 hover:bg-sky-500 text-white'
                 }`}
@@ -398,11 +436,28 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
           <div className="flex items-center gap-2 text-sm font-medium">
             <span className="inline-block w-3 h-3 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
             <span className="text-sky-300">
-              Posting now — full 5-cycle sequence
-              {postCycleStatus.detail?.stage ? ` (Cycle ${postCycleStatus.detail.stage}/5` : ''}
-              {postCycleStatus.detail?.currentPlatform ? `, currently: ${postCycleStatus.detail.currentPlatform})` : postCycleStatus.detail?.stage ? ')' : ''}
+              {postCycleStatus.detail?.round ? (
+                <>
+                  Posting now — Round {postCycleStatus.detail.round}
+                  {postCycleStatus.detail?.currentPlatform ? `, currently: ${postCycleStatus.detail.currentPlatform}` : ''}
+                </>
+              ) : (
+                <>
+                  Posting now — full 5-cycle sequence
+                  {postCycleStatus.detail?.stage ? ` (Cycle ${postCycleStatus.detail.stage}/5` : ''}
+                  {postCycleStatus.detail?.currentPlatform ? `, currently: ${postCycleStatus.detail.currentPlatform})` : postCycleStatus.detail?.stage ? ')' : ''}
+                </>
+              )}
             </span>
           </div>
+          {postCycleStatus.detail?.remainingCounts && (
+            <p className="mt-1 text-xs text-sky-300/70 font-mono">
+              remaining: {Object.entries(postCycleStatus.detail.remainingCounts)
+                .filter(([, c]) => c > 0)
+                .map(([k, c]) => `${k}:${c}`)
+                .join('  ') || 'all done'}
+            </p>
+          )}
           {postCycleStatus.log && (
             <pre className="mt-2 text-xs text-slate-400 whitespace-pre-wrap max-h-40 overflow-y-auto font-mono">{postCycleStatus.log}</pre>
           )}
@@ -558,6 +613,7 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
 
       {modal && <LoginOverlay modal={modal} onDone={finishLogin} />}
       {showGen && <GenerateModal agentId={agentId} busy={genBusy} onClose={() => setShowGen(false)} onSubmit={submitGenerate} />}
+      {showPostCounts && <PostCountsModal busy={postCycleBusy} onClose={() => setShowPostCounts(false)} onSubmit={submitPostCounts} />}
     </div>
   );
 }
@@ -677,6 +733,63 @@ function GenerateModal({
             className="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white"
           >
             {busy ? 'Starting…' : `Generate ${ready !== null ? Math.min(count, ready) : count}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PostCountsModal({
+  busy, onClose, onSubmit,
+}: {
+  busy: boolean;
+  onClose: () => void;
+  onSubmit: (counts: Record<string, number>) => void;
+}) {
+  const [counts, setCounts] = useState<Record<string, number>>(
+    () => Object.fromEntries(POST_COUNT_PLATFORMS.map((p) => [p.key, 0]))
+  );
+
+  const total = Object.values(counts).reduce((sum, c) => sum + (c > 0 ? c : 0), 0);
+
+  function setCount(key: string, value: number) {
+    setCounts((prev) => ({ ...prev, [key]: Math.max(0, Math.floor(value) || 0) }));
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-white">Post Now — how many per platform?</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl leading-none">×</button>
+        </div>
+        <p className="text-xs text-slate-500 mb-4">
+          Leave a platform at 0 to skip it entirely. Runs in rounds — 1 post per platform per round —
+          decrementing every round until every count reaches 0, with a 30 min wait between rounds.
+        </p>
+
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          {POST_COUNT_PLATFORMS.map((p) => (
+            <div key={p.key}>
+              <label className="block text-xs text-slate-400 mb-1">{p.label}</label>
+              <input
+                type="number" min={0} value={counts[p.key]}
+                onChange={(e) => setCount(p.key, Number(e.target.value))}
+                className="w-full bg-slate-900 border border-border rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-sky-500"
+              />
+            </div>
+          ))}
+        </div>
+
+        <div className="flex justify-end gap-2 mt-2">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white">Cancel</button>
+          <button
+            onClick={() => onSubmit(counts)}
+            disabled={busy || total === 0}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white"
+          >
+            {busy ? 'Starting…' : `Start (${total} total post${total === 1 ? '' : 's'})`}
           </button>
         </div>
       </div>

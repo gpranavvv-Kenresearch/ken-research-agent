@@ -67,6 +67,7 @@ export function startCycle(agent: string): void {
     stdio: 'ignore',
     cwd: process.cwd(),
     env: { ...process.env, DISPLAY: process.env.DISPLAY || ':99', WORKER_NAME: agent, BLOG_LOG: logFile },
+    shell: process.platform === 'win32', // Windows resolves `npx` to npx.cmd only through a shell
   });
   child.unref();
 
