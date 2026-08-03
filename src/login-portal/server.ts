@@ -32,7 +32,6 @@ import { startCycle, stopCycle, cycleStatus } from './blogCycle.js';
 import { startPostCycle, stopPostCycle, postCycleStatus } from './postCycle.js';
 import { proxySummary, rotateProxy } from '../health/proxyPool.js';
 import { checkProxies } from '../health/proxyCheck.js';
-import { acquireBrowserSlot } from '../utils/browserSlots.js';
 
 let websockifyProc: ChildProcess | null = null;
 
@@ -338,16 +337,27 @@ app.get('/api/agent/:agent/post-cycle/status', requireAgentToken, (req: Request,
 // "Post Now" button, direct (no external Django/Celery hop — that path went
 // through a separate backend that kept failing with unrelated errors). Runs
 // the exact same runRetryRow() the scheduler's own inter-stage retry sweep
-// calls, just triggered on demand for one row — but in its OWN child process
-// (scripts/retry-row-once.ts) with WORKER_NAME set to the requested agent.
-// login-api is one shared process pinned to a single WORKER_NAME env var —
-// calling runRetryRow() in-process here would always resolve whichever
+// calls, just triggered on demand for one row — but in its OWN detached child
+// process (scripts/retry-row-once.ts) with WORKER_NAME set to the requested
+// agent. login-api is one shared process pinned to a single WORKER_NAME env
+// var — calling runRetryRow() in-process here would always resolve whichever
 // agent's sheet THIS server happens to be configured for, not the agent the
 // row actually belongs to (same reason postCycle.ts/blogCycle.ts spawn a
-// child instead of calling in-process). No per-agent token: this isn't
-// scoped to one agent's login session, just an admin action already behind
-// requireDashboardSecret (same trust level as the proxy routes below).
-app.post('/api/retry-row', async (req: Request, res: Response) => {
+// child instead of calling in-process).
+//
+// Fire-and-forget on purpose: real posting (content generation + browser
+// automation) routinely takes longer than any HTTP timeout in this chain —
+// nginx's proxy_read_timeout and Vercel's serverless function limit both cut
+// off well under a minute, well short of what e.g. Google Sites needs
+// (confirmed live: nginx 504'd a retry that had, in fact, already succeeded
+// server-side by the time it timed out). So this responds the instant the
+// child is spawned; the sheet write IS the result — the dashboard's existing
+// row auto-refresh picks it up once it lands, same as any other post.
+//
+// No per-agent token: this isn't scoped to one agent's login session, just an
+// admin action already behind requireDashboardSecret (same trust level as
+// the proxy routes below).
+app.post('/api/retry-row', (req: Request, res: Response) => {
   const rowIndex = Number(req.body?.rowIndex);
   const platform = String(req.body?.platform || '').toLowerCase();
   const agent = String(req.body?.agent || '').toLowerCase().trim();
@@ -363,28 +373,16 @@ app.post('/api/retry-row', async (req: Request, res: Response) => {
     res.status(400).json({ error: 'agent required (which person\'s sheet this row belongs to)' });
     return;
   }
-  const releaseSlot = await acquireBrowserSlot(`retry-row:${platform}`, { agent });
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn('npx', ['tsx', 'scripts/retry-row-once.ts', '--row', String(rowIndex), '--platform', platform], {
-        cwd: process.cwd(),
-        env: { ...process.env, WORKER_NAME: agent },
-        stdio: 'ignore',
-        shell: process.platform === 'win32',
-      });
-      const timeout = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('retry timed out after 5 min')); }, 5 * 60_000);
-      child.on('exit', (code) => {
-        clearTimeout(timeout);
-        code === 0 ? resolve() : reject(new Error(`retry process exited with code ${code}`));
-      });
-      child.on('error', (err) => { clearTimeout(timeout); reject(err); });
-    });
-    res.json({ ok: true, message: 'Retry complete — check the row for the result.' });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'retry failed' });
-  } finally {
-    releaseSlot();
-  }
+  const child = spawn('npx', ['tsx', 'scripts/retry-row-once.ts', '--row', String(rowIndex), '--platform', platform], {
+    cwd: process.cwd(),
+    env: { ...process.env, WORKER_NAME: agent },
+    stdio: 'ignore',
+    detached: true,
+    shell: process.platform === 'win32',
+  });
+  child.on('error', (err) => console.error(`[retry-row] failed to start: ${err.message}`));
+  child.unref();
+  res.json({ ok: true, message: 'Started — the row will update once it finishes (can take a few minutes for slower platforms).' });
 });
 
 // ── Proxy management (dashboard test/rotate buttons) ────────────────────────

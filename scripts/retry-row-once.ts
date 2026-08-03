@@ -13,6 +13,7 @@
 import { runRetryRow } from '../src/coordinator/masterCoordinator.js';
 import { closeAllBrowsers } from '../src/tools/browserTools.js';
 import { killPostingChrome } from '../src/utils/procKill.js';
+import { acquireBrowserSlot } from '../src/utils/browserSlots.js';
 
 const arg = (flag: string) => {
   const i = process.argv.indexOf(flag);
@@ -28,6 +29,13 @@ if (!Number.isFinite(rowIndex) || !platform) {
 }
 
 async function main() {
+  // This process runs detached, spawned fire-and-forget by the /api/retry-row
+  // route (posting can take longer than any sane HTTP timeout — nginx and
+  // Vercel's own serverless function both cut off well under 5 min, so the
+  // caller doesn't wait for this at all; the sheet write is the real result).
+  // Slot acquisition therefore lives HERE, not in the route, since nothing
+  // else is waiting on this process to hold the release open correctly.
+  const releaseSlot = await acquireBrowserSlot(`retry-row:${platform}`);
   try {
     await runRetryRow(rowIndex, platform);
   } finally {
@@ -36,6 +44,7 @@ async function main() {
     // runOnePlatform does per platform, just single-shot here).
     await closeAllBrowsers().catch(() => {});
     killPostingChrome();
+    releaseSlot();
   }
 }
 
