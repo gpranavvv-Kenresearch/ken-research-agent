@@ -212,11 +212,21 @@ export async function postToLinkedinPulse(
       finalUrl = await page.$eval('meta[property="og:url"]', el => el.getAttribute('content') ?? '').catch(() => '');
     }
 
+    // A garbage URL (login page, homepage, whatever the browser happened to
+    // land on) is not a successful post — confirmed live: this returned
+    // success:true with postUrl "linkedin.com/login" while the account's
+    // session had actually been killed mid-flow. Never report success
+    // without a real /pulse/ URL as proof.
+    if (!finalUrl.includes('/pulse/')) {
+      console.log(`   ❌ No real article URL captured (got: "${finalUrl}") — session likely died mid-publish, not a real success`);
+      throw new Error(`LinkedIn Pulse did not return a real /pulse/ article URL (got "${finalUrl}" instead) — session was likely killed mid-publish`);
+    }
+
     console.log(`   ✅ Article published. URL: ${finalUrl}`);
 
     return {
       success: true,
-      postUrl: finalUrl || 'Unknown URL',
+      postUrl: finalUrl,
       postedAt: new Date(),
     };
   } catch (err: any) {
