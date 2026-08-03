@@ -7,6 +7,7 @@ import PlatformBadge from './PlatformBadge';
 interface Props {
   row: RawRow;
   tab: 'social' | 'blog';
+  agentId: string;
   onClose: () => void;
 }
 
@@ -26,8 +27,8 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PlatformSection({ title, platforms, row, name, tab }: {
-  title: string; platforms: PlatformDef[]; row: RawRow; name: string; tab: 'social' | 'blog';
+function PlatformSection({ title, platforms, row, name, tab, agentId }: {
+  title: string; platforms: PlatformDef[]; row: RawRow; name: string; tab: 'social' | 'blog'; agentId: string;
 }) {
   const [posting, setPosting] = useState<string | null>(null);
   const [msgs, setMsgs]       = useState<Record<string, string>>({});
@@ -55,6 +56,7 @@ function PlatformSection({ title, platforms, row, name, tab }: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          agent:       agentId,
           name:        name.toLowerCase(),
           sheetRow:    row._sheetRow,
           platform:    platformKey,
@@ -131,7 +133,7 @@ function PlatformSection({ title, platforms, row, name, tab }: {
   );
 }
 
-export default function RowDetailModal({ row, tab, onClose }: Props) {
+export default function RowDetailModal({ row, tab, agentId, onClose }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -213,8 +215,8 @@ export default function RowDetailModal({ row, tab, onClose }: Props) {
 
           {/* Platform statuses */}
           {tab === 'social'
-            ? <PlatformSection title="Social Platforms" platforms={SOCIAL_PLATFORMS} row={row} name={name} tab={tab} />
-            : <PlatformSection title="Blog Platforms"   platforms={BLOG_PLATFORMS}   row={row} name={name} tab={tab} />
+            ? <PlatformSection title="Social Platforms" platforms={SOCIAL_PLATFORMS} row={row} name={name} tab={tab} agentId={agentId} />
+            : <PlatformSection title="Blog Platforms"   platforms={BLOG_PLATFORMS}   row={row} name={name} tab={tab} agentId={agentId} />
           }
         </div>
       </div>

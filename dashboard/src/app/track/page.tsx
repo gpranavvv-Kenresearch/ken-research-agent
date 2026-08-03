@@ -71,7 +71,7 @@ export default function TrackPage() {
       )}
 
       {!isLoading && !error && !data?.error && (
-        <TrackingTable rows={rows} tab={tab} />
+        <TrackingTable rows={rows} tab={tab} agentId={user?.id ?? ''} />
       )}
     </div>
   );

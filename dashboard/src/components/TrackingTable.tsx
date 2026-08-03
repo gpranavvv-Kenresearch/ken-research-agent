@@ -8,6 +8,7 @@ import RowDetailModal from './RowDetailModal';
 interface Props {
   rows: RawRow[];
   tab: 'social' | 'blog';
+  agentId: string;
 }
 
 function ProgressBar({ row, tab }: { row: RawRow; tab: 'social' | 'blog' }) {
@@ -27,7 +28,7 @@ function ProgressBar({ row, tab }: { row: RawRow; tab: 'social' | 'blog' }) {
   );
 }
 
-export default function TrackingTable({ rows, tab }: Props) {
+export default function TrackingTable({ rows, tab, agentId }: Props) {
   const [selected, setSelected] = useState<RawRow | null>(null);
   const [search, setSearch] = useState('');
   const platforms = tab === 'social' ? SOCIAL_PLATFORMS : BLOG_PLATFORMS;
@@ -143,7 +144,7 @@ export default function TrackingTable({ rows, tab }: Props) {
       </div>
 
       {selected && (
-        <RowDetailModal row={selected} tab={tab} onClose={() => setSelected(null)} />
+        <RowDetailModal row={selected} tab={tab} agentId={agentId} onClose={() => setSelected(null)} />
       )}
     </div>
   );

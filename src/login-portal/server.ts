@@ -32,10 +32,7 @@ import { startCycle, stopCycle, cycleStatus } from './blogCycle.js';
 import { startPostCycle, stopPostCycle, postCycleStatus } from './postCycle.js';
 import { proxySummary, rotateProxy } from '../health/proxyPool.js';
 import { checkProxies } from '../health/proxyCheck.js';
-import { runRetryRow } from '../coordinator/masterCoordinator.js';
 import { acquireBrowserSlot } from '../utils/browserSlots.js';
-import { closeAllBrowsers } from '../tools/browserTools.js';
-import { killPostingChrome } from '../utils/procKill.js';
 
 let websockifyProc: ChildProcess | null = null;
 
@@ -337,17 +334,23 @@ app.get('/api/agent/:agent/post-cycle/status', requireAgentToken, (req: Request,
   res.json(postCycleStatus(req.params.agent.toLowerCase()));
 });
 
-// POST /api/retry-row { rowIndex, platform } — dashboard's Track page "Post Now"
-// button, direct (no external Django/Celery hop — that path went through a
-// separate backend that kept failing with unrelated errors). Reuses the same
-// runRetryRow() the scheduler's own inter-stage retry sweep calls, so it's the
-// exact same posting logic, account resolution, and sheet writes as automated
-// retries — just triggered on demand for one row. No per-agent token: this
-// isn't scoped to one agent's login session, just an admin action already
-// behind requireDashboardSecret (same trust level as the proxy routes below).
+// POST /api/retry-row { rowIndex, platform, agent } — dashboard's Track page
+// "Post Now" button, direct (no external Django/Celery hop — that path went
+// through a separate backend that kept failing with unrelated errors). Runs
+// the exact same runRetryRow() the scheduler's own inter-stage retry sweep
+// calls, just triggered on demand for one row — but in its OWN child process
+// (scripts/retry-row-once.ts) with WORKER_NAME set to the requested agent.
+// login-api is one shared process pinned to a single WORKER_NAME env var —
+// calling runRetryRow() in-process here would always resolve whichever
+// agent's sheet THIS server happens to be configured for, not the agent the
+// row actually belongs to (same reason postCycle.ts/blogCycle.ts spawn a
+// child instead of calling in-process). No per-agent token: this isn't
+// scoped to one agent's login session, just an admin action already behind
+// requireDashboardSecret (same trust level as the proxy routes below).
 app.post('/api/retry-row', async (req: Request, res: Response) => {
   const rowIndex = Number(req.body?.rowIndex);
   const platform = String(req.body?.platform || '').toLowerCase();
+  const agent = String(req.body?.agent || '').toLowerCase().trim();
   if (!Number.isFinite(rowIndex) || rowIndex < 2) {
     res.status(400).json({ error: 'rowIndex (sheet row number) required' });
     return;
@@ -356,15 +359,30 @@ app.post('/api/retry-row', async (req: Request, res: Response) => {
     res.status(400).json({ error: 'platform required' });
     return;
   }
-  const releaseSlot = await acquireBrowserSlot(`retry-row:${platform}`);
+  if (!agent) {
+    res.status(400).json({ error: 'agent required (which person\'s sheet this row belongs to)' });
+    return;
+  }
+  const releaseSlot = await acquireBrowserSlot(`retry-row:${platform}`, { agent });
   try {
-    await runRetryRow(rowIndex, platform);
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('npx', ['tsx', 'scripts/retry-row-once.ts', '--row', String(rowIndex), '--platform', platform], {
+        cwd: process.cwd(),
+        env: { ...process.env, WORKER_NAME: agent },
+        stdio: 'ignore',
+        shell: process.platform === 'win32',
+      });
+      const timeout = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('retry timed out after 5 min')); }, 5 * 60_000);
+      child.on('exit', (code) => {
+        clearTimeout(timeout);
+        code === 0 ? resolve() : reject(new Error(`retry process exited with code ${code}`));
+      });
+      child.on('error', (err) => { clearTimeout(timeout); reject(err); });
+    });
     res.json({ ok: true, message: 'Retry complete — check the row for the result.' });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'retry failed' });
   } finally {
-    try { await closeAllBrowsers(); } catch { /* best-effort */ }
-    killPostingChrome();
     releaseSlot();
   }
 });
