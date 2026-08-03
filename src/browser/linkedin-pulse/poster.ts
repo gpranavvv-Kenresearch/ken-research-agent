@@ -161,8 +161,23 @@ export async function postToLinkedinPulse(
       await randomDelay(800, 1200);
     }
 
+    // Debug capture — the failure mode we're chasing (session dies somewhere
+    // in this sequence, final page ends up on /login) has no visible evidence
+    // once it's happened; screenshot + URL at each checkpoint pins down WHEN
+    // in the sequence it actually happens instead of guessing from the end
+    // state. Never throws — diagnostics must not break the real flow.
+    const debugId = `${Date.now()}`;
+    async function snapshot(label: string): Promise<void> {
+      try {
+        const url = page.url();
+        console.log(`   [debug:${label}] url=${url}`);
+        await page.screenshot({ path: `/tmp/li-pulse-debug-${debugId}-${label}.png` }).catch(() => {});
+      } catch { /* best-effort */ }
+    }
+
     // Click PUBLISH Button
     console.log('   Clicking Publish...');
+    await snapshot('before-publish-click');
     const publishBtn = page.locator('button.share-actions__primary-action.artdeco-button--primary, button:has-text("Publish")').first();
     if (await publishBtn.isVisible().catch(() => false)) {
       await publishBtn.click({ delay: 150 }).catch(() => {});
@@ -175,15 +190,19 @@ export async function postToLinkedinPulse(
         /* ignore */
       }
     }
+    await snapshot('right-after-publish-click');
 
     // Click "Get the link to this article" to capture the /pulse/ URL
     console.log('   Waiting for post-publish modal...');
     await page.waitForTimeout(5000);
+    await snapshot('after-5s-wait');
 
     let finalUrl = '';
     try {
       const getLinkBtn = page.locator('button.post-publish-modal__get-link-button, button:has(span:has-text("Get the link to this article"))').first();
-      if (await getLinkBtn.isVisible({ timeout: 8000 }).catch(() => false)) {
+      const getLinkVisible = await getLinkBtn.isVisible({ timeout: 8000 }).catch(() => false);
+      console.log(`   [debug] get-link-button visible: ${getLinkVisible}`);
+      if (getLinkVisible) {
         await getLinkBtn.click({ delay: 150 }).catch(() => {});
         console.log('   Clicked Get the link to this article');
         await page.waitForTimeout(2000);
@@ -203,6 +222,7 @@ export async function postToLinkedinPulse(
     } catch (err) {
       console.warn(`   ⚠️ Could not get article link: ${(err as any).message}`);
     }
+    await snapshot('after-get-link-attempt');
 
     // Fallback — read from page meta (never use address bar)
     if (!finalUrl || !finalUrl.includes('/pulse/')) {
@@ -218,7 +238,7 @@ export async function postToLinkedinPulse(
     // session had actually been killed mid-flow. Never report success
     // without a real /pulse/ URL as proof.
     if (!finalUrl.includes('/pulse/')) {
-      console.log(`   ❌ No real article URL captured (got: "${finalUrl}") — session likely died mid-publish, not a real success`);
+      console.log(`   ❌ No real article URL captured (got: "${finalUrl}") — session likely died mid-publish, not a real success. Debug screenshots: /tmp/li-pulse-debug-${debugId}-*.png`);
       throw new Error(`LinkedIn Pulse did not return a real /pulse/ article URL (got "${finalUrl}" instead) — session was likely killed mid-publish`);
     }
 
