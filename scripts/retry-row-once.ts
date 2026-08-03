@@ -10,6 +10,7 @@
  * Usage:
  *   WORKER_NAME=sanya npx tsx scripts/retry-row-once.ts --row 2 --platform wordpress
  */
+import fs from 'fs';
 import { runRetryRow } from '../src/coordinator/masterCoordinator.js';
 import { closeAllBrowsers } from '../src/tools/browserTools.js';
 import { killPostingChrome } from '../src/utils/procKill.js';
@@ -27,6 +28,18 @@ if (!Number.isFinite(rowIndex) || !platform) {
   console.error('Usage: retry-row-once.ts --row <n> --platform <key>');
   process.exit(1);
 }
+
+// Spawned detached with stdio:'ignore' by /api/retry-row (see server.ts) —
+// nothing else captures this process's output, so write it to a file or a
+// failure is undebuggable after the fact. One file per (agent, platform)
+// call, overwritten each retry — WORKER_NAME is set by the spawning route.
+const LOG_FILE = `/tmp/retry-row-${process.env.WORKER_NAME || 'unknown'}-${platform}.log`;
+const _log = console.log.bind(console);
+const _err = console.error.bind(console);
+function toFile(s: string): void { try { fs.appendFileSync(LOG_FILE, s + '\n'); } catch { /* noop */ } }
+console.log = (...a: unknown[]) => { const s = a.map(String).join(' '); _log(s); toFile(s); };
+console.error = (...a: unknown[]) => { const s = a.map(String).join(' '); _err(s); toFile(s); };
+fs.writeFileSync(LOG_FILE, `=== retry row ${rowIndex} on ${platform} for ${process.env.WORKER_NAME} @ ${new Date().toISOString()} ===\n`);
 
 async function main() {
   // This process runs detached, spawned fire-and-forget by the /api/retry-row
