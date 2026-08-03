@@ -56,7 +56,13 @@ async function runDeepCheck(sessionDir: string): Promise<void> {
   try {
     if (!fs.existsSync(sessionDir)) { writeCacheEntry(sessionDir, { ready: false, checkedAt: Date.now() }); return; }
     ctx = await chromium.launchPersistentContext(sessionDir, {
-      headless: true,
+      // Medium sits behind Cloudflare, which blocks headless Chrome outright
+      // (serves a logged-out/guest header regardless of valid session cookies)
+      // — same finding already documented in browser/medium/login.ts. Must run
+      // headed, on the VPS's persistent virtual display (:99) when no real
+      // DISPLAY is set, same as the real posting flow.
+      headless: false,
+      env: { ...process.env, DISPLAY: process.env.DISPLAY || ':99' },
       executablePath: fs.existsSync(CHROME_PATH) ? CHROME_PATH : undefined,
       channel: fs.existsSync(CHROME_PATH) ? undefined : 'chrome',
       ignoreDefaultArgs: ['--enable-automation'],
