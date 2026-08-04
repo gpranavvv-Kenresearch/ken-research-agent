@@ -618,6 +618,11 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
   );
 }
 
+const IMAGE_PROMPT_OPTIONS = [
+  { id: '1', label: 'Image 1', example: 'https://ik.imagekit.io/m139x4s8x/microblogs/samples/image-prompt-1-example_kycrQnBCW.png' },
+  { id: '2', label: 'Image 2', example: 'https://ik.imagekit.io/m139x4s8x/microblogs/samples/image-prompt-2-example_YQO9uDy-BJ.png' },
+];
+
 const GEN_FORMATS = [
   { id: '', label: 'Use each row\'s Format column', sample: '' },
   { id: 'seo-li', label: 'Sample 1', sample: '/samples/format-1.html' },
@@ -729,14 +734,22 @@ function GenerateModal({
         {/* Cover image prompt */}
         <label className="block text-sm text-slate-300 mb-2">Cover image style</label>
         <div className="space-y-2 mb-4">
-          {[{ id: '1', label: 'Image 1' }, { id: '2', label: 'Image 2' }].map((opt) => (
-            <label key={opt.id} className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio" name="imageprompt" checked={imagePrompt === opt.id}
-                onChange={() => setImagePrompt(opt.id)} className="accent-emerald-500"
-              />
-              <span className="text-sm text-white">{opt.label}</span>
-            </label>
+          {IMAGE_PROMPT_OPTIONS.map((opt) => (
+            <div key={opt.id} className="flex items-center gap-2">
+              <label className="flex items-center gap-2 flex-1 cursor-pointer">
+                <input
+                  type="radio" name="imageprompt" checked={imagePrompt === opt.id}
+                  onChange={() => setImagePrompt(opt.id)} className="accent-emerald-500"
+                />
+                <span className="text-sm text-white">{opt.label}</span>
+              </label>
+              <a
+                href={opt.example} target="_blank" rel="noopener noreferrer"
+                className="text-xs text-blue-400 hover:text-blue-300 underline shrink-0"
+              >
+                view example
+              </a>
+            </div>
           ))}
         </div>
 
