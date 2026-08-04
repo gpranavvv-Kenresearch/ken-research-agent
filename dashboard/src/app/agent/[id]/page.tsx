@@ -2,6 +2,7 @@
 import useSWR from 'swr';
 import { useState, useEffect, useRef, use } from 'react';
 import { getUser, type UserConfig } from '@/lib/userConfig';
+import { IMAGE_PROMPT_OPTIONS } from '@/types';
 
 const PLATFORMS = [
   // Social
@@ -618,14 +619,9 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
   );
 }
 
-const IMAGE_PROMPT_OPTIONS = [
-  { id: '1', label: 'Image 1', example: 'https://ik.imagekit.io/m139x4s8x/microblogs/samples/image-prompt-1-example_kycrQnBCW.png' },
-  { id: '2', label: 'Image 2', example: 'https://ik.imagekit.io/m139x4s8x/microblogs/samples/image-prompt-2-example_YQO9uDy-BJ.png' },
-];
-
 const GEN_FORMATS = [
   { id: '', label: 'Use each row\'s Format column', sample: '' },
-  { id: 'seo-li', label: 'Sample 1', sample: '' },
+  { id: 'seo-li', label: 'Sample 1', sample: '/samples/sample-1.html' },
   { id: 'custom', label: 'Custom (paste a sample below)', sample: '' },
 ];
 

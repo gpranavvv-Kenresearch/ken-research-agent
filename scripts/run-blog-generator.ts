@@ -154,9 +154,9 @@ function generate(row: BlogRow): Promise<{ title: string; description: string; h
  * separate from generate()'s shared blog-writer profile — so pass() below runs this
  * concurrently with generate() instead of waiting for it to finish first.
  */
-function generateImage(marketName: string, reportUrl: string): Promise<string> {
+function generateImage(marketName: string, reportUrl: string, imagePromptChoice: string): Promise<string> {
   return new Promise((resolve) => {
-    const args = ['tsx', 'scripts/generate_image.ts', '--agent', NAME, '--market-name', marketName, '--image-prompt', IMAGE_PROMPT];
+    const args = ['tsx', 'scripts/generate_image.ts', '--agent', NAME, '--market-name', marketName, '--image-prompt', imagePromptChoice];
     if (reportUrl) args.push('--url', reportUrl);
     const child = spawnTsx(args, process.env);
     let stdout = '';
@@ -245,11 +245,14 @@ async function pass() {
       if (overrideFmt) writeFormatCol(row._dataRow, overrideFmt);
 
       const marketName = rowTitle(row);
+      // Row's own "Image Prompt" pick (from the Submit form) wins; falls back to the
+      // batch/CLI default so old rows and the agent-page Generate modal still work.
+      const imagePromptChoice = String(row['Image Prompt'] || '').trim() || IMAGE_PROMPT;
       console.log(`\n🖼️  Generating cover image + article in parallel for: "${marketName}"`);
 
       // Separate ChatGPT profiles (chatgpt-image-profile vs chatgpt-profile) — safe to run together.
       const [coverImageUrl, res] = await Promise.all([
-        generateImage(marketName, String(row.targetUrl || '')).then((url) => {
+        generateImage(marketName, String(row.targetUrl || ''), imagePromptChoice).then((url) => {
           if (url) { console.log(`✓ Cover image ready: ${url}`); writeCoverImageUrl(row._dataRow, url); }
           else console.log('⚠ Continuing without a cover image for this row.');
           return url;

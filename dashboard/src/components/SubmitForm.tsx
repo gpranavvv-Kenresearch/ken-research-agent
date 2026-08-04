@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FORMATS, BLOG_PLATFORMS, SOCIAL_PLATFORMS } from '@/types';
+import { FORMATS, BLOG_PLATFORMS, SOCIAL_PLATFORMS, IMAGE_PROMPT_OPTIONS } from '@/types';
 import { useUser } from '@/context/UserContext';
 import { SHARED_SHEET_ID, resolveSheetId } from '@/lib/userConfig';
 
@@ -21,6 +21,7 @@ export default function SubmitForm() {
     platforms: BLOG_PLATFORMS.map((p) => p.key),
     social: [] as string[],
     customPrompt: '',
+    imagePrompt: '1',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError]   = useState('');
@@ -56,7 +57,7 @@ export default function SubmitForm() {
         const res = await fetch('/api/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, targetUrl: url, name: user.displayName, format: form.format, description: '', platforms: form.platforms, socialPlatforms: form.social, userId: user.id, customPrompt: form.customPrompt }),
+          body: JSON.stringify({ title, targetUrl: url, name: user.displayName, format: form.format, description: '', platforms: form.platforms, socialPlatforms: form.social, userId: user.id, customPrompt: form.customPrompt, imagePrompt: form.imagePrompt }),
         });
         const data = await res.json() as { success?: boolean; blogSheetRow?: number; socialSheetRow?: number; error?: string };
         if (!res.ok) results.push({ title, url, error: data.error ?? 'Failed' });
@@ -91,6 +92,7 @@ export default function SubmitForm() {
           socialPlatforms: form.social,
           userId:          user.id,
           customPrompt: form.customPrompt,
+          imagePrompt:  form.imagePrompt,
         }),
       });
       const data = await res.json() as { success?: boolean; blogSheetRow?: number; socialSheetRow?: number; blogTab?: string; socialTab?: string; error?: string };
@@ -173,6 +175,13 @@ export default function SubmitForm() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-white font-semibold text-sm">{f.label}</p>
                       <span className="text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">{f.subLabel}</span>
+                      {f.sample && (
+                        <a href={f.sample} target="_blank" rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-xs text-blue-400 hover:text-blue-300 underline shrink-0">
+                          view sample ↗
+                        </a>
+                      )}
                     </div>
                     <p className="text-slate-400 text-xs mt-1">{f.desc}</p>
                   </div>
@@ -193,6 +202,29 @@ export default function SubmitForm() {
                 />
               </div>
             )}
+          </section>
+
+          {/* Cover image style */}
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Cover Image</h2>
+            <div className="grid gap-2">
+              {IMAGE_PROMPT_OPTIONS.map((opt) => (
+                <label key={opt.id}
+                  className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-colors ${
+                    form.imagePrompt === opt.id ? 'border-blue-500 bg-blue-950/40' : 'border-border bg-card hover:border-slate-500'
+                  }`}
+                >
+                  <input type="radio" name="bulk-imageprompt" value={opt.id} checked={form.imagePrompt === opt.id}
+                    onChange={() => setForm({ ...form, imagePrompt: opt.id })} className="accent-blue-500 shrink-0" />
+                  <span className="text-white text-sm flex-1">{opt.label}</span>
+                  <a href={opt.example} target="_blank" rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-xs text-blue-400 hover:text-blue-300 underline shrink-0">
+                    view example ↗
+                  </a>
+                </label>
+              ))}
+            </div>
           </section>
 
           {/* Blog platforms */}
@@ -322,6 +354,13 @@ export default function SubmitForm() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-white font-semibold text-sm">{f.label}</p>
                   <span className="text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">{f.subLabel}</span>
+                  {f.sample && (
+                    <a href={f.sample} target="_blank" rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-xs text-blue-400 hover:text-blue-300 underline shrink-0">
+                      view sample ↗
+                    </a>
+                  )}
                 </div>
                 <p className="text-slate-400 text-xs mt-1">{f.desc}</p>
               </div>
@@ -342,6 +381,29 @@ export default function SubmitForm() {
             />
           </div>
         )}
+      </section>
+
+      {/* Cover image style */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Cover Image</h2>
+        <div className="grid gap-2">
+          {IMAGE_PROMPT_OPTIONS.map((opt) => (
+            <label key={opt.id}
+              className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-colors ${
+                form.imagePrompt === opt.id ? 'border-blue-500 bg-blue-950/40' : 'border-border bg-card hover:border-slate-500'
+              }`}
+            >
+              <input type="radio" name="imageprompt" value={opt.id} checked={form.imagePrompt === opt.id}
+                onChange={() => setForm({ ...form, imagePrompt: opt.id })} className="accent-blue-500 shrink-0" />
+              <span className="text-white text-sm flex-1">{opt.label}</span>
+              <a href={opt.example} target="_blank" rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-xs text-blue-400 hover:text-blue-300 underline shrink-0">
+                view example ↗
+              </a>
+            </label>
+          ))}
+        </div>
       </section>
 
       {/* Blog platforms */}

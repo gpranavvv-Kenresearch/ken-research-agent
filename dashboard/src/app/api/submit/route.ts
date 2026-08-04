@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
       socialPlatforms: body.socialPlatforms ?? [],
       description:    body.description,
       customPrompt:   body.customPrompt,
+      imagePrompt:    body.imagePrompt,
       blogTab:        user.blogTab,
       socialTab:      user.socialTab,
       spreadsheetId:  resolveSheetId(user),

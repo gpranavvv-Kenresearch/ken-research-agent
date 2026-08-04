@@ -23,6 +23,17 @@ function getServiceAccount() {
   throw new Error('No service account found. Set GOOGLE_SERVICE_ACCOUNT_JSON env var or add .accounts/google-service-account.json');
 }
 
+function colLetter(idx: number): string {
+  let n = idx + 1;
+  let result = '';
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    result = String.fromCharCode(65 + rem) + result;
+    n = Math.floor((n - 1) / 26);
+  }
+  return result;
+}
+
 async function getSheetsClient() {
   const auth = new google.auth.GoogleAuth({
     credentials: getServiceAccount(),
@@ -72,6 +83,7 @@ export interface SubmitPayload {
   socialPlatforms: string[]; // social platforms (x, facebook, linkedin)
   description?: string;
   customPrompt?: string;
+  imagePrompt?: string;
   blogTab: string;
   socialTab: string;
   spreadsheetId?: string; // defaults to the shared sheet if omitted
@@ -88,6 +100,17 @@ export async function appendBlogRow(payload: SubmitPayload): Promise<number> {
   });
   const headers: string[] = (headerRes.data.values?.[0] ?? []) as string[];
 
+  // Self-heal: add the "Image Prompt" header if this tab predates the feature.
+  if (payload.imagePrompt && !headers.includes('Image Prompt')) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `'${payload.blogTab}'!${colLetter(headers.length)}1`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [['Image Prompt']] },
+    });
+    headers.push('Image Prompt');
+  }
+
   const now = new Date();
   const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
   const timestamp = ist.toISOString().replace('T', ' ').slice(0, 16);
@@ -102,6 +125,7 @@ export async function appendBlogRow(payload: SubmitPayload): Promise<number> {
                           ? (payload.customPrompt as string)
                           : payload.format,
     'Custom Prompt':    payload.customPrompt ?? '',
+    'Image Prompt':     payload.imagePrompt ?? '',
     'Submitted At':     timestamp,
     'Blog Description': payload.description ?? '',
     'Platforms':        payload.platforms.join(', '),
