@@ -65,6 +65,7 @@ const PERSONAL_SHEET_ID: Record<string, string> = {
   meenakshi: '1IAI2S1LQJ2opg6zu-Sir7BAC8elHGC9TONLTuhibHKg',
   hritika: '1NjOCYlYPV1W-8FYNoLI7m_lqxx5pr5H9xTWu6OvWmcY',
   vansh: '1N_hPhtCA9qIVBpeftgxqRc0farsjAKTcZWMgbhJZQHM',
+  sameeksha: '1MA5duGvHHDe-cnnf4Ibj5-d9mW6JpYcziPkKGbMZZIo',
 };
 const RESOLVED_SHEET_ID = PERSONAL_SHEET_ID[(process.env.WORKER_NAME || '').toLowerCase()] || COMBINED_SHEET_ID;
 
