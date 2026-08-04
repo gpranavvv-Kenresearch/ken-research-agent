@@ -10,7 +10,7 @@
  *
  * Usage:
  *   DISPLAY=:99 npx tsx scripts/run-blog-generator.ts --name abhinav --limit 3
- *   [--loop] [--interval 300] [--format-override seo-li|format2|...|custom] [--sample-file path]
+ *   [--loop] [--interval 300] [--format-override seo-li|custom] [--sample-file path] [--image-prompt 1|2]
  */
 
 import { spawn, spawnSync } from 'child_process';
@@ -36,6 +36,7 @@ const PY = process.env.PYTHON
 // Batch overrides (from the dashboard Generate modal): one format/sample for every row.
 const FORMAT_OVERRIDE = (arg('--format-override') || '').trim();
 const SAMPLE_OVERRIDE = (arg('--sample-file') || '').trim();
+const IMAGE_PROMPT = (arg('--image-prompt') || '1').trim(); // '1' or '2' — which cover-image prompt to use
 // spawn('npx', ...) is unreliable on Windows — npx is a .cmd shim (ENOENT
 // without the extension) and even 'npx.cmd' can throw EINVAL depending on how
 // Windows resolves it. Spawn node directly with the same --import=tsx loader
@@ -152,7 +153,7 @@ function generate(row: BlogRow): Promise<{ title: string; description: string; h
  */
 function generateImage(marketName: string, reportUrl: string): Promise<string> {
   return new Promise((resolve) => {
-    const args = ['tsx', 'scripts/generate_image.ts', '--agent', NAME, '--market-name', marketName];
+    const args = ['tsx', 'scripts/generate_image.ts', '--agent', NAME, '--market-name', marketName, '--image-prompt', IMAGE_PROMPT];
     if (reportUrl) args.push('--url', reportUrl);
     const child = spawnTsx(args, process.env);
     let stdout = '';

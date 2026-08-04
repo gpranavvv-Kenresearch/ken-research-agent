@@ -248,14 +248,14 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
 
   const [showGen, setShowGen] = useState(false);
   const [genBusy, setGenBusy] = useState(false);
-  async function submitGenerate(count: number, format: string, sample: string) {
+  async function submitGenerate(count: number, format: string, sample: string, imagePrompt: string) {
     if (!token) return;
     setGenBusy(true);
     try {
       const res = await fetch(`/api/agent/${agentId}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Agent-Token': token },
-        body: JSON.stringify({ count, format, sample }),
+        body: JSON.stringify({ count, format, sample, imagePrompt }),
       }).then((r) => r.json());
       setShowGen(false);
       alert(res.message || res.error || 'Started');
@@ -632,11 +632,12 @@ function GenerateModal({
   agentId: string;
   busy: boolean;
   onClose: () => void;
-  onSubmit: (count: number, format: string, sample: string) => void;
+  onSubmit: (count: number, format: string, sample: string, imagePrompt: string) => void;
 }) {
   const [count, setCount] = useState(1);
   const [format, setFormat] = useState('');
   const [sample, setSample] = useState('');
+  const [imagePrompt, setImagePrompt] = useState('1');
   const [ready, setReady] = useState<number | null>(null); // rows with URL + empty content
 
   useEffect(() => {
@@ -725,10 +726,24 @@ function GenerateModal({
           </div>
         )}
 
+        {/* Cover image prompt */}
+        <label className="block text-sm text-slate-300 mb-2">Cover image style</label>
+        <div className="space-y-2 mb-4">
+          {[{ id: '1', label: 'Image 1' }, { id: '2', label: 'Image 2' }].map((opt) => (
+            <label key={opt.id} className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio" name="imageprompt" checked={imagePrompt === opt.id}
+                onChange={() => setImagePrompt(opt.id)} className="accent-emerald-500"
+              />
+              <span className="text-sm text-white">{opt.label}</span>
+            </label>
+          ))}
+        </div>
+
         <div className="flex justify-end gap-2 mt-2">
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white">Cancel</button>
           <button
-            onClick={() => onSubmit(Math.min(count, ready ?? count), format, format === 'custom' ? sample : '')}
+            onClick={() => onSubmit(Math.min(count, ready ?? count), format, format === 'custom' ? sample : '', imagePrompt)}
             disabled={busy || ready === 0 || (format === 'custom' && !sample.trim())}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white"
           >

@@ -9,12 +9,15 @@
  * .sessions-cookies/chatgpt-profile/) so image generation can run truly in
  * parallel with text generation — no shared-profile lock contention.
  *
+ * Two selectable, fully self-contained prompts (each does its own market
+ * research, color/industry selection, and layout — see imagePrompt1/
+ * imagePrompt2 below) — pick with --image-prompt 1|2 (default 1).
+ *
  * Usage:
  *   npx tsx scripts/generate_image.ts \
  *     --market-name "India Cold Storage Market" \
- *     --market-size "USD 2.68 Billion" \
- *     --cagr "12.5% CAGR" \
- *     --forecast "USD 5.1 Billion by 2030"
+ *     --url "https://www.kenresearch.com/industry-reports/india-cold-storage-market" \
+ *     --image-prompt 2
  *
  * Outputs JSON to stdout:
  *   {"status":"success","imageUrl":"https://ik.imagekit.io/..."}
@@ -39,13 +42,9 @@ const get  = (flag: string, fallback = '') => {
   return i !== -1 && argv[i + 1] ? argv[i + 1] : fallback;
 };
 const marketName = get('--market-name', 'Market Intelligence Report');
-const marketSize = get('--market-size', '');
-const cagr       = get('--cagr', '');
-const forecast   = get('--forecast', '');
-const sectorArg  = get('--sector', '');
-const countryArg = get('--country', 'Global');
 const reportUrl  = get('--url', '');
 const agentArg   = get('--agent', '').toLowerCase();
+const imagePromptChoice = get('--image-prompt', '1'); // '1' or '2' — see imagePrompt1/imagePrompt2 below
 
 // ── ImageKit ──────────────────────────────────────────────────────────────────
 const IMAGEKIT_PRIVATE_KEY = 'private_MkJ4nzxRoVz+dDpEeFUTryhRXVM=';
@@ -66,143 +65,498 @@ const TMP_DIR          = path.join(__dirname, '..', 'generated_images');
 fs.mkdirSync(CHATGPT_PROFILE, { recursive: true });
 fs.mkdirSync(TMP_DIR, { recursive: true });
 
-// ── Sector color system (primary / secondary / accent-name) ───────────────────
-// The 5 rows marked "live" are the exact hex values from the v5 pipeline doc;
-// the rest extend the same keyword-detection heuristic this repo already used,
-// restyled into the primary/secondary pairing (approximate — adjust if a more
-// complete table becomes available).
-interface SectorColors { sectorName: string; primary: string; secondary: string; accentName: string; }
-const SECTOR_TABLE: Record<string, SectorColors> = {
-  logistics:    { sectorName: 'Logistics & Supply Chain',       primary: '#0A84FF', secondary: '#38BDF8', accentName: 'Electric Blue' }, // live
-  healthcare:   { sectorName: 'Healthcare & Pharma',             primary: '#00BFA5', secondary: '#2DD4BF', accentName: 'Teal' },          // live
-  fintech:      { sectorName: 'Fintech & Financial Services',    primary: '#DC143C', secondary: '#FB7185', accentName: 'Crimson' },       // live
-  technology:   { sectorName: 'Technology',                      primary: '#8B5CF6', secondary: '#A78BFA', accentName: 'Violet' },        // live
-  energy:       { sectorName: 'Energy & Power',                  primary: '#10B981', secondary: '#34D399', accentName: 'Emerald' },       // live
-  agriculture:  { sectorName: 'Food & Agriculture',               primary: '#16A34A', secondary: '#4ADE80', accentName: 'Green' },
-  automotive:   { sectorName: 'Automotive & Mobility',            primary: '#EA580C', secondary: '#FB923C', accentName: 'Orange' },
-  retail:       { sectorName: 'Retail & Consumer',                primary: '#DB2777', secondary: '#F472B6', accentName: 'Pink' },
-  education:    { sectorName: 'Education & Training',             primary: '#4F46E5', secondary: '#818CF8', accentName: 'Indigo' },
-  construction: { sectorName: 'Real Estate & Construction',       primary: '#B45309', secondary: '#FBBF24', accentName: 'Amber' },
-  default:      { sectorName: 'Market Intelligence',              primary: '#CC2222', secondary: '#EF4444', accentName: 'Red' },          // live
-};
+// ── Image prompt 1 — research-heavy, structured "canvas architecture" layout.
+// User-supplied verbatim (2026-08-04), just with [INSERT MARKET TITLE] /
+// [INSERT EXACT REPORT URL] swapped for the real values. Self-contained: does
+// its own research, color selection, and layout — no local sector/color logic
+// needed anymore.
+function imagePrompt1(name: string, reportUrl: string): string {
+  return `Act as a senior market researcher and premium editorial data-visualization designer.
+Your task is to independently research the supplied market, validate its most important statistics, select an industry-appropriate visual identity, and create a production-ready market-intelligence cover image inspired by the supplied reference image.
+USER INPUT
+Market/Report Title: "${name}"
+Primary Report URL: "${reportUrl}"
+Reference Image: "https://lh3.googleusercontent.com/d/13G9f9b25YxH3UUniIzHYaBBK3zPo3Dzf"
+Current Year: Use the actual current year.
+Do not ask the user to supply market values, CAGR, forecast figures, statistics, colors, or visual concepts. Research and select them yourself.
+PHASE 1: MARKET RESEARCH
+Before generating the image, search the internet and verify the market information.
+Research in this priority order:
+Open and analyze the exact Primary Report URL.
+Use official government departments, regulators, statistical agencies, and ministries.
+Use recognized multilateral organizations such as the World Bank, WHO, OECD, IEA, ITU, FAO, UN agencies, or regional authorities where relevant.
+Use credible industry associations, public company filings, and authoritative sector publications.
+Avoid using competing market-research-company pages when the supplied report or official sources provide the required data.
+Find and validate the following:
+Correct market name and geographic scope
+Base year
+Base-year market value
+Forecast year
+Forecast market value
+Forecast CAGR
+Leading product, technology, application, channel, or segment
+One verified market-share or adoption statistic
+Two or three additional quantitative market indicators
+One important qualitative trend if a reliable numerical statistic is unavailable
+Possible supporting indicators include:
+Unit shipments
+User or subscriber count
+Online channel share
+Production volume
+Installed capacity
+Average selling price
+Technology adoption
+Import or export value
+Regulatory target
+Infrastructure coverage
+Premium-product adoption
+Digital penetration
+Regional contribution
+DATA-VALIDATION RULES
+Never fabricate a market value, CAGR, percentage, year, unit, currency, or forecast.
+Never mix global data with country- or region-specific data.
+Never mix adjacent markets unless the distinction is clearly disclosed.
+Keep market definitions, geography, currency, base year, and forecast period consistent.
+Give priority to the exact supplied report when credible sources show different market estimates.
+Recalculate the CAGR when base and forecast values are available:
+CAGR = ((Forecast Value ÷ Base Value) ^ (1 ÷ Number of Years) − 1) × 100
+If the recalculated CAGR materially conflicts with the published CAGR, use the published figure only when the report clearly defines a different forecast period.
+Do not create intermediate annual market values unless they are published by a source.
+If only the base and forecast values are available, label only those two endpoints on the chart.
+Do not present estimated or interpolated values as published facts.
+If a reliable market valuation cannot be found, use verified adoption, shipment, capacity, penetration, or regulatory statistics instead.
+When reliable numerical data is unavailable, use concise qualitative language rather than inventing a number.
+RESEARCH OUTPUT
+Before generating the image, provide a concise validation table containing:
+Metric
+Selected value
+Year
+Source name
+Direct source URL
+Keep this research table outside the image. Do not display source URLs or citations inside the final cover.
+PHASE 2: INDUSTRY AND COLOR SELECTION
+Identify the market's primary industry and select the color palette yourself.
+Choose one dominant accent color and one supporting accent color that match the industry's visual language.
+Suggested direction:
+Healthcare, medical devices, pharmaceuticals: crimson, medical red, cyan, or clinical blue
+Banking, fintech, insurance: electric blue, violet, cyan, or deep emerald
+Renewable energy and sustainability: emerald, teal, or clean green
+Oil, gas, mining, and heavy industry: amber, copper, orange, or steel blue
+Automotive and mobility: electric blue, orange, or metallic cyan
+Consumer electronics, ICT, and software: violet, indigo, blue, or neon cyan
+Food, agriculture, and natural products: green, olive, gold, or warm amber
+Logistics, warehousing, and supply chain: navy, cyan, teal, or orange
+Construction and infrastructure: amber, safety orange, yellow, or steel blue
+Luxury, beauty, hospitality, and travel: magenta, burgundy, gold, or rose
+Aerospace and defense: steel blue, graphite, cyan, or restrained red
+Education and professional services: blue, indigo, or turquoise
+These are guidelines, not fixed assignments. Select the palette that best represents the specific market.
+Color requirements:
+State the selected industry and hexadecimal color codes in the research summary.
+Use a dark near-black background.
+Maintain strong contrast between text and background.
+Use the dominant accent for figures, chart lines, icons, and highlights.
+Use the supporting accent sparingly for depth.
+Avoid oversaturation and excessive neon effects.
+Do not automatically use purple for every market.
+PHASE 3: IMAGE GENERATION
+Create a premium 16:9 landscape market-intelligence cover.
+Generate at 2048×1152 pixels in high quality. The composition must remain suitable for export at 1920×1080.
+VISUAL STANDARD
+The cover should resemble a sophisticated editorial intelligence visual from Bloomberg Intelligence, Bain, McKinsey, or a premium financial publication.
+It must feel:
+Authoritative
+Data-driven
+Cinematic
+Contemporary
+Photorealistic
+Executive-grade
+Suitable for LinkedIn, report promotion, and corporate publishing
+Use the reference image only as structural inspiration. Do not copy its products, text, statistics, map, branding, or exact design.
+CANVAS ARCHITECTURE
+Left information zone: approximately 38–42%.
+Center and right hero zone: approximately 58–62%.
+Maintain a minimum 6% safe margin on every side.
+Create a clear reading sequence:
+Market title
+Base-year valuation
+CAGR and forecast
+Supporting market insight
+Hero visual
+Forecast chart
+Bottom indicator panel
+BACKGROUND
+Use a cinematic dark gradient built from near-black, charcoal, and the selected industry colors.
+Add:
+Subtle atmospheric haze
+Restrained volumetric lighting
+Fine digital texture
+Soft reflections
+Faint analytical gridlines
+A low-opacity map or geographic outline representing the market region
+The geographic map must remain subtle and must not interfere with the title.
+TITLE AREA
+Render the researched market title EXACTLY.
+Use a bold premium geometric sans-serif typeface.
+Display the title across two to four balanced lines.
+Typography treatment:
+Geographic region or country in white
+Primary market keywords in the dominant accent color
+Strong contrast
+Clean spacing
+No awkward word breaks
+No text touching the canvas edges
+Add a short horizontal accent line beneath the title.
+PRIMARY VALUATION
+Display:
+"[VERIFIED BASE-YEAR MARKET VALUE]"
 
-function detectSector(name: string, explicitSector = ''): SectorColors {
-  const requested = explicitSector.trim().toLowerCase();
-  if (requested && SECTOR_TABLE[requested]) return SECTOR_TABLE[requested];
+"([BASE YEAR])"
+Make the market value the most prominent numerical element on the left.
+Use white for the currency and the dominant accent color for the numerical value.
+CAGR AND FORECAST
+Add a clean growth icon and display:
+"[VERIFIED CAGR]% CAGR"
 
-  const n = name.toLowerCase();
-  if (/logistics|courier|freight|supply chain|cold storage|warehouse|shipping/.test(n)) return SECTOR_TABLE.logistics;
-  if (/pharma|healthcare|medical|hospital|clinical|diagnostic|biotech|ai in health/.test(n)) return SECTOR_TABLE.healthcare;
-  if (/fintech|payment|banking|insurance|lending|financial|investment/.test(n)) return SECTOR_TABLE.fintech;
-  if (/technology|software|saas|ai|cloud|data|digital|cyber|iot|semiconductor/.test(n)) return SECTOR_TABLE.technology;
-  if (/energy|power|solar|wind|renewable|oil|gas|petroleum|electricity/.test(n)) return SECTOR_TABLE.energy;
-  if (/food|agriculture|agricultural|surfactant|edible|dairy|beverage|crop|grain|organic|meat/.test(n)) return SECTOR_TABLE.agriculture;
-  if (/automotive|car|vehicle|ev|electric|bus|motor|tire|rental/.test(n)) return SECTOR_TABLE.automotive;
-  if (/retail|consumer|fashion|cosmetic|luxury|apparel|ecommerce/.test(n)) return SECTOR_TABLE.retail;
-  if (/education|training|university|learning|academic|school/.test(n)) return SECTOR_TABLE.education;
-  if (/real estate|construction|housing|property|building|infrastructure/.test(n)) return SECTOR_TABLE.construction;
-  return SECTOR_TABLE.default;
+"to [VERIFIED FORECAST VALUE] by [FORECAST YEAR]"
+Highlight the CAGR and forecast value with the dominant accent color. Keep supporting text white.
+If the CAGR or forecast value cannot be verified, remove this block and replace it with a verified market indicator.
+SECONDARY MARKET INSIGHT
+Display one concise, verified insight such as:
+"Online channel share rising to [VALUE]% by [YEAR]"
+or:
+"[SEGMENT] accounts for [VALUE]% of demand"
+or another relevant verified indicator.
+Use one simple sector-relevant outline icon.
+Keep this insight under 12 words wherever possible.
+HERO VISUAL
+Independently determine the most relevant hero scene for the market.
+Show two to four high-quality visual elements representing the market ecosystem.
+Examples:
+Products or equipment
+Relevant infrastructure
+Digital devices and interfaces
+Industrial machinery
+Healthcare technology
+Vehicles and mobility systems
+Renewable-energy infrastructure
+Consumer goods
+Agricultural environments
+Logistics facilities
+Place the primary hero object near the center-right. Use smaller supporting objects to create depth and market context.
+Hero requirements:
+Photorealistic
+Generic and unbranded
+Realistic materials and proportions
+Cinematic rim lighting
+Controlled depth of field
+Subtle reflections
+Industry-relevant environment
+No copied commercial-product design
+DATA-VISUALIZATION LAYER
+Integrate a premium upward-trending line or area chart in the upper-right background.
+Chart requirements:
+Use the selected dominant accent color.
+Include a subtle glow.
+Use restrained gridlines.
+Include circular markers only when meaningful.
+Keep the chart visually behind the hero subject.
+Do not let the chart cross through important text.
+Label only verified values.
+If only base and forecast values are known, show only those endpoint labels.
+Never invent intermediate annual figures.
+At the final data point, display:
+"[VERIFIED FORECAST VALUE]"
+
+"[FORECAST YEAR]"
+If no reliable forecast value exists, use a qualitative trend visualization without numerical labels.
+BOTTOM INTELLIGENCE PANEL
+Add a semi-transparent dark glass panel across the lower-left or lower-middle area.
+Panel styling:
+Rounded corners
+Thin border using the dominant accent
+Subtle internal glow
+Clean vertical dividers
+High text contrast
+Include a maximum of three verified indicators.
+Recommended structure:
+Indicator 1:
+
+"[SHORT LABEL]"
+
+"[CURRENT VALUE] → [FORECAST VALUE]"
+Indicator 2:
+
+"[SHORT LABEL]"
+
+"[CURRENT VALUE] → [FORECAST VALUE]"
+Indicator 3:
+
+"[SHORT LABEL]"
+
+"[VERIFIED VALUE OR SHORT TREND]"
+Use a simple outline icon for each indicator.
+Do not use paragraphs, citations, disclaimers, or tiny typography inside this panel.
+TEXT-CONTROL RULES
+Render only the approved title and verified data selected during research.
+Preserve spelling, currency, decimals, units, percentages, and years exactly.
+Do not paraphrase the report title.
+Do not add random text.
+Do not repeat a statistic unnecessarily.
+Do not invent company names.
+Keep text short enough to remain readable on mobile devices.
+Use no more than approximately 65–75 words across the entire cover.
+Prefer three accurate statistics over many unreadable statistics.
+BRANDING RESTRICTIONS
+No Ken Research name unless explicitly requested
+No company names
+No logos
+No monograms
+No trademarks
+No watermarks
+No branded products
+No copied user interfaces
+No competitor branding
+FINAL QUALITY CONTROL
+After generating the image, inspect it carefully.
+Verify:
+The market title is spelled correctly.
+The geographic region is correct.
+All figures match the research table.
+Currency units are correct.
+CAGR and forecast years are correct.
+No fabricated values appear.
+Text is legible and correctly placed.
+No text is clipped.
+No random characters appear.
+No logo or brand name appears.
+The map matches the market geography.
+The color palette suits the industry.
+The hero visual accurately represents the market.
+The layout remains readable at LinkedIn-feed size.
+The chart does not imply unsupported annual figures.
+If any title, number, percentage, unit, or year is incorrect or unreadable, repair or regenerate the image before presenting the final result.
+NEGATIVE PROMPT
+No fabricated statistics, incorrect market values, conflicting forecast years, fake citations, competitor data presented as primary data, random text, spelling mistakes, tiny paragraphs, clipped typography, duplicate objects, distorted products, inaccurate maps, irrelevant hero visuals, logos, company names, trademarks, watermarks, cluttered dashboards, excessive neon, oversaturated colors, cartoon graphics, cheap stock-photo aesthetics, low resolution, weak contrast, or generic template appearance.
+FINAL RESPONSE
+Return:
+The research validation table with direct source links.
+The identified industry.
+The selected dominant and supporting colors with hexadecimal codes.
+The completed 16:9 cover image.
+Do not stop after research. Proceed directly to image generation once the selected statistics have been validated.`;
 }
 
-/**
- * Instruction (not a pre-written scene) telling ChatGPT to invent the visual
- * itself based on what the market actually is. A hardcoded keyword→scene
- * lookup table was tried here before and consistently failed for anything
- * outside ~10 categories — e.g. "Sour Milk Drinks Market" matched none of the
- * keywords (not even the food/agriculture pattern, which only checked for
- * "food|agriculture|crop|grain") and silently fell back to a generic
- * "corporate boardroom with people" image that had nothing to do with the
- * topic. ChatGPT already knows what any given market actually involves —
- * asking it to reason about that directly is more robust than any keyword
- * list could ever be, and scales to markets no one anticipated.
- */
-function sceneInstruction(name: string): string {
-  return `Think about what "${name}" actually is and what its real-world products, equipment, facilities, or processes look like — then invent 4-6 SPECIFIC, RELEVANT visual elements for a scene built entirely from that. Do NOT default to a generic corporate boardroom, meeting room, or people in suits sitting around a table — that has nothing to do with any specific market and must be avoided. The scene must be immediately recognizable as belonging to THIS exact market, not a generic "business intelligence" placeholder.`;
+// ── Image prompt 2 — immersive editorial/cinematic layout, single continuous
+// scene rather than a structured left/right split. User-supplied verbatim
+// (2026-08-04), same placeholder substitution as prompt 1.
+function imagePrompt2(name: string, reportUrl: string): string {
+  return `Act as an elite market-intelligence researcher, creative director, and editorial data-visualization designer.
+Create one visually striking, production-ready 16:9 market-intelligence cover for:
+MARKET TITLE: "${name}"
+REPORT URL: "${reportUrl}"
+REFERENCE STYLE: Use this image only as a benchmark for premium quality and data-rich storytelling—not as a layout that must be copied:
+https://lh3.googleusercontent.com/d/13G9f9b25YxH3UUniIzHYaBBK3zPo3Dzf
+Complete the research, creative direction, color selection, composition, and image generation as one continuous task. Do not stop to present a research table, design plan, or intermediate output. Proceed directly to the finished image.
+RESEARCH AND DATA ACCURACY
+First, privately research the market using the supplied report URL as the primary source.
+Identify:
+Correct market title and geographic scope
+Most recent reliable market value
+Valuation year
+Forecast market value
+Forecast year
+CAGR
+One leading segment, channel, technology, or application
+Two additional high-value quantitative market indicators
+If information is missing from the report page, search reliable government sources, regulators, statistical agencies, international organizations, industry associations, and authoritative sector publications.
+Do not use conflicting estimates from competitor market-research firms when the supplied report contains the required information.
+Never fabricate a value, CAGR, percentage, currency, year, segment share, shipment figure, or forecast.
+Do not combine statistics from different geographies or adjacent markets.
+If a reliable figure cannot be verified, omit it and use a concise qualitative market trend instead.
+Use no more than five major statistics in the image. Prioritize accuracy, relevance, and visual impact over information volume.
+AUTONOMOUS CREATIVE DIRECTION
+Identify the industry and independently choose the most appropriate visual language, hero subject, environment, lighting style, data-visualization treatment, and color palette.
+Choose:
+One dominant industry-appropriate accent color
+One complementary supporting color
+A dark cinematic background family
+A high-contrast neutral color for typography
+Do not automatically use purple, red, or blue for every market.
+The selected palette should feel psychologically and commercially appropriate for the industry:
+Healthcare should feel clinical, trusted, advanced, and human
+Technology should feel intelligent, connected, and futuristic
+Finance should feel secure, precise, and premium
+Renewable energy should feel clean, progressive, and sustainable
+Industrial markets should feel powerful, engineered, and operational
+Consumer markets should feel desirable, contemporary, and energetic
+Luxury markets should feel refined, exclusive, and editorial
+Logistics should feel connected, efficient, and infrastructure-led
+Agriculture should feel natural, productive, and innovation-driven
+Automotive should feel dynamic, engineered, and performance-oriented
+VISUAL CONCEPT
+Create one cohesive full-bleed editorial scene—not a rigid split-screen template and not a collection of disconnected infographic boxes.
+The composition should feel immersive and cinematic, with natural visual flow across the entire canvas.
+Use an asymmetrical editorial layout that adapts to the market:
+Position the market title within clean negative space.
+Make the industry hero visual the central storytelling element.
+Integrate statistics into the environment instead of placing everything inside a fixed dashboard.
+Allow selected objects, charts, lighting effects, and data signals to visually connect different parts of the composition.
+Maintain balance without creating an obvious 50/50 division.
+Avoid repetitive "text on the left, product on the right" execution when a more compelling composition is possible.
+HERO SCENE
+Create a photorealistic hero scene that immediately communicates the market.
+Select the most meaningful combination of:
+Products
+Technology
+Infrastructure
+Equipment
+Professional users
+Digital interfaces
+Geographic context
+Industrial environments
+Consumer-use scenarios
+Supply-chain elements
+Use one dominant focal subject supported by two or three secondary elements.
+The primary subject should have:
+Realistic scale and proportions
+Premium material detail
+Cinematic rim lighting
+Natural reflections
+Controlled depth of field
+Strong silhouette
+Clear separation from the background
+Build depth using foreground, middle-ground, and background layers.
+Add restrained atmospheric elements where appropriate:
+Volumetric light
+Soft haze
+Reflections
+Subtle particles
+Network signals
+Energy trails
+Data streams
+Environmental texture
+Geographic contours
+These effects should enhance the subject rather than make the image excessively futuristic or artificial.
+DATA STORYTELLING
+Integrate data visualization organically into the hero scene.
+The visualization should relate to the industry:
+Technology: network paths, signal waves, connected nodes
+Finance: analytical curves, secure transaction flows, digital grids
+Energy: capacity curves, power flows, infrastructure networks
+Logistics: routes, movement paths, warehouse or port connections
+Healthcare: patient pathways, clinical signals, diagnostic interfaces
+Automotive: mobility routes, telemetry, charging or traffic patterns
+Consumer products: adoption curves, channel growth, product ecosystems
+Industrial markets: production paths, capacity indicators, operational systems
+Use one principal visualization, such as:
+A luminous growth curve
+A restrained area chart
+A geographic data path
+A network visualization
+An adoption trajectory
+A capacity or volume indicator
+Do not add a generic chart simply to fill space.
+Label only verified values. Never invent intermediate annual data points.
+If only the starting and forecast values are available, show only those verified endpoints.
+TYPOGRAPHY AND INFORMATION HIERARCHY
+Render the exact market title prominently and verbatim:
+"${name}"
+Use a premium geometric sans-serif typeface with strong kerning and clean line spacing.
+Break the title into two to four balanced lines. Avoid awkward single-word lines.
+Create a clear hierarchy:
+Market title
+Primary market value
+CAGR and forecast value
+One high-impact market insight
+Up to two supporting indicators
+Make the market value the strongest numerical element.
+Suggested data treatment:
+"[VERIFIED MARKET VALUE]"
+
+"[VALUATION YEAR]"
+"[VERIFIED CAGR]% CAGR"
+
+"to [VERIFIED FORECAST VALUE] by [FORECAST YEAR]"
+All text must be short, bold, high-contrast, and readable at LinkedIn-feed size.
+Render every required text element exactly once.
+Do not display source URLs, citations, methodology, paragraphs, or disclaimers inside the image.
+INTEGRATED STATISTIC CALLOUTS
+Display supporting statistics as elegant editorial callouts integrated into available negative space.
+They may appear as:
+Minimal floating glass capsules
+Large standalone numbers
+Fine-line annotations
+Labels connected to relevant objects
+Geographic data markers
+Subtle translucent overlays
+Do not create a large bottom dashboard.
+Do not place all statistics inside identical boxes.
+Use no more than three supporting callouts. Each should contain a short label and one meaningful value.
+PREMIUM ART DIRECTION
+The final image should feel comparable to a high-end Bloomberg Intelligence feature, global consulting publication, institutional-investor presentation, or premium technology campaign.
+Aim for:
+Strong visual tension
+Clear focal hierarchy
+Sophisticated asymmetry
+Photorealistic materials
+Rich but controlled contrast
+Elegant negative space
+Cinematic lighting
+Editorial restraint
+Modern data storytelling
+Premium commercial finish
+The cover must remain visually engaging even when viewed without reading every statistic.
+OUTPUT REQUIREMENTS
+16:9 landscape
+1920×1080 pixels
+High-resolution rendering
+Sharp, legible typography
+Minimum 6% safe margin
+No clipped text
+No important elements touching the edges
+Suitable for LinkedIn, blogs, report pages, PR distribution, and social media
+STRICT RESTRICTIONS
+No fabricated statistics
+No incorrect currencies or years
+No competitor market-research figures presented as primary data
+No logos
+No Ken Research branding unless explicitly requested
+No company names
+No trademarks
+No branded products
+No watermarks
+No random decorative words
+No stock-photo collage
+No rigid corporate-template appearance
+No large bottom dashboard
+No excessive infographic boxes
+No crowded composition
+No excessive neon
+No cartoon or illustration style
+No distorted products, people, machinery, or infrastructure
+No meaningless futuristic holograms
+No repeated title or statistics
+No unreadable microtext
+FINAL SELF-CHECK
+Before delivering the image, visually inspect it and confirm:
+The title is spelled exactly as supplied.
+The market geography is correct.
+Every displayed statistic is verified.
+Currency, units, decimals, percentages, and years are accurate.
+The colors appropriately represent the industry.
+The hero scene clearly communicates the market.
+The statistics feel integrated into the visual story.
+The image does not resemble a rigid split-screen template.
+The composition remains clear at thumbnail size.
+No random text, logo, brand name, or watermark appears.
+No text is clipped, duplicated, misspelled, or unreadable.
+If any text, number, year, currency, or layout element is incorrect, repair the image before delivering the final result.
+Return only the completed market-intelligence cover image. Do not provide the research process, source table, explanation, or design rationale.`;
 }
 
-function buildImagePrompt(name: string, size: string, cagrVal: string, forecastVal: string, country: string, reportUrl: string, explicitSector = ''): string {
-  const currentYear = new Date().getFullYear();
-  const forecastYear = currentYear + 5;
-  const sector = detectSector(name, explicitSector);
-  const scene = sceneInstruction(name);
-
-  // If we already have real numbers (from the row/sheet), hand them over as fact —
-  // no need for GPT to re-research those specific fields. Anything missing, GPT
-  // must research itself (via the report URL if given, else a live web search) —
-  // never invent figures.
-  const knownFacts = [
-    size && `Market Size: ${size} (${currentYear})`,
-    cagrVal && `CAGR: ${cagrVal}`,
-    forecastVal && `Forecast: ${forecastVal}`,
-  ].filter(Boolean).join('\n');
-
-  const researchBlock = reportUrl
-    ? `STEP 1 — RESEARCH (do this before designing anything):
-Visit ${reportUrl} and read it. Extract the REAL, current figures for this market:
-- Market size (with currency and year)
-- CAGR / growth rate
-- Forecast value and year
-- 2 more concrete, specific stats: one regulatory/policy figure, one demand-driver or segment/technology figure — each with an actual number.
-${knownFacts ? `\nAlready confirmed (use these, don't override):\n${knownFacts}\n` : ''}
-Use ONLY real figures found on that page (or, if the page doesn't have enough detail, from a quick web search on "${name} market size CAGR forecast"). Do NOT fabricate or estimate numbers — if a specific figure truly cannot be found, use a general qualitative phrase instead of a fake number for that one line only.
-
-STEP 2 — DESIGN
-`
-    : `STEP 1 — RESEARCH (do this before designing anything):
-${knownFacts
-        ? `Use these confirmed figures:\n${knownFacts}\nResearch 2 more concrete, real stats for "${name}" (one regulatory/policy figure, one demand-driver or segment/technology figure, each with an actual number) via a quick web search.`
-        : `No source URL was provided. Research real, current figures for "${name}" via a quick web search: market size (currency + year), CAGR, forecast value/year, plus 2 more concrete stats (regulatory/policy, demand-driver or segment). Do NOT fabricate or estimate — use only what you actually find.`}
-
-STEP 2 — DESIGN
-`;
-
-  return `MASTER UNIVERSAL HORIZONTAL MARKET INTELLIGENCE COVER IMAGE PROMPT v5
-
-ROLE
-You are a world-class editorial visual designer, Bloomberg Intelligence art director, McKinsey report designer, and market intelligence cover specialist.
-
-${researchBlock}
-MARKET DETAILS TO VISUALIZE
-Market: ${name}
-Market Size: [from your research above — real figure + year]
-Country: ${country || 'Global'}
-Sector: ${sector.sectorName}
-Forecast: Through ${forecastYear}
-
-KEY MARKET STATISTICS (use the real figures from your research — render them as short punchy labels, not full sentences):
-• [market size + CAGR + forecast value, from research]
-• [the regulatory/policy stat, from research]
-• [the demand-driver stat, from research]
-• [the segment/technology stat, from research]
-
-LEFT SIDE (35-45%): Information Hierarchy
-• ${name}
-• [market size figure + year, from research]
-• [shortest, punchiest stat from research — 8-10 words max]
-• [second short stat from research — 8-10 words max]
-
-RIGHT SIDE (55-65%): Visual Scene
-${scene}
-Render this as ONE cohesive photographic/illustrative scene — NOT a dashboard of separate boxed panels, charts, or stat cards. At most one subtle data-visualization overlay (a single chart or map, low-opacity, blended into the scene) is allowed; do not add more than that, and never stack multiple small panels with their own numbers and labels next to each other — that reads as cluttered and small text inside those panels reliably renders as illegible garbage.
-
-INDUSTRY COLOR SYSTEM (${sector.sectorName})
-Primary: ${sector.primary} (${sector.accentName} dominant tone)
-Secondary: ${sector.secondary} (${sector.accentName} lighter accent)
-Accent: ${sector.secondary} (highlight / data-point color)
-
-TEXT TO DISPLAY
-(same 4 lines as the LEFT SIDE section above — the real market size and the two short stats from your research)
-
-ABSOLUTE RULES — NON-NEGOTIABLE:
-• NO Ken Research branding, text, watermarks, logos anywhere on the image
-• NO company names, firm names, brand identifiers of any kind
-• NO cartoonish or stock-photo aesthetic — premium editorial quality only
-• NO dense data tables — use flowing infographic elements
-• Image dimensions: 1672 x 941 pixels (16:9 horizontal)
-• Style: Bloomberg Intelligence / McKinsey editorial — sophisticated, data-forward, professional
-
-FINAL OUTPUT
-Generate ONE premium horizontal market intelligence cover image for ${name} showing ${sector.sectorName.toLowerCase()} market momentum through ${forecastYear}.`;
+function buildImagePrompt(name: string, reportUrl: string, promptChoice: string): string {
+  return promptChoice === '2' ? imagePrompt2(name, reportUrl) : imagePrompt1(name, reportUrl);
 }
 
 // ── Multi-selector image finder (polls every 2s, up to 9 min) ─────────────────
@@ -276,7 +630,7 @@ async function uploadToImageKit(imageBuffer: Buffer, publicId: string): Promise<
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
-  const prompt = buildImagePrompt(marketName, marketSize, cagr, forecast, countryArg, reportUrl, sectorArg);
+  const prompt = buildImagePrompt(marketName, reportUrl, imagePromptChoice);
   console.error(`[generate_image] Starting for: ${marketName}`);
 
   const context = await chromium.launchPersistentContext(CHATGPT_PROFILE, {

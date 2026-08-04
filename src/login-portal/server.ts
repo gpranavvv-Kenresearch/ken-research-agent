@@ -233,13 +233,14 @@ app.post('/api/agent/:agent/generate-blogs', requireAgentToken, (req: Request, r
   const count = Math.max(1, Math.min(20, Number(req.body?.count) || 1));
   const format = String(req.body?.format || '').trim();   // optional batch override
   const sample = String(req.body?.sample || '').trim();    // optional custom sample HTML
+  const imagePrompt = String(req.body?.imagePrompt || '1').trim() === '2' ? '2' : '1'; // which cover-image prompt (1 or 2)
   if (generating.has(agent)) {
     res.status(409).json({ error: 'a generation is already running for this agent — wait for it to finish' });
     return;
   }
   generating.add(agent);
 
-  const args = ['tsx', 'scripts/run-blog-generator.ts', '--name', agent, '--limit', String(count)];
+  const args = ['tsx', 'scripts/run-blog-generator.ts', '--name', agent, '--limit', String(count), '--image-prompt', imagePrompt];
   if (format) args.push('--format-override', format);
   let sampleTmp = '';
   if (sample) {
