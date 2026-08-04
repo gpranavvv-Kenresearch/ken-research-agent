@@ -44,11 +44,32 @@ export function fleetNickname(agent: string, index: number): string {
   return `${agent.toLowerCase()} ${index}`;
 }
 
+/**
+ * Chrome's own multi-profile switcher — a login session can legitimately end
+ * up in "Profile 1" (or any other slot) instead of "Default", and Chrome's
+ * own "Local State" file (in the user-data-dir root) records which one it
+ * actually considers active via `profile.last_used`. Confirmed live: a real,
+ * working sameeksha X login had `auth_token` sitting in "Profile 1" — the
+ * status check hardcoded to "Default" reported it as logged out even though
+ * the account was genuinely, currently logged in (and posting would have
+ * worked fine, since launchPersistentContext just opens whatever profile
+ * Chrome itself considers active).
+ */
+function activeProfileSubdir(dir: string): string {
+  try {
+    const localState = JSON.parse(fs.readFileSync(path.join(dir, 'Local State'), 'utf-8'));
+    const lastUsed = localState?.profile?.last_used;
+    if (lastUsed && fs.existsSync(path.join(dir, lastUsed))) return lastUsed;
+  } catch { /* no Local State yet, or unreadable — fall through to Default */ }
+  return 'Default';
+}
+
 /** Locate the Chrome Cookies SQLite DB inside a profile dir (newer path first). */
 function cookiesDbPath(dir: string): string | null {
+  const profile = activeProfileSubdir(dir);
   const candidates = [
-    path.join(dir, 'Default', 'Network', 'Cookies'),
-    path.join(dir, 'Default', 'Cookies'),
+    path.join(dir, profile, 'Network', 'Cookies'),
+    path.join(dir, profile, 'Cookies'),
   ];
   return candidates.find(fs.existsSync) || null;
 }
