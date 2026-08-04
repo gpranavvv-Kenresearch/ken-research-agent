@@ -619,10 +619,40 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
       )}
 
       {modal && <LoginOverlay modal={modal} onDone={finishLogin} />}
-      {showGen && <GenerateModal agentId={agentId} busy={genBusy} onClose={() => setShowGen(false)} onSubmit={submitGenerate} />}
-      {showPostCounts && <PostCountsModal busy={postCycleBusy} onClose={() => setShowPostCounts(false)} onSubmit={submitPostCounts} />}
+      {showGen && <GenerateModal agentId={agentId} token={token} busy={genBusy} onClose={() => setShowGen(false)} onSubmit={submitGenerate} />}
+      {showPostCounts && <PostCountsModal agentId={agentId} token={token} busy={postCycleBusy} onClose={() => setShowPostCounts(false)} onSubmit={submitPostCounts} />}
     </div>
   );
+}
+
+interface QueueStatus {
+  running: { agent: string; startedAt: number }[];
+  waiting: { agent: string; joinedAt: number; position: number }[];
+  capacity: number;
+  etaMs: number;
+}
+
+/** Polls the box-wide job queue (blog-gen / post-cycle) so a modal can warn before submit, not just after. */
+function useQueueStatus(agentId: string, token: string | null, category: string): QueueStatus | null {
+  const [status, setStatus] = useState<QueueStatus | null>(null);
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    const poll = () => {
+      fetch(`/api/agent/${agentId}/queue-status/${category}`, { headers: { 'X-Agent-Token': token } })
+        .then((r) => r.json())
+        .then((d) => { if (!cancelled) setStatus(d); })
+        .catch(() => { /* keep last known status */ });
+    };
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [agentId, token, category]);
+  return status;
+}
+
+function otherAgents(status: QueueStatus, self: string): string[] {
+  return status.running.map((r) => r.agent).filter((a) => a !== self);
 }
 
 const GEN_FORMATS = [
@@ -632,9 +662,10 @@ const GEN_FORMATS = [
 ];
 
 function GenerateModal({
-  agentId, busy, onClose, onSubmit,
+  agentId, token, busy, onClose, onSubmit,
 }: {
   agentId: string;
+  token: string | null;
   busy: boolean;
   onClose: () => void;
   onSubmit: (count: number, format: string, sample: string, imagePrompt: string, force: boolean) => void;
@@ -645,6 +676,7 @@ function GenerateModal({
   const [imagePrompt, setImagePrompt] = useState('1');
   const [force, setForce] = useState(false);
   const [ready, setReady] = useState<number | null>(null); // rows with URL + empty content
+  const queue = useQueueStatus(agentId, token, 'blog-gen');
 
   useEffect(() => {
     fetch(`/api/rows?tab=blog&user=${agentId}`)
@@ -663,6 +695,8 @@ function GenerateModal({
   }, [agentId]);
 
   const overAsking = ready !== null && count > ready;
+  const queueFull = queue !== null && queue.running.length >= queue.capacity;
+  useEffect(() => { if (!queueFull && force) setForce(false); }, [queueFull, force]);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
@@ -755,13 +789,22 @@ function GenerateModal({
         </div>
 
         {/* Queue behavior */}
-        <label className="flex items-start gap-2 mb-4 cursor-pointer">
-          <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)}
-            className="accent-emerald-500 mt-0.5 shrink-0" />
-          <span className="text-xs text-slate-400">
-            Only 2 agents can generate at once — if that&apos;s already full, tick this to <span className="text-white font-medium">skip the queue and run right now anyway</span> (may reduce quality) instead of waiting your turn.
-          </span>
-        </label>
+        {queueFull && queue && (
+          <div className="mb-4 rounded-lg bg-amber-950/40 border border-amber-800/40 px-3 py-2 text-xs text-amber-300">
+            ⏳ {otherAgents(queue, agentId).join(' and ') || 'Someone'} {otherAgents(queue, agentId).length === 1 ? 'is' : 'are'} currently generating blogs.
+            {queue.waiting.length > 0 ? ` ${queue.waiting.length} other${queue.waiting.length === 1 ? '' : 's'} already waiting.` : ''}
+            {' '}You&apos;ll be queued and start automatically once one finishes (~{Math.round((queue.etaMs || 0) / 60000)} min estimated wait) — please wait patiently, or tick below to run right now instead.
+          </div>
+        )}
+        {queueFull && (
+          <label className="flex items-start gap-2 mb-4 cursor-pointer">
+            <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)}
+              className="accent-emerald-500 mt-0.5 shrink-0" />
+            <span className="text-xs text-slate-400">
+              <span className="text-white font-medium">Skip the queue and run right now anyway</span> (may reduce quality) instead of waiting my turn.
+            </span>
+          </label>
+        )}
 
         <div className="flex justify-end gap-2 mt-2">
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white">Cancel</button>
@@ -779,8 +822,10 @@ function GenerateModal({
 }
 
 function PostCountsModal({
-  busy, onClose, onSubmit,
+  agentId, token, busy, onClose, onSubmit,
 }: {
+  agentId: string;
+  token: string | null;
   busy: boolean;
   onClose: () => void;
   onSubmit: (counts: Record<string, number>) => void;
@@ -788,6 +833,8 @@ function PostCountsModal({
   const [counts, setCounts] = useState<Record<string, number>>(
     () => Object.fromEntries(POST_COUNT_PLATFORMS.map((p) => [p.key, 0]))
   );
+  const queue = useQueueStatus(agentId, token, 'post-cycle');
+  const queueFull = queue !== null && queue.running.length >= queue.capacity;
 
   const total = Object.values(counts).reduce((sum, c) => sum + (c > 0 ? c : 0), 0);
 
@@ -806,10 +853,18 @@ function PostCountsModal({
           Leave a platform at 0 to skip it entirely. Runs in rounds — 1 post per platform per round —
           decrementing every round until every count reaches 0, with a 30 min wait between rounds.
         </p>
-        <p className="text-xs text-slate-500 mb-4">
-          Only one agent can post at a time. If someone else is already posting, you&apos;ll be queued
-          automatically and start right after them.
-        </p>
+        {queueFull && queue ? (
+          <div className="mb-4 rounded-lg bg-amber-950/40 border border-amber-800/40 px-3 py-2 text-xs text-amber-300">
+            ⏳ {otherAgents(queue, agentId).join(', ') || 'Someone'} {otherAgents(queue, agentId).length === 1 ? 'is' : 'are'} currently posting.
+            {queue.waiting.length > 0 ? ` ${queue.waiting.length} other${queue.waiting.length === 1 ? '' : 's'} already waiting.` : ''}
+            {' '}You&apos;ll be queued and start automatically once they finish (~{Math.round((queue.etaMs || 0) / 60000)} min estimated wait) — please wait patiently.
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500 mb-4">
+            Only one agent can post at a time. If someone else is already posting, you&apos;ll be queued
+            automatically and start right after them.
+          </p>
+        )}
 
         <div className="grid grid-cols-2 gap-3 mb-4">
           {POST_COUNT_PLATFORMS.map((p) => (

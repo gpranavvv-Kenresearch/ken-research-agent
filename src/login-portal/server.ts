@@ -30,6 +30,7 @@ import { deleteFleetAccount } from './sessionDelete.js';
 import { verifyOrSetPin, mintToken, requireAgentToken } from './agentAuth.js';
 import { startCycle, stopCycle, cycleStatus } from './blogCycle.js';
 import { startPostCycle, stopPostCycle, postCycleStatus } from './postCycle.js';
+import { getQueueStatus, estimateWaitMs, CATEGORIES } from '../utils/jobQueue.js';
 import { proxySummary, rotateProxy } from '../health/proxyPool.js';
 import { checkProxies } from '../health/proxyCheck.js';
 
@@ -279,6 +280,18 @@ app.get('/api/agent/:agent/generate-status', requireAgentToken, (req: Request, r
       .trim().split('\n').filter(Boolean).slice(-12).join('\n');
   } catch { /* no run yet */ }
   res.json({ generating: generating.has(agent), log });
+});
+
+// GET /api/agent/:agent/queue-status/:category — box-wide job-queue snapshot
+// (who's running, who's waiting, capacity) so the dashboard can warn BEFORE
+// someone clicks Generate/Post Now, not just after. `:agent` is only used
+// for auth here — the response covers the whole category, not one agent.
+app.get('/api/agent/:agent/queue-status/:category', requireAgentToken, (req: Request, res: Response) => {
+  const category = req.params.category;
+  if (!CATEGORIES[category]) { res.status(400).json({ error: `unknown category "${category}"` }); return; }
+  const status = getQueueStatus(category);
+  const etaMs = status.running.length >= status.capacity ? estimateWaitMs(category, status.waiting.length + 1) : 0;
+  res.json({ ...status, etaMs });
 });
 
 // POST /api/agent/:agent/blog-cycle/start — begin the continuous loop: generate
