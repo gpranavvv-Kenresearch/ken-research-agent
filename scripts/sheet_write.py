@@ -101,9 +101,17 @@ def _load_json(path: str) -> dict:
 
 
 def _save_json(path: str, data: dict):
-    _ensure_cache_dir()
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f)
+    # Caching is an optimization, not a requirement — a write failure here
+    # (permission issue, disk full, concurrent-writer collision) must never
+    # crash a sheet write. Worst case without it: a slower uncached fetch.
+    try:
+        _ensure_cache_dir()
+        tmp = f"{path}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        os.replace(tmp, path)  # atomic — never leaves a torn/partial cache file
+    except Exception:
+        pass
 
 
 def get_token() -> str:

@@ -123,9 +123,17 @@ def _load_json(path):
 
 
 def _save_json(path, data):
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f)
+    # Caching is an optimization, not a requirement — a write failure here
+    # (permission issue, disk full, concurrent-writer collision) must never
+    # crash a sheet read. Worst case without it: a slower uncached fetch.
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        tmp = f"{path}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        os.replace(tmp, path)  # atomic — never leaves a torn/partial cache file
+    except Exception:
+        pass
 
 
 def get_token():
