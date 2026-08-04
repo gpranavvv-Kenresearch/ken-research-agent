@@ -152,9 +152,9 @@ function generate(row: BlogRow): Promise<{ title: string; description: string; h
 
 /**
  * Generate a cover image via ChatGPT DALL-E 3 (scripts/generate_image.ts), uploaded
- * to ImageKit. Runs on its own dedicated ChatGPT profile (chatgpt-image-profile),
- * separate from generate()'s shared blog-writer profile — so pass() below runs this
- * concurrently with generate() instead of waiting for it to finish first.
+ * to ImageKit. Shares generate()'s ChatGPT profile (one login per agent) — pass()
+ * below runs this BEFORE generate(), not concurrently, since only one process can
+ * hold that profile at a time.
  */
 function generateImage(marketName: string, reportUrl: string, imagePromptChoice: string): Promise<string> {
   return new Promise((resolve) => {
@@ -261,17 +261,19 @@ async function pass() {
       // Row's own "Image Prompt" pick (from the Submit form) wins; falls back to the
       // batch/CLI default so old rows and the agent-page Generate modal still work.
       const imagePromptChoice = String(row['Image Prompt'] || '').trim() || IMAGE_PROMPT;
-      console.log(`\n🖼️  Generating cover image + article in parallel for: "${marketName}"`);
 
-      // Separate ChatGPT profiles (chatgpt-image-profile vs chatgpt-profile) — safe to run together.
-      const [coverImageUrl, res] = await Promise.all([
-        generateImage(marketName, String(row.targetUrl || ''), imagePromptChoice).then((url) => {
-          if (url) { console.log(`✓ Cover image ready: ${url}`); writeCoverImageUrl(row._dataRow, url); }
-          else console.log('⚠ Continuing without a cover image for this row.');
-          return url;
-        }),
-        generate(row),
-      ]);
+      // Image and text generation now share ONE ChatGPT profile (a second logged-in
+      // profile for the same account gets its session killed server-side the moment
+      // it's used — OpenAI's anti-hijack defense, not fixable by copying cookies more
+      // carefully). Chrome also only allows one process per profile dir at a time, so
+      // these must run one after another, not in parallel.
+      console.log(`\n🖼️  Generating cover image for: "${marketName}"`);
+      const coverImageUrl = await generateImage(marketName, String(row.targetUrl || ''), imagePromptChoice).then((url) => {
+        if (url) { console.log(`✓ Cover image ready: ${url}`); writeCoverImageUrl(row._dataRow, url); }
+        else console.log('⚠ Continuing without a cover image for this row.');
+        return url;
+      });
+      const res = await generate(row);
 
       if (res && res.html) {
         const html = injectCoverImage(res.html, coverImageUrl, marketName);

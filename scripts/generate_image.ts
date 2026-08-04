@@ -4,10 +4,13 @@
  * same Lexical-safe composer paste helper (chatgpt_composer.ts) and image-polling
  * logic, adapted to this repo's CLI args and ImageKit upload step.
  *
- * Runs on a SEPARATE ChatGPT profile from the blog-text writer
- * (.sessions-cookies/chatgpt-image-profile/, vs generate_blog_chatgpt.ts's
- * .sessions-cookies/chatgpt-profile/) so image generation can run truly in
- * parallel with text generation — no shared-profile lock contention.
+ * Runs on the SAME ChatGPT profile as the blog-text writer
+ * (.sessions-cookies/chatgpt-profile-{agent}/, shared with generate_blog_chatgpt.ts).
+ * A second profile logged into the same account was tried and doesn't work —
+ * OpenAI invalidates a session the moment it's used from a second browser
+ * fingerprint (same defense LinkedIn applies to li_at). Chrome also only
+ * allows one process per profile directory at a time, so run-blog-generator.ts
+ * runs this AFTER text generation finishes, not concurrently with it.
  *
  * Two selectable, fully self-contained prompts (each does its own market
  * research, color/industry selection, and layout — see imagePrompt1/
@@ -52,14 +55,13 @@ const IMAGEKIT_FOLDER      = '/microblogs';
 
 // ── Paths ─────────────────────────────────────────────────────────────────────
 const SESSIONS_DIR    = path.join(__dirname, '..', '.sessions-cookies');
-// Dedicated profile — deliberately NOT the same one generate_blog_chatgpt.ts uses,
-// so this can run concurrently with blog-text generation without profile-lock conflicts.
-// One profile PER AGENT (not shared team-wide) so two agents can each generate images
-// concurrently too — "abhinav" keeps the original un-suffixed dir name (already logged
-// in there before this became per-agent); every other agent gets its own suffixed dir.
+// Same profile generate_blog_chatgpt.ts uses — one ChatGPT login per agent,
+// shared between text and image generation (see file header for why there's
+// no longer a separate image profile). "abhinav" keeps the original
+// un-suffixed dir name (already logged in there before this became per-agent).
 const CHATGPT_PROFILE = path.join(
   SESSIONS_DIR,
-  !agentArg || agentArg === 'abhinav' ? 'chatgpt-image-profile' : `chatgpt-image-profile-${agentArg}`,
+  !agentArg || agentArg === 'abhinav' ? 'chatgpt-profile' : `chatgpt-profile-${agentArg}`,
 );
 const TMP_DIR          = path.join(__dirname, '..', 'generated_images');
 fs.mkdirSync(CHATGPT_PROFILE, { recursive: true });
