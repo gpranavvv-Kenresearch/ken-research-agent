@@ -69,7 +69,10 @@ function normalizeFormat(raw: string): string {
   return 'seo-li';
 }
 function formatLabel(id: string): string {
-  return ({ 'seo-li': 'Sample 1', 'format2': 'Sample 2', 'testing-demo': 'Sample 3', 'custom': 'your custom sample' } as Record<string, string>)[id] || id;
+  // format2/testing-demo are legacy values from old rows — no longer real
+  // options, but still routed to the master prompt (anything non-'custom'
+  // does) rather than erroring, so just label them the same as Sample 1.
+  return ({ 'custom': 'your custom sample' } as Record<string, string>)[id] || 'Sample 1';
 }
 function looksLikeHtml(s: string): boolean {
   return /<[a-z!][\s\S]*>/i.test(s) && s.length > 60;

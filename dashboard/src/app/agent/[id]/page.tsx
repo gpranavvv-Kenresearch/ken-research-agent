@@ -625,9 +625,7 @@ const IMAGE_PROMPT_OPTIONS = [
 
 const GEN_FORMATS = [
   { id: '', label: 'Use each row\'s Format column', sample: '' },
-  { id: 'seo-li', label: 'Sample 1', sample: '/samples/format-1.html' },
-  { id: 'format2', label: 'Sample 2', sample: '/samples/format-2.html' },
-  { id: 'testing-demo', label: 'Sample 3', sample: '/samples/format-3.html' },
+  { id: 'seo-li', label: 'Sample 1', sample: '' },
   { id: 'custom', label: 'Custom (paste a sample below)', sample: '' },
 ];
 

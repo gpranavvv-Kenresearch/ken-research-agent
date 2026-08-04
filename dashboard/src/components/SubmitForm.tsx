@@ -176,14 +176,6 @@ export default function SubmitForm() {
                     </div>
                     <p className="text-slate-400 text-xs mt-1">{f.desc}</p>
                   </div>
-                  {f.sampleRoute && (
-                    <a href={f.sampleRoute} target="_blank" rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="shrink-0 text-xs text-blue-400 hover:text-blue-300 border border-blue-800/60 hover:border-blue-500 bg-blue-950/30 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
-                    >
-                      See example ↗
-                    </a>
-                  )}
                 </label>
               ))}
             </div>
@@ -333,17 +325,6 @@ export default function SubmitForm() {
                 </div>
                 <p className="text-slate-400 text-xs mt-1">{f.desc}</p>
               </div>
-              {f.sampleRoute && (
-                <a
-                  href={f.sampleRoute}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="shrink-0 text-xs text-blue-400 hover:text-blue-300 border border-blue-800/60 hover:border-blue-500 bg-blue-950/30 px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
-                >
-                  See example ↗
-                </a>
-              )}
             </label>
           ))}
         </div>
