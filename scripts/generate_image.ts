@@ -4,13 +4,18 @@
  * same Lexical-safe composer paste helper (chatgpt_composer.ts) and image-polling
  * logic, adapted to this repo's CLI args and ImageKit upload step.
  *
- * Runs on the SAME ChatGPT profile as the blog-text writer
- * (.sessions-cookies/chatgpt-profile-{agent}/, shared with generate_blog_chatgpt.ts).
- * A second profile logged into the same account was tried and doesn't work —
- * OpenAI invalidates a session the moment it's used from a second browser
- * fingerprint (same defense LinkedIn applies to li_at). Chrome also only
- * allows one process per profile directory at a time, so run-blog-generator.ts
- * runs this AFTER text generation finishes, not concurrently with it.
+ * Profile: uses a DEDICATED chatgpt-image-profile-{agent} if one already
+ * exists on disk (already logged in — the original VPS setup, still true for
+ * abhinav/krishi/sameeksha/sanya/vansh), otherwise falls back to sharing
+ * generate_blog_chatgpt.ts's chatgpt-profile-{agent} (no separate image
+ * login needed — used for any newly-added agent, e.g. local vishal).
+ * A cloned SECOND login for the same account doesn't work — OpenAI
+ * invalidates a session the moment it's used from a second browser
+ * fingerprint (same defense LinkedIn applies to li_at) — so an agent with no
+ * dedicated image profile must fall back to sharing rather than getting a
+ * fresh one via cloning. Chrome also only allows one process per profile
+ * directory at a time, so when sharing, run-blog-generator.ts runs this
+ * AFTER text generation finishes, never concurrently with it.
  *
  * Two selectable, fully self-contained prompts (each does its own market
  * research, color/industry selection, and layout — see imagePrompt1/
@@ -55,14 +60,15 @@ const IMAGEKIT_FOLDER      = '/microblogs';
 
 // ── Paths ─────────────────────────────────────────────────────────────────────
 const SESSIONS_DIR    = path.join(__dirname, '..', '.sessions-cookies');
-// Same profile generate_blog_chatgpt.ts uses — one ChatGPT login per agent,
-// shared between text and image generation (see file header for why there's
-// no longer a separate image profile). "abhinav" keeps the original
-// un-suffixed dir name (already logged in there before this became per-agent).
-const CHATGPT_PROFILE = path.join(
-  SESSIONS_DIR,
-  !agentArg || agentArg === 'abhinav' ? 'chatgpt-profile' : `chatgpt-profile-${agentArg}`,
-);
+const isAbhinav = !agentArg || agentArg === 'abhinav';
+const DEDICATED_IMAGE_PROFILE = path.join(SESSIONS_DIR, isAbhinav ? 'chatgpt-image-profile' : `chatgpt-image-profile-${agentArg}`);
+const SHARED_TEXT_PROFILE     = path.join(SESSIONS_DIR, isAbhinav ? 'chatgpt-profile' : `chatgpt-profile-${agentArg}`);
+// Use the dedicated image profile if it's already logged in (existing VPS
+// agents); otherwise share the text profile rather than requiring — or
+// cloning into — a fresh image login (see file header). run-blog-generator.ts
+// makes the identical disk check (dedicatedImageProfileExists()) before
+// deciding whether it's safe to run image + text generation in parallel.
+const CHATGPT_PROFILE = fs.existsSync(DEDICATED_IMAGE_PROFILE) ? DEDICATED_IMAGE_PROFILE : SHARED_TEXT_PROFILE;
 const TMP_DIR          = path.join(__dirname, '..', 'generated_images');
 fs.mkdirSync(CHATGPT_PROFILE, { recursive: true });
 fs.mkdirSync(TMP_DIR, { recursive: true });

@@ -39,6 +39,17 @@ const FORMAT_OVERRIDE = (arg('--format-override') || '').trim();
 const SAMPLE_OVERRIDE = (arg('--sample-file') || '').trim();
 const IMAGE_PROMPT = (arg('--image-prompt') || '1').trim(); // '1' or '2' — which cover-image prompt to use
 const FORCE = process.argv.includes('--force'); // skip the box-wide generation queue, run a 3rd+ concurrent pass anyway
+
+// Mirrors generate_image.ts's own profile-path check: if this agent already
+// has a dedicated, logged-in chatgpt-image-profile (existing VPS agents),
+// image + text generation each get their own ChatGPT browser and can run in
+// parallel as before. Agents with no dedicated image profile (e.g. local
+// vishal) fall back to generate_image.ts sharing the text profile instead —
+// which only one process can hold at a time, so those two steps must run
+// one after another, not concurrently.
+const isAbhinav = !NAME || NAME === 'abhinav';
+const DEDICATED_IMAGE_PROFILE = path.resolve('.sessions-cookies', isAbhinav ? 'chatgpt-image-profile' : `chatgpt-image-profile-${NAME}`);
+const HAS_DEDICATED_IMAGE_PROFILE = fs.existsSync(DEDICATED_IMAGE_PROFILE);
 // spawn('npx', ...) is unreliable on Windows — npx is a .cmd shim (ENOENT
 // without the extension) and even 'npx.cmd' can throw EINVAL depending on how
 // Windows resolves it. Spawn node directly with the same --import=tsx loader
@@ -152,9 +163,10 @@ function generate(row: BlogRow): Promise<{ title: string; description: string; h
 
 /**
  * Generate a cover image via ChatGPT DALL-E 3 (scripts/generate_image.ts), uploaded
- * to ImageKit. Shares generate()'s ChatGPT profile (one login per agent) — pass()
- * below runs this BEFORE generate(), not concurrently, since only one process can
- * hold that profile at a time.
+ * to ImageKit. Uses this agent's dedicated chatgpt-image-profile if one already
+ * exists (own ChatGPT browser, runs in parallel with generate() below), otherwise
+ * shares generate()'s chatgpt-profile and pass() runs the two sequentially instead
+ * — see HAS_DEDICATED_IMAGE_PROFILE and generate_image.ts's own file header.
  */
 function generateImage(marketName: string, reportUrl: string, imagePromptChoice: string): Promise<string> {
   return new Promise((resolve) => {
@@ -262,18 +274,32 @@ async function pass() {
       // batch/CLI default so old rows and the agent-page Generate modal still work.
       const imagePromptChoice = String(row['Image Prompt'] || '').trim() || IMAGE_PROMPT;
 
-      // Image and text generation now share ONE ChatGPT profile (a second logged-in
-      // profile for the same account gets its session killed server-side the moment
-      // it's used — OpenAI's anti-hijack defense, not fixable by copying cookies more
-      // carefully). Chrome also only allows one process per profile dir at a time, so
-      // these must run one after another, not in parallel.
-      console.log(`\n🖼️  Generating cover image for: "${marketName}"`);
-      const coverImageUrl = await generateImage(marketName, String(row.targetUrl || ''), imagePromptChoice).then((url) => {
+      const withCoverLog = (p: Promise<string>) => p.then((url) => {
         if (url) { console.log(`✓ Cover image ready: ${url}`); writeCoverImageUrl(row._dataRow, url); }
         else console.log('⚠ Continuing without a cover image for this row.');
         return url;
       });
-      const res = await generate(row);
+
+      let coverImageUrl: string;
+      let res: { title: string; description: string; html: string } | null;
+      if (HAS_DEDICATED_IMAGE_PROFILE) {
+        // Separate ChatGPT profiles (chatgpt-image-profile vs chatgpt-profile) — safe to run together.
+        console.log(`\n🖼️  Generating cover image + article in parallel for: "${marketName}"`);
+        [coverImageUrl, res] = await Promise.all([
+          withCoverLog(generateImage(marketName, String(row.targetUrl || ''), imagePromptChoice)),
+          generate(row),
+        ]);
+      } else {
+        // Sharing one ChatGPT profile (no dedicated image login for this agent) — a
+        // second logged-in profile for the same account gets its session killed
+        // server-side the moment it's used (OpenAI's anti-hijack defense, not
+        // fixable by copying cookies more carefully), and Chrome only allows one
+        // process per profile dir at a time either way — so these run one after
+        // another instead.
+        console.log(`\n🖼️  Generating cover image for: "${marketName}"`);
+        coverImageUrl = await withCoverLog(generateImage(marketName, String(row.targetUrl || ''), imagePromptChoice));
+        res = await generate(row);
+      }
 
       if (res && res.html) {
         const html = injectCoverImage(res.html, coverImageUrl, marketName);
