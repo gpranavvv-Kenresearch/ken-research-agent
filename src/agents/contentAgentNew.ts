@@ -12,7 +12,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { SheetRow } from '../sheets/sheets.js';
-import { UTM_PARAMS, injectUTM } from '../utils/utm.js';
+import { UTM_PARAMS, injectUTM, personalizeUtm } from '../utils/utm.js';
 import { callTavily } from '../config/tavilyClient.js';
 
 // ── Tweet history (per URL) ────────────────────────────────────────────────────
@@ -212,7 +212,7 @@ export async function generateTweet(params: {
   marketValue?: string;
   overLimitBy?: number; // if set, tighten the char limit by this amount
 }): Promise<string> {
-  const utmUrl = `${params.url}${UTM_PARAMS.X}`;
+  const utmUrl = `${params.url}${personalizeUtm(UTM_PARAMS.X)}`;
 
   const mv = (params.marketValue ?? '').trim();
   const marketValueLine = mv && mv !== '0' && mv !== 'null'
@@ -332,7 +332,7 @@ export async function generateXThread(params: {
   title: string;
   marketValue?: string;
 }): Promise<string[]> {
-  const utmUrl = `${params.url}${UTM_PARAMS.X}`;
+  const utmUrl = `${params.url}${personalizeUtm(UTM_PARAMS.X)}`;
   const marketData = await fetchMarketData(params.title);
   const mv = (params.marketValue ?? '').trim();
 
@@ -641,7 +641,7 @@ export async function generateFbPost(params: {
   seoRanking: number;
   priority: string;
 }): Promise<string> {
-  const utmUrl = `${params.url}${UTM_PARAMS.Facebook}`;
+  const utmUrl = `${params.url}${personalizeUtm(UTM_PARAMS.Facebook)}`;
   const marketData = await fetchMarketData(params.title);
   const marketDataSection = marketData
     ? `REAL MARKET DATA (from web search — use specific numbers, CAGR, market size, competitors if present):\n${marketData}`
@@ -715,7 +715,7 @@ export async function generateLiPost(params: {
   seoRanking: number;
   priority: string;
 }): Promise<string> {
-  const utmUrl = `${params.url}${UTM_PARAMS.LinkedIn}`;
+  const utmUrl = `${params.url}${personalizeUtm(UTM_PARAMS.LinkedIn)}`;
   const marketData = await fetchMarketData(params.title);
   const marketDataSection = marketData
     ? `REAL MARKET DATA (from web search — use specific numbers, CAGR, market size, top competitors if present):\n${marketData}`

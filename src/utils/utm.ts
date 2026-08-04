@@ -35,6 +35,11 @@ function agentCampaign(): string {
   return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() + 'Automation';
 }
 
+/** Swap the generic "Automation" campaign in a UTM_PARAMS string for the running agent's own. */
+export function personalizeUtm(utmString: string): string {
+  return utmString.replace(/utm_campaign=Automation\b/, `utm_campaign=${agentCampaign()}`);
+}
+
 /**
  * Add UTM parameters to all URLs in text/HTML content
  * Avoids adding if UTM already exists
@@ -43,9 +48,7 @@ export function injectUTM(content: string, utmString: string): string {
   if (!content || !utmString) return content;
 
   // Personalize the campaign for the running agent: utm_campaign=Automation → {Agent}Automation.
-  const utmParams = utmString
-    .replace(/^\?/, '') // strip leading ?
-    .replace(/utm_campaign=Automation\b/, `utm_campaign=${agentCampaign()}`);
+  const utmParams = personalizeUtm(utmString.replace(/^\?/, '')); // strip leading ?
   const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
 
   return content.replace(urlRegex, (match) => {
