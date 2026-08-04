@@ -10,7 +10,8 @@
  *     WORKER_NAME=abhinav npx tsx scripts/run-post-cycle-once.ts
  */
 import fs from 'fs';
-import { runCoordinatorOnce, runCountedPostCycle } from '../src/scheduler-new.js';
+import { runCoordinatorOnce, runCountedPostCycle, writeStatus } from '../src/scheduler-new.js';
+import { acquireJobSlot, estimateWaitMs } from '../src/utils/jobQueue.js';
 
 // Mirror run-blog-generator.ts's pattern: stream progress into a shared log
 // file so the dashboard status endpoint can show live output, not just a
@@ -25,15 +26,34 @@ console.log = (...a: unknown[]) => { const s = a.map(String).join(' '); _origLog
 console.error = (...a: unknown[]) => { const s = a.map(String).join(' '); _origErr(s); toFile(s); };
 
 const STATUS_FILE = process.env.POST_CYCLE_STATUS;
+const WORKER_NAME = process.env.WORKER_NAME || '';
 
 // POST_CYCLE_COUNTS, if set, switches to the counted round-based cycle
 // (per-platform post counts from the dashboard form) instead of the fixed
 // 5-stage sequence — see postCycle.ts's startPostCycle().
 const countsJson = process.env.POST_CYCLE_COUNTS;
-const run = countsJson
-  ? runCountedPostCycle(JSON.parse(countsJson), STATUS_FILE)
-  : runCoordinatorOnce(STATUS_FILE);
 
-run
+async function main() {
+  // Box-wide posting queue — only one agent's cycle actually posts at a
+  // time; everyone else waits their turn (no bypass — posting always
+  // strictly serializes).
+  const releaseQueue = await acquireJobSlot('post-cycle', WORKER_NAME, {
+    onWaiting: (status, position) => {
+      const waitingFor = status.running.map((r) => r.agent);
+      const etaMs = estimateWaitMs('post-cycle', position);
+      console.log(`⏳ Queued for a posting slot — you are #${position}, ${waitingFor.join(', ') || 'someone'} posting now (~${Math.round(etaMs / 60000)} min estimated wait)`);
+      if (STATUS_FILE) writeStatus({ phase: 'queued', position, waitingFor, etaMs }, STATUS_FILE);
+    },
+  });
+  try {
+    await (countsJson
+      ? runCountedPostCycle(JSON.parse(countsJson), STATUS_FILE)
+      : runCoordinatorOnce(STATUS_FILE));
+  } finally {
+    releaseQueue();
+  }
+}
+
+main()
   .then(() => process.exit(0))
   .catch((err) => { console.error(`Post cycle failed: ${err?.message || err}`); process.exit(1); });

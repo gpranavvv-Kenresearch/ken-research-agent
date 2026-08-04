@@ -119,7 +119,7 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
     { refreshInterval: 5000, shouldRetryOnError: false }
   );
 
-  const { data: postCycleStatus, mutate: mutatePostCycle } = useSWR<{ running: boolean; agent?: string; startedAt?: number; log?: string; detail?: { stage?: number; round?: number; currentPlatform?: string; phase?: string; remainingCounts?: Record<string, number> } }>(
+  const { data: postCycleStatus, mutate: mutatePostCycle } = useSWR<{ running: boolean; agent?: string; startedAt?: number; log?: string; detail?: { stage?: number; round?: number; currentPlatform?: string; phase?: string; remainingCounts?: Record<string, number>; position?: number; waitingFor?: string[]; etaMs?: number } }>(
     hydrated && token ? `/api/agent/${agentId}/post-cycle/status` : null,
     authedFetcher,
     { refreshInterval: 5000, shouldRetryOnError: false }
@@ -249,14 +249,14 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
 
   const [showGen, setShowGen] = useState(false);
   const [genBusy, setGenBusy] = useState(false);
-  async function submitGenerate(count: number, format: string, sample: string, imagePrompt: string) {
+  async function submitGenerate(count: number, format: string, sample: string, imagePrompt: string, force: boolean) {
     if (!token) return;
     setGenBusy(true);
     try {
       const res = await fetch(`/api/agent/${agentId}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Agent-Token': token },
-        body: JSON.stringify({ count, format, sample, imagePrompt }),
+        body: JSON.stringify({ count, format, sample, imagePrompt, force }),
       }).then((r) => r.json());
       setShowGen(false);
       alert(res.message || res.error || 'Started');
@@ -437,7 +437,13 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
           <div className="flex items-center gap-2 text-sm font-medium">
             <span className="inline-block w-3 h-3 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
             <span className="text-sky-300">
-              {postCycleStatus.detail?.round ? (
+              {postCycleStatus.detail?.phase === 'queued' ? (
+                <>
+                  ⏳ Queued — you are #{postCycleStatus.detail.position}
+                  {postCycleStatus.detail?.waitingFor?.length ? `, ${postCycleStatus.detail.waitingFor.join(', ')} posting now` : ''}
+                  {postCycleStatus.detail?.etaMs ? ` (~${Math.round(postCycleStatus.detail.etaMs / 60000)} min estimated wait)` : ''}
+                </>
+              ) : postCycleStatus.detail?.round ? (
                 <>
                   Posting now — Round {postCycleStatus.detail.round}
                   {postCycleStatus.detail?.currentPlatform ? `, currently: ${postCycleStatus.detail.currentPlatform}` : ''}
@@ -631,12 +637,13 @@ function GenerateModal({
   agentId: string;
   busy: boolean;
   onClose: () => void;
-  onSubmit: (count: number, format: string, sample: string, imagePrompt: string) => void;
+  onSubmit: (count: number, format: string, sample: string, imagePrompt: string, force: boolean) => void;
 }) {
   const [count, setCount] = useState(1);
   const [format, setFormat] = useState('');
   const [sample, setSample] = useState('');
   const [imagePrompt, setImagePrompt] = useState('1');
+  const [force, setForce] = useState(false);
   const [ready, setReady] = useState<number | null>(null); // rows with URL + empty content
 
   useEffect(() => {
@@ -747,10 +754,19 @@ function GenerateModal({
           ))}
         </div>
 
+        {/* Queue behavior */}
+        <label className="flex items-start gap-2 mb-4 cursor-pointer">
+          <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)}
+            className="accent-emerald-500 mt-0.5 shrink-0" />
+          <span className="text-xs text-slate-400">
+            Only 2 agents can generate at once — if that&apos;s already full, tick this to <span className="text-white font-medium">skip the queue and run right now anyway</span> (may reduce quality) instead of waiting your turn.
+          </span>
+        </label>
+
         <div className="flex justify-end gap-2 mt-2">
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-300 hover:text-white">Cancel</button>
           <button
-            onClick={() => onSubmit(Math.min(count, ready ?? count), format, format === 'custom' ? sample : '', imagePrompt)}
+            onClick={() => onSubmit(Math.min(count, ready ?? count), format, format === 'custom' ? sample : '', imagePrompt, force)}
             disabled={busy || ready === 0 || (format === 'custom' && !sample.trim())}
             className="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white"
           >
@@ -789,6 +805,10 @@ function PostCountsModal({
         <p className="text-xs text-slate-500 mb-4">
           Leave a platform at 0 to skip it entirely. Runs in rounds — 1 post per platform per round —
           decrementing every round until every count reaches 0, with a 30 min wait between rounds.
+        </p>
+        <p className="text-xs text-slate-500 mb-4">
+          Only one agent can post at a time. If someone else is already posting, you&apos;ll be queued
+          automatically and start right after them.
         </p>
 
         <div className="grid grid-cols-2 gap-3 mb-4">

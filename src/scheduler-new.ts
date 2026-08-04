@@ -128,7 +128,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 // = a stage is actively posting right now (with the specific platform live).
 const STATUS_FILE = path.resolve('.sessions/scheduler-status.json');
 
-function writeStatus(status: Record<string, unknown>, statusFile: string = STATUS_FILE): void {
+export function writeStatus(status: Record<string, unknown>, statusFile: string = STATUS_FILE): void {
   try {
     fs.mkdirSync(path.dirname(statusFile), { recursive: true });
     fs.writeFileSync(statusFile, JSON.stringify({ ...status, updatedAt: new Date().toISOString() }, null, 2));

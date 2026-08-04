@@ -18,6 +18,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { acquireBrowserSlot } from '../src/utils/browserSlots.js';
+import { acquireJobSlot, estimateWaitMs } from '../src/utils/jobQueue.js';
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -37,6 +38,7 @@ const PY = process.env.PYTHON
 const FORMAT_OVERRIDE = (arg('--format-override') || '').trim();
 const SAMPLE_OVERRIDE = (arg('--sample-file') || '').trim();
 const IMAGE_PROMPT = (arg('--image-prompt') || '1').trim(); // '1' or '2' — which cover-image prompt to use
+const FORCE = process.argv.includes('--force'); // skip the box-wide generation queue, run a 3rd+ concurrent pass anyway
 // spawn('npx', ...) is unreliable on Windows — npx is a .cmd shim (ENOENT
 // without the extension) and even 'npx.cmd' can throw EINVAL depending on how
 // Windows resolves it. Spawn node directly with the same --import=tsx loader
@@ -233,6 +235,17 @@ async function pass() {
         : FORMAT_OVERRIDE)
     : '';
 
+  // Box-wide generation queue — up to 2 agents generating at once, everyone
+  // else waits their turn (or ticks "generate right now anyway" → --force).
+  const releaseQueue = await acquireJobSlot('blog-gen', NAME, {
+    force: FORCE,
+    onWaiting: (status, position) => {
+      const others = status.running.map((r) => r.agent).join(', ') || 'someone';
+      const etaMs = estimateWaitMs('blog-gen', position);
+      console.log(`⏳ Queued for a generation slot — you are #${position}, currently generating for: ${others} (~${Math.round(etaMs / 60000)} min estimated wait)`);
+    },
+  });
+
   // This agent's own browser slot, held for the whole pass — so this agent's
   // blog-gen browsers and its own posting browser (index.ts/scheduler-new.ts)
   // can never be open at the same time, while a DIFFERENT agent's slot is
@@ -269,6 +282,7 @@ async function pass() {
     console.log(`\n🏁 Finished. ${done} of ${rows.length} blog${rows.length === 1 ? '' : 's'} saved to your sheet.`);
   } finally {
     releaseSlot();
+    releaseQueue();
   }
 }
 
