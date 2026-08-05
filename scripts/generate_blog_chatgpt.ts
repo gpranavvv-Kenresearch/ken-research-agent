@@ -24,6 +24,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { injectUTM, UTM_PARAMS } from '../src/utils/utm.js';
+import { dismissBlockingModals } from './chatgpt_composer.js';
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -673,6 +674,7 @@ async function main() {
     }
 
     const prompt = format === 'custom' ? buildPrompt(loadSample()) : buildMasterPrompt(title, url);
+    await dismissBlockingModals(page); // e.g. the "conversation history rate limit" overlay
     const input = page.locator('#prompt-textarea, div[contenteditable="true"]').first();
     await input.waitFor({ state: 'visible', timeout: 20000 });
     progress('Logged in. Sending the prompt to ChatGPT…');
@@ -680,10 +682,26 @@ async function main() {
     await page.keyboard.insertText(prompt); // reliable for ChatGPT's contenteditable + large text
     await page.waitForTimeout(1000);
 
-    // Submit (button, else Enter).
+    // The blocking modal can re-render itself seconds after being removed
+    // (this is a live React app) — check again right before the send click,
+    // not just once before typing, and retry once if the first click gets
+    // intercepted by it.
+    await dismissBlockingModals(page);
     const sendBtn = page.locator('button[data-testid="send-button"], button[aria-label="Send prompt"]').first();
-    if (await sendBtn.isVisible({ timeout: 3000 }).catch(() => false)) await sendBtn.click();
-    else await page.keyboard.press('Enter');
+    async function clickSend(): Promise<boolean> {
+      if (!(await sendBtn.isVisible({ timeout: 3000 }).catch(() => false))) return false;
+      await sendBtn.click();
+      return true;
+    }
+    try {
+      if (!(await clickSend())) await page.keyboard.press('Enter');
+    } catch (e) {
+      // Most likely the modal re-appeared and intercepted the click — dismiss and retry once.
+      console.error(`[generate_blog_chatgpt] send click failed (${(e as Error).message.slice(0, 80)}), retrying after modal dismiss...`);
+      await dismissBlockingModals(page);
+      await page.waitForTimeout(1000);
+      if (!(await clickSend())) await page.keyboard.press('Enter');
+    }
     progress('Prompt sent — ChatGPT is writing the blog now (about 12-15 minutes)…');
 
     await waitForCompletion(page);

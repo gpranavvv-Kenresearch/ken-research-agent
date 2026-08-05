@@ -107,7 +107,7 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
     { refreshInterval: 10000, shouldRetryOnError: false }
   );
 
-  const { data: genStatus } = useSWR<{ generating: boolean; log?: string }>(
+  const { data: genStatus, mutate: mutateGen } = useSWR<{ generating: boolean; log?: string }>(
     hydrated && token ? `/api/agent/${agentId}/generate-status` : null,
     authedFetcher,
     { refreshInterval: 5000, shouldRetryOnError: false }
@@ -285,6 +285,22 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
   const [postCycleBusy, setPostCycleBusy] = useState(false);
   const [showPostCounts, setShowPostCounts] = useState(false);
 
+  const [genStopBusy, setGenStopBusy] = useState(false);
+  async function stopGenerate() {
+    if (!token) return;
+    setGenStopBusy(true);
+    try {
+      const res = await fetch(`/api/agent/${agentId}/generate/stop`, {
+        method: 'POST',
+        headers: { 'X-Agent-Token': token },
+      }).then((r) => r.json());
+      if (res.error) alert(res.error);
+      mutateGen();
+    } finally {
+      setGenStopBusy(false);
+    }
+  }
+
   async function stopPostCycle() {
     if (!token) return;
     setPostCycleBusy(true);
@@ -346,9 +362,14 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowGen(true)}
-            className="text-sm bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-1.5 rounded-lg transition-colors">
-            ✨ Generate Blogs
+          <button
+            onClick={() => (genStatus?.generating ? stopGenerate() : setShowGen(true))}
+            disabled={genStopBusy}
+            className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+              genStatus?.generating ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+            }`}
+          >
+            {genStopBusy ? 'Working…' : genStatus?.generating ? '⏹ Stop Generating' : '✨ Generate Blogs'}
           </button>
           {(() => {
             const mine = cycleStatus?.running && cycleStatus.agent === agentId;

@@ -38,7 +38,7 @@ import path from 'path';
 import https from 'https';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import { pasteIntoChatGPTComposer } from './chatgpt_composer.js';
+import { pasteIntoChatGPTComposer, dismissBlockingModals } from './chatgpt_composer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -689,6 +689,10 @@ async function main() {
     await pasteIntoChatGPTComposer(page, prompt);
     await page.waitForTimeout(1000);
 
+    // The blocking modal (e.g. "conversation history rate limit") can
+    // re-render itself seconds after pasteIntoChatGPTComposer already
+    // removed it once — check again right before the send click.
+    await dismissBlockingModals(page);
     const sendSelectors = [
       'button[data-testid="send-button"]',
       'button[aria-label="Send prompt"]',
@@ -697,14 +701,24 @@ async function main() {
       'div[class*="composer"] button:last-child',
       'form button[type="submit"]',
     ];
-    let sendClicked = false;
-    for (const sel of sendSelectors) {
-      if (await page.locator(sel).last().isVisible({ timeout: 3000 }).catch(() => false)) {
-        await page.locator(sel).last().click();
-        sendClicked = true;
-        console.error(`[generate_image] Send clicked via "${sel}"`);
-        break;
+    async function trySendClick(): Promise<boolean> {
+      for (const sel of sendSelectors) {
+        if (await page.locator(sel).last().isVisible({ timeout: 3000 }).catch(() => false)) {
+          await page.locator(sel).last().click();
+          console.error(`[generate_image] Send clicked via "${sel}"`);
+          return true;
+        }
       }
+      return false;
+    }
+    let sendClicked = false;
+    try {
+      sendClicked = await trySendClick();
+    } catch (e) {
+      console.error(`[generate_image] send click failed (${(e as Error).message.slice(0, 80)}), retrying after modal dismiss...`);
+      await dismissBlockingModals(page);
+      await page.waitForTimeout(1000);
+      sendClicked = await trySendClick();
     }
     if (!sendClicked) {
       await page.keyboard.press('Enter');

@@ -38,6 +38,8 @@ let websockifyProc: ChildProcess | null = null;
 
 /** Agents with a blog-generation run currently in flight (one at a time — shared ChatGPT). */
 const generating = new Set<string>();
+/** PID of that agent's generation child, so the dashboard can offer a real Stop button. */
+const generatingPid = new Map<string, number>();
 
 // Fixed token for the dashboard's always-on "Watch Live" panel (the shared
 // :99 posting display, not a per-login slot) — same value the dashboard
@@ -264,11 +266,24 @@ app.post('/api/agent/:agent/generate-blogs', requireAgentToken, (req: Request, r
     shell: process.platform === 'win32', // Windows resolves `npx` to npx.cmd only through a shell
   });
   child.unref();
-  const release = () => { generating.delete(agent); if (sampleTmp) { try { fs.rmSync(sampleTmp, { force: true }); } catch { /* noop */ } } };
+  if (child.pid) generatingPid.set(agent, child.pid);
+  const release = () => { generating.delete(agent); generatingPid.delete(agent); if (sampleTmp) { try { fs.rmSync(sampleTmp, { force: true }); } catch { /* noop */ } } };
   child.on('exit', release);
   // Safety release, sized to ~35 min/blog so the lock never frees while a slow run is still going.
   setTimeout(release, (count * 35 + 10) * 60 * 1000);
   res.json({ ok: true, agent, count, message: `Generating ${count} blog(s). Content fills into your sheet as each finishes (~10-15 min each).` });
+});
+
+// POST /api/agent/:agent/generate-blogs/stop — kill this agent's in-flight generation.
+app.post('/api/agent/:agent/generate-blogs/stop', requireAgentToken, (req: Request, res: Response) => {
+  const agent = req.params.agent.toLowerCase();
+  const pid = generatingPid.get(agent);
+  if (!pid) { res.json({ ok: true, stopped: false }); return; }
+  try { process.kill(-pid, 'SIGTERM'); } catch { /* group gone, or Windows (no POSIX groups) */ }
+  try { process.kill(pid, 'SIGTERM'); } catch { /* already gone */ }
+  generating.delete(agent);
+  generatingPid.delete(agent);
+  res.json({ ok: true, stopped: true, agent });
 });
 
 // GET /api/agent/:agent/generate-status — running? + recent progress/error log lines.

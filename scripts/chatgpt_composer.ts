@@ -15,6 +15,29 @@ import { Page } from 'playwright';
 
 const COMPOSER_SELECTOR = '#prompt-textarea';
 
+/**
+ * Remove ChatGPT's blocking overlay modals (e.g. the "conversation history
+ * rate limit" dialog) from the DOM. This is a live React app — the modal can
+ * re-render itself seconds after being removed if the underlying condition
+ * (rate limit, session nudge, etc.) is still true, so call this again right
+ * before EVERY click that could be intercepted, not just once up front.
+ * Returns true if a modal was found and removed.
+ */
+export async function dismissBlockingModals(page: Page): Promise<boolean> {
+  const removed = await page.evaluate(() => {
+    const modal = document.querySelector(
+      '#modal-conversation-history-rate-limit, [data-testid="modal-conversation-history-rate-limit"]'
+    );
+    if (modal) { modal.remove(); return true; }
+    return false;
+  });
+  if (removed) {
+    console.log('[composer] Removed blocking modal from DOM');
+    await page.waitForTimeout(300);
+  }
+  return removed;
+}
+
 export async function pasteIntoChatGPTComposer(
   page: Page,
   text: string,
@@ -23,14 +46,7 @@ export async function pasteIntoChatGPTComposer(
   const { minFillRatio = 0.5 } = opts;
   const expectedLen = text.length;
 
-  // Remove any overlay modal that blocks interaction (e.g. conversation-history rate-limit)
-  await page.evaluate(() => {
-    const modal = document.querySelector(
-      '#modal-conversation-history-rate-limit, [data-testid="modal-conversation-history-rate-limit"]'
-    );
-    if (modal) { modal.remove(); console.log('[composer] Removed blocking modal from DOM'); }
-  });
-  await page.waitForTimeout(300);
+  await dismissBlockingModals(page);
 
   const composer = page.locator(COMPOSER_SELECTOR).first();
   await composer.waitFor({ state: 'visible', timeout: 15000 });
