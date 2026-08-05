@@ -78,6 +78,24 @@ export function injectUTM(content: string, utmString: string): string {
       return `${baseUrl}${separator}${utmParams}`;
     }
 
+    // ChatGPT sometimes wrongly tags an external citation link (e.g. a
+    // government stats page) with our own generic placeholder UTM, following
+    // the "tag every link" instruction too literally. That signature
+    // (utm_campaign=automation) is unambiguously ours — strip it off rather
+    // than leave or personalize it, since an external site shouldn't carry
+    // Ken Research's own campaign tracking at all.
+    if (/utm_campaign=automation\b/i.test(match)) {
+      const stripped = match
+        .replace(/[?&]utm_source=[^&"'\s]*/gi, '')
+        .replace(/[?&]utm_medium=[^&"'\s]*/gi, '')
+        .replace(/[?&]utm_campaign=[^&"'\s]*/gi, '')
+        .replace(/[?&]utm_term=[^&"'\s]*/gi, '')
+        .replace(/[?&]utm_content=[^&"'\s]*/gi, '')
+        .replace(/\?$/, '')
+        .replace(/&$/, '');
+      return stripped;
+    }
+
     // For all other URLs: only add UTM if none already present
     if (match.toLowerCase().includes('utm_')) {
       return match;
