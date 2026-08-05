@@ -23,6 +23,7 @@ import { chromium, Page } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { injectUTM, UTM_PARAMS } from '../src/utils/utm.js';
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -619,16 +620,16 @@ function sanitizeHtml(html: string): string {
     .trim();
 }
 
-/** Safety net: ensure every http(s) link carries the required UTM params.
- *  Quote-agnostic — the master prompt's own markup spec uses single-quoted
- *  href attributes (unlike the older custom-sample prompt's double quotes). */
+/**
+ * Ensure every kenresearch.com link carries the correct UTM params — always
+ * strips whatever ChatGPT wrote (any case, &amp;-encoded or not — the master
+ * prompt asks for lowercase "automation" with &amp; entities, neither of
+ * which is what we actually want) and rebuilds fresh with the real per-agent
+ * campaign (shared with every platform poster's own injectUTM call, so this
+ * is really just what shows up before any platform-specific posting).
+ */
 function injectUtm(html: string): string {
-  const utm = 'utm_source=linkedin&utm_medium=referral&utm_campaign=automation';
-  return html.replace(/href=(["'])(https?:\/\/[^"']+)\1/gi, (m, _q: string, href: string) => {
-    if (/utm_source=/.test(href)) return m;
-    const sep = href.includes('?') ? '&' : '?';
-    return `href="${href}${sep}${utm}"`;
-  });
+  return injectUTM(html, UTM_PARAMS.LinkedinPulse);
 }
 
 async function main() {

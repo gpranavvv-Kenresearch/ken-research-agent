@@ -51,20 +51,27 @@ export function injectUTM(content: string, utmString: string): string {
   const utmParams = personalizeUtm(utmString.replace(/^\?/, '')); // strip leading ?
   const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
 
-  return content.replace(urlRegex, (match) => {
+  return content.replace(urlRegex, (rawMatch) => {
+    // Normalize HTML-entity-encoded ampersands first (ChatGPT-written blog HTML
+    // often uses ?a=1&amp;b=2) so stripping below works regardless of which the
+    // source used — output always uses plain &, never &amp;.
+    const match = rawMatch.replace(/&amp;/gi, '&');
+
     // Never touch image/media URLs
     if (match.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) {
       return match;
     }
 
-    // For kenresearch.com URLs: always strip existing UTM and replace with correct platform UTM
+    // For kenresearch.com URLs: always strip existing UTM (any case) and
+    // replace with the correct platform + per-agent UTM, regardless of what
+    // was already there.
     if (match.includes('kenresearch.com')) {
       const baseUrl = match
-        .replace(/[?&]utm_source=[^&"'\s]*/g, '')
-        .replace(/[?&]utm_medium=[^&"'\s]*/g, '')
-        .replace(/[?&]utm_campaign=[^&"'\s]*/g, '')
-        .replace(/[?&]utm_term=[^&"'\s]*/g, '')
-        .replace(/[?&]utm_content=[^&"'\s]*/g, '')
+        .replace(/[?&]utm_source=[^&"'\s]*/gi, '')
+        .replace(/[?&]utm_medium=[^&"'\s]*/gi, '')
+        .replace(/[?&]utm_campaign=[^&"'\s]*/gi, '')
+        .replace(/[?&]utm_term=[^&"'\s]*/gi, '')
+        .replace(/[?&]utm_content=[^&"'\s]*/gi, '')
         .replace(/\?$/, '')   // remove trailing ?
         .replace(/&$/, '');   // remove trailing &
       const separator = baseUrl.includes('?') ? '&' : '?';
@@ -72,7 +79,7 @@ export function injectUTM(content: string, utmString: string): string {
     }
 
     // For all other URLs: only add UTM if none already present
-    if (match.includes('utm_')) {
+    if (match.toLowerCase().includes('utm_')) {
       return match;
     }
     const separator = match.includes('?') ? '&' : '?';
