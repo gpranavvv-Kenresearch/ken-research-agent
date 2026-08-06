@@ -32,10 +32,10 @@ export const PLATFORMS: Record<string, PortalPlatform> = {
   x:  { key: 'x',  label: 'X (Twitter)', group: 'social', loginUrl: 'https://x.com/login',                homeUrl: 'https://x.com/home',                        registryFile: '.accounts/accounts.json',          authCookies: ['auth_token'] },
   fb: { key: 'fb', label: 'Facebook',    group: 'social', loginUrl: 'https://www.facebook.com/login',      homeUrl: 'https://www.facebook.com/me',               registryFile: '.accounts/facebook-accounts.json', authCookies: ['c_user'] },
   li: { key: 'li', label: 'LinkedIn',    group: 'social', loginUrl: 'https://www.linkedin.com/login',      homeUrl: 'https://www.linkedin.com/feed/',            registryFile: '.accounts/linkedin-accounts.json', authCookies: ['li_at'] },
-  // authCookies unconfirmed (tumblr.com's actual session cookie name hasn't
-  // been inspected live yet) — login itself works regardless, per this
-  // file's own note above; only the "ready" badge accuracy is approximate.
-  tumblr: { key: 'tumblr', label: 'Tumblr', group: 'social', loginUrl: 'https://www.tumblr.com/login', homeUrl: 'https://www.tumblr.com/', registryFile: '.accounts/accounts-tumblr.json', authCookies: ['pfg', 'pfp'] },
+  // authCookies confirmed live 2026-08-06 (queried Sameeksha's actual Tumblr
+  // cookie DB — 'logged_in'/'sid' are real, 'pfg'/'pfp' from the original
+  // guess never existed).
+  tumblr: { key: 'tumblr', label: 'Tumblr', group: 'social', loginUrl: 'https://www.tumblr.com/login', homeUrl: 'https://www.tumblr.com/', registryFile: '.accounts/accounts-tumblr.json', authCookies: ['logged_in', 'sid'] },
   // authCookies unconfirmed (mastodon.social's actual session cookie name
   // hasn't been inspected live yet) — same caveat as Tumblr above.
   mastodon: { key: 'mastodon', label: 'Mastodon', group: 'social', loginUrl: 'https://mastodon.social/auth/sign_in', homeUrl: 'https://mastodon.social/', registryFile: '.accounts/accounts-mastodon.json', authCookies: ['_mastodon_session'] },
