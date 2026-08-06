@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useUser } from '@/context/UserContext';
 
-const CODA_NOTICE_KEY = 'kr_coda_notice_dismissed_v1';
+const CODA_NOTICE_KEY = 'kr_coda_notice_dismissed_v2';
 
 function CodaNoticeBanner({ loginsHref }: { loginsHref: string }) {
   const [dismissed, setDismissed] = useState(true); // default hidden until we know localStorage says otherwise (avoids SSR flash)
@@ -20,7 +20,7 @@ function CodaNoticeBanner({ loginsHref }: { loginsHref: string }) {
       <div className="max-w-screen-2xl mx-auto px-6 py-2 flex items-center gap-3 text-sm">
         <span className="text-amber-300">🆕</span>
         <span className="text-amber-200 flex-1">
-          New blog platform added: <span className="font-semibold">Coda</span>. Head to <span className="font-semibold">Logins</span> and log in to start posting to it.
+          New platforms are live: <span className="font-semibold">Coda</span> (blog) and <span className="font-semibold">Tumblr</span> (bookmarking). Head to <span className="font-semibold">Logins</span> and log in to start posting to them.
         </span>
         <Link href={loginsHref} className="text-amber-300 hover:text-amber-100 underline text-xs shrink-0">Go to Logins</Link>
         <button
