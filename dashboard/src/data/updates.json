@@ -1,0 +1,26 @@
+[
+  {
+    "id": "2026-08-06-tumblr",
+    "date": "2026-08-06",
+    "title": "Tumblr added as a social platform",
+    "description": "Replaces the old unused Threads slot. Posts a Link block (URL as its own card) with a caption written in the same style as X, tagged with UTM. Log in via your Logins page to start posting."
+  },
+  {
+    "id": "2026-08-06-coda",
+    "date": "2026-08-06",
+    "title": "Coda added as a blog platform",
+    "description": "New blog publishing target, available to every agent. Log in via your Logins page to start posting to it."
+  },
+  {
+    "id": "2026-08-06-blog-2slot",
+    "date": "2026-08-06",
+    "title": "Blog posting now caps each row to 2 platforms",
+    "description": "Previously every blog platform piled onto the same row, so posting 27 times a day only promoted 3 distinct report URLs. Now each row is posted to at most 2 platforms, then the next row picks up the rest — more report URLs get promoted per day. Track's Blog tab now shows 2 platform+URL cards per row instead of a status badge per platform."
+  },
+  {
+    "id": "2026-08-06-track-refine",
+    "date": "2026-08-06",
+    "title": "Track page refined",
+    "description": "Added a date filter and \"Posted Today\" stat, and fixed Pending to mean rows with generated content that haven't been posted yet (not just rows with no content at all)."
+  }
+]

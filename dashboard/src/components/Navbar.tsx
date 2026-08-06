@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useUser } from '@/context/UserContext';
+import UpdatesBell from './UpdatesBell';
 
 const CODA_NOTICE_KEY = 'kr_coda_notice_dismissed_v2';
 
@@ -71,6 +72,7 @@ export default function Navbar() {
             <NavLink href="/track"  active={path.startsWith('/track')}>📊 Track</NavLink>
             <NavLink href="/submit" active={path.startsWith('/submit')}>➕ Submit URL</NavLink>
             <NavLink href={`/agent/${user.id}`} active={path.startsWith('/agent')}>🔑 Logins</NavLink>
+            <UpdatesBell />
           </div>
         )}
 
