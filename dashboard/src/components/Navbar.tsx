@@ -1,7 +1,38 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import { useUser } from '@/context/UserContext';
+
+const CODA_NOTICE_KEY = 'kr_coda_notice_dismissed_v1';
+
+function CodaNoticeBanner({ loginsHref }: { loginsHref: string }) {
+  const [dismissed, setDismissed] = useState(true); // default hidden until we know localStorage says otherwise (avoids SSR flash)
+
+  useEffect(() => {
+    setDismissed(localStorage.getItem(CODA_NOTICE_KEY) === '1');
+  }, []);
+
+  if (dismissed) return null;
+
+  return (
+    <div className="bg-amber-950/40 border-b border-amber-800/40">
+      <div className="max-w-screen-2xl mx-auto px-6 py-2 flex items-center gap-3 text-sm">
+        <span className="text-amber-300">🆕</span>
+        <span className="text-amber-200 flex-1">
+          New blog platform added: <span className="font-semibold">Coda</span>. Head to <span className="font-semibold">Logins</span> and log in to start posting to it.
+        </span>
+        <Link href={loginsHref} className="text-amber-300 hover:text-amber-100 underline text-xs shrink-0">Go to Logins</Link>
+        <button
+          onClick={() => { localStorage.setItem(CODA_NOTICE_KEY, '1'); setDismissed(true); }}
+          className="text-amber-400 hover:text-amber-100 text-xs shrink-0"
+        >
+          ✕ dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
 
 const COLOR_DOT: Record<string, string> = {
   blue: 'bg-blue-500', purple: 'bg-purple-500', green: 'bg-green-500',
@@ -65,6 +96,7 @@ export default function Navbar() {
           </div>
         )}
       </div>
+      {user && <CodaNoticeBanner loginsHref={`/agent/${user.id}`} />}
     </nav>
   );
 }
