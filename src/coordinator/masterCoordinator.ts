@@ -65,6 +65,7 @@ import { retryOnSelectorTimeout } from '../utils/retry.js';
 import { record as healthRecord } from '../health/accountHealth.js';
 import { proxyDispatcher } from '../health/proxyPool.js';
 import { listAgentStatus } from '../login-portal/sessionResolver.js';
+import { selectAccountForPlatform } from '../utils/accountRotation.js';
 
 /**
  * Cap a platform's row-pull limit to how many accounts the CURRENT agent
@@ -359,8 +360,9 @@ export async function runXBatch(batchNum: number = 1, limit: number = 12): Promi
         }
         if (!tweet?.trim()) { console.log(`    ⏭ Skipping — generated content empty`); continue; }
       }
-      const xResult = await retryOnSelectorTimeout(() => runXAgent({ tweetText: tweet, accountHandle: row.name }), { label: 'X post' });
-      healthRecordSafe('X', row.name, { success: xResult.success, error: xResult.error, reason: (xResult as any).reason });
+      const xAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'x', row.name);
+      const xResult = await retryOnSelectorTimeout(() => runXAgent({ tweetText: tweet, accountHandle: xAccount }), { label: 'X post' });
+      healthRecordSafe('X', xAccount, { success: xResult.success, error: xResult.error, reason: (xResult as any).reason });
 
       // 3. Save result
       if (xResult.success) {
@@ -449,9 +451,10 @@ export async function runFbBatch(batchNum: number = 1, limit: number = 12): Prom
       row.fbPost = fbPost;
 
       // 3. Post to FB
-      console.log(`    Posting to FB (account: ${row.name})...`);
-      const postResult = await retryOnSelectorTimeout(() => postToFbAccount(row.name, fbPost), { label: 'FB post' });
-      healthRecordSafe('Facebook', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
+      const fbAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'fb', row.name);
+      console.log(`    Posting to FB (account: ${fbAccount})...`);
+      const postResult = await retryOnSelectorTimeout(() => postToFbAccount(fbAccount, fbPost), { label: 'FB post' });
+      healthRecordSafe('Facebook', fbAccount, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
 
       if (postResult.success) {
         fbPost = postResult.postText || fbPost;
@@ -587,9 +590,10 @@ export async function runTumblrBatch(batchNum: number = 1, limit: number = 12): 
       }
       row.tumblrPost = tumblrPost;
 
-      console.log(`    Posting to Tumblr (account: ${row.name})...`);
-      const postResult = await retryOnSelectorTimeout(() => postToTumblrAccount(row.name, tumblrPost, row.targetUrl), { label: 'Tumblr post' });
-      healthRecordSafe('Tumblr', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
+      const tumblrAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'tumblr', row.name);
+      console.log(`    Posting to Tumblr (account: ${tumblrAccount})...`);
+      const postResult = await retryOnSelectorTimeout(() => postToTumblrAccount(tumblrAccount, tumblrPost, row.targetUrl), { label: 'Tumblr post' });
+      healthRecordSafe('Tumblr', tumblrAccount, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
 
       if (postResult.success) {
         await saveUnifiedTumblrResult(row, {
@@ -698,9 +702,10 @@ export async function runMastodonBatch(batchNum: number = 1, limit: number = 12)
       }
       row.mastodonPost = mastodonPost;
 
-      console.log(`    Posting to Mastodon (account: ${row.name})...`);
-      const postResult = await retryOnSelectorTimeout(() => postToMastodonAccount(row.name, mastodonPost), { label: 'Mastodon post' });
-      healthRecordSafe('Mastodon', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
+      const mastodonAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'mastodon', row.name);
+      console.log(`    Posting to Mastodon (account: ${mastodonAccount})...`);
+      const postResult = await retryOnSelectorTimeout(() => postToMastodonAccount(mastodonAccount, mastodonPost), { label: 'Mastodon post' });
+      healthRecordSafe('Mastodon', mastodonAccount, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
 
       if (postResult.success) {
         await saveUnifiedMastodonResult(row, {
@@ -798,9 +803,10 @@ export async function runLiBatch(options?: { manual?: boolean }, batchNum: numbe
       row.linkedinPost = liPost;
 
       // 3. Post to LI
-      console.log(`    Posting to LI (account: ${row.name})...`);
-      const postResult = await retryOnSelectorTimeout(() => postToLiAccount(row.name, liPost), { label: 'LI post' });
-      healthRecordSafe('LinkedIn', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
+      const liAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'li', row.name);
+      console.log(`    Posting to LI (account: ${liAccount})...`);
+      const postResult = await retryOnSelectorTimeout(() => postToLiAccount(liAccount, liPost), { label: 'LI post' });
+      healthRecordSafe('LinkedIn', liAccount, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
 
       if (postResult.success) {
         liPost = postResult.postText || liPost;
