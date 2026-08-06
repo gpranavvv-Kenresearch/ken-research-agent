@@ -235,6 +235,12 @@ export interface SheetRow {
   paragraphError?: string;
   paragraphBatch?: string;
   lastPostedParagraph?: string;
+  // Coda columns
+  codaPostUrl?: string;
+  codaStatus?: string;
+  codaError?: string;
+  codaBatch?: string;
+  lastPostedCoda?: string;
 }
 
 // Backwards-compatible alias used by facebookPostingAgent and linkedinPostingAgent
@@ -502,6 +508,12 @@ function mapRow(row: string[], colMap: ColMap, rowIndex: number, sheetType: Shee
     paragraphError:      g(colMap, 'Paragraph Error', 'paragraph error'),
     paragraphBatch:      g(colMap, 'Paragraph Batch', 'paragraph batch', 'paragraphBatch'),
     lastPostedParagraph: g(colMap, 'Last Posted Paragraph', 'lastPostedParagraph', 'lastpostedparagraph'),
+    // Coda columns
+    codaPostUrl:    g(colMap, 'Coda Post URL', 'coda post url'),
+    codaStatus:     g(colMap, 'Coda Status', 'coda status'),
+    codaError:      g(colMap, 'Coda Error', 'coda error'),
+    codaBatch:      g(colMap, 'Coda Batch', 'coda batch', 'codaBatch'),
+    lastPostedCoda: g(colMap, 'Last Posted Coda', 'lastPostedCoda', 'lastpostedcoda'),
     // Result columns
     messageStatus:   g(colMap, 'Message Status', 'message status'),
     sanityIssues:    g(colMap, 'Sanity Issues', 'sanity issues'),
@@ -2254,6 +2266,51 @@ export async function saveUnifiedBloggerResult(
     { names: ['Blogger Error', 'blogger error'], value: result.error ?? '' },
     { names: ['bloggerBatch', 'blogger batch', 'Blogger Batch'], value: result.batch ?? '' },
     { names: ['Last Posted Blogger', 'lastPostedBlogger', 'lastpostedblogger'], value: newLastPosted },
+  ], sheetConfig.name);
+
+  await batchWrite(sheets, data, sheetConfig.id);
+}
+
+// ──── Coda Blog Posting ───────────────────────────────────────────────────
+
+export async function getRowsForContinuousCodaPosting(limit: number = 15, _minRowIndex: number = 0): Promise<SheetRow[]> {
+  return pickRowsByEmptyStatus(['Coda Status', 'coda status', 'CodaStatus'], 'Coda', limit);
+}
+
+export async function saveUnifiedCodaResult(
+  row: SheetRow,
+  result: { postUrl: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig('blog');
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+  const today = nowStamp();
+
+  let liveCodaPostUrl = row.codaPostUrl ?? '';
+  let liveLastPostedCoda = row.lastPostedCoda ?? '';
+  try {
+    const liveRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetConfig.id,
+      range: `${sheetConfig.name}!${row.rowIndex}:${row.rowIndex}`,
+    });
+    const liveRow: string[] = liveRes.data.values?.[0] ?? [];
+    const urlIdx = col(colMap, 'Coda Post URL', 'coda post url');
+    const dateIdx = col(colMap, 'Last Posted Coda', 'lastPostedCoda', 'lastpostedcoda');
+    if (urlIdx !== undefined) liveCodaPostUrl = (liveRow[urlIdx] ?? '').trim();
+    if (dateIdx !== undefined) liveLastPostedCoda = (liveRow[dateIdx] ?? '').trim();
+  } catch { /* non-critical */ }
+
+  const newUrl = appendValue(liveCodaPostUrl, result.postUrl);
+  const newLastPosted = result.status?.toLowerCase() === 'posted'
+    ? appendValue(liveLastPostedCoda, today)
+    : liveLastPostedCoda;
+
+  const data = buildUpdates(colMap, row.rowIndex, [
+    { names: ['Coda Post URL', 'coda post url'], value: newUrl },
+    { names: ['Coda Status', 'coda status'], value: result.status },
+    { names: ['Coda Error', 'coda error'], value: result.error ?? '' },
+    { names: ['codaBatch', 'coda batch', 'Coda Batch'], value: result.batch ?? '' },
+    { names: ['Last Posted Coda', 'lastPostedCoda', 'lastpostedcoda'], value: newLastPosted },
   ], sheetConfig.name);
 
   await batchWrite(sheets, data, sheetConfig.id);

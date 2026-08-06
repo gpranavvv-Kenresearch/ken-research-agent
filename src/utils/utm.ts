@@ -21,6 +21,7 @@ export const UTM_PARAMS = {
   Note: '?utm_source=Note&utm_medium=Referral&utm_campaign=Automation',
   Ameba: '?utm_source=Ameba&utm_medium=Referral&utm_campaign=Automation',
   Paragraph: '?utm_source=Paragraph&utm_medium=Referral&utm_campaign=Automation',
+  Coda: '?utm_source=Coda&utm_medium=Referral&utm_campaign=Automation',
 };
 
 /**

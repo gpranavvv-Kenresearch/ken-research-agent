@@ -43,7 +43,7 @@ import {
   runMediumBatch, runLinkmateBatch, runGoogleSiteBatch,
   runDevtoBatch, runLinkedinPulseBatch, runCalisthenicsNBatch,
   runWordpressBatch, runBloggerBatch, runHackmdBatch,
-  runNotionBatch, runNoteBatch,
+  runNotionBatch, runNoteBatch, runCodaBatch,
   runWeeklySerpRecheck, runSundayExamination, resetBatchCounters,
   runRetryRow,
 } from './coordinator/masterCoordinator.js';
@@ -77,6 +77,7 @@ const HACKMD:       PlatformDef = { label: 'HackMD',         run: runHackmdBatch
 const LINKMATE:     PlatformDef = { label: 'Linkmate',       run: runLinkmateBatch };
 const CALISTHENICS: PlatformDef = { label: 'Calisthenics',   run: runCalisthenicsNBatch };
 const NOTION:       PlatformDef = { label: 'Notion',         run: runNotionBatch };
+const CODA:         PlatformDef = { label: 'Coda',           run: runCodaBatch };
 
 // Key map for the counted, round-based "Post Now" cycle (runCountedPostCycle) —
 // the dashboard form's platform keys to the PlatformDef objects above.
@@ -84,6 +85,7 @@ const COUNTED_PLATFORMS: Record<string, PlatformDef> = {
   x: X, fb: FB, lipost: LI, lipulse: LI_PULSE, medium: MEDIUM,
   wordpress: WORDPRESS, blogger: BLOGGER, googlepost: GOOGLESITE, note: NOTE,
   hackmd: HACKMD, linkmate: LINKMATE, calisthenics: CALISTHENICS, notion: NOTION, devto: DEVTO,
+  coda: CODA,
 };
 
 // ── The 5 stages, exactly as agreed ────────────────────────────────────────────

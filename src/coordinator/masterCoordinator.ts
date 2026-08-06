@@ -171,6 +171,8 @@ import {
   SheetRow,
   getRowsForContinuousParagraphPosting,
   saveUnifiedParagraphResult,
+  getRowsForContinuousCodaPosting,
+  saveUnifiedCodaResult,
 } from '../sheets/sheets.js';
 import fs from 'fs';
 import path from 'path';
@@ -1551,6 +1553,67 @@ export async function runBloggerBatch(batchNum: number = 1, limit: number = 12):
   }
   printDiagnostics('Blogger', failures, posted, rows.length);
   console.log(`\n[BLOGGER BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
+}
+
+// ──── Coda Batch ────────────────────────────────────────────────────────────
+async function postToCodaAccount(
+  accountName: string,
+  title: string,
+  htmlContent: string,
+): Promise<{ success: boolean; postUrl?: string; error?: string }> {
+  try {
+    const loginResult = await executeBrowserTool('login_coda', { nickname: accountName });
+    if (!loginResult.success) {
+      return { success: false, error: loginResult.error || 'Coda login failed' };
+    }
+    const postResult = await executeBrowserTool('post_coda', { title, htmlContent });
+    return {
+      success: postResult.success ?? false,
+      postUrl: postResult.postUrl,
+      error: postResult.error,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function runCodaBatch(batchNum: number = 1, limit: number = 12): Promise<void> {
+  console.log(`\n[CODA BATCH] Starting...`);
+  const rows = await getRowsForContinuousCodaPosting(capToLiveAccounts(limit, 'coda'));
+  if (rows.length === 0) { console.log('[CODA BATCH] No rows available'); return; }
+  const batchLabel = `Batch ${batchNum}`;
+  console.log(`  Found ${rows.length} rows ready for Coda posting (${batchLabel})`);
+  let posted = 0, failed = 0;
+  const failures: FailureEntry[] = [];
+  for (const row of rows) {
+    try {
+      console.log(`\n  Processing [row ${row.rowIndex}]: ${row.title.slice(0, 60)}`);
+      let content = row.blogContent || await generateHackmdPost(row);
+      const title = row.title;
+      if (row.targetUrl && !content.includes(row.targetUrl)) {
+        content += `\n\n<p><a href="${row.targetUrl}">Read the full report on Ken Research</a></p>`;
+      }
+      if (!healthGate('Coda', row.name)) continue;
+      const r = await retryOnSelectorTimeout(() => postToCodaAccount(row.name, title, content), { label: 'Coda post' });
+      healthRecordSafe('Coda', row.name, { success: r.success, error: r.error, reason: (r as any).reason });
+      if (r.success) {
+        await saveUnifiedCodaResult(row, { postUrl: r.postUrl || '', status: 'Posted', batch: batchLabel });
+        console.log(`    ✅ Posted → ${r.postUrl}`);
+        posted++;
+      } else {
+        await saveUnifiedCodaResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: r.error });
+        failed++;
+        addFailure(failures, row.name, r.error);
+      }
+    } catch (err: any) {
+      console.error(`  ❌ Row ${row.rowIndex}: ${err.message}`);
+      addFailure(failures, row.name, err.message);
+      try { await saveUnifiedCodaResult(row, { postUrl: '', status: 'Error', batch: batchLabel, error: err.message }); } catch {}
+      failed++;
+    }
+  }
+  printDiagnostics('Coda', failures, posted, rows.length);
+  console.log(`\n[CODA BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
 // ──── HackMD Batch ──────────────────────────────────────────────────────────

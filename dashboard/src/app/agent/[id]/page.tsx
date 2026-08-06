@@ -25,6 +25,7 @@ const PLATFORMS = [
   { key: 'calisthenics', label: 'Calisthenics', group: 'blog', icon: 'C', color: 'bg-purple-600 text-white' },
   { key: 'linkmate', label: 'Linkmate', group: 'blog', icon: 'L', color: 'bg-teal-600 text-white' },
   { key: 'ameba', label: 'Ameba', group: 'blog', icon: 'A', color: 'bg-rose-600 text-white' },
+  { key: 'coda', label: 'Coda', group: 'blog', icon: 'C', color: 'bg-red-500 text-white' },
   // Engine (blog writer, not a posting target)
   { key: 'chatgpt', label: 'ChatGPT (blog writer)', group: 'engine', icon: '✦', color: 'bg-emerald-700 text-white' },
   { key: 'chatgpt-image', label: 'ChatGPT (image gen)', group: 'engine', icon: '🖼', color: 'bg-fuchsia-700 text-white' },
@@ -54,6 +55,7 @@ const POST_COUNT_PLATFORMS = [
   { key: 'calisthenics', label: 'Calisthenics' },
   { key: 'notion', label: 'Notion' },
   { key: 'devto', label: 'Dev.to' },
+  { key: 'coda', label: 'Coda' },
 ];
 
 interface Account {

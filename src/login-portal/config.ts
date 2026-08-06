@@ -48,6 +48,10 @@ export const PLATFORMS: Record<string, PortalPlatform> = {
   calisthenics: { key: 'calisthenics', label: 'Calisthenics', group: 'blog', loginUrl: 'https://calisthenics.mn.co/',    homeUrl: 'https://calisthenics.mn.co/',              registryFile: '.accounts/accounts-calisthenics.json', authCookies: ['_session_id'] },
   linkmate:     { key: 'linkmate',     label: 'Linkmate',     group: 'blog', loginUrl: 'https://linkmate.mn.co/',        homeUrl: 'https://linkmate.mn.co/',                  registryFile: '.accounts/accounts-linkmate.json',     authCookies: ['_session_id'] },
   ameba:        { key: 'ameba',        label: 'Ameba',        group: 'blog', loginUrl: 'https://ameba.jp/login',         homeUrl: 'https://www.ameba.jp/home',                registryFile: '.accounts/accounts-ameba.json',        authCookies: ['user_session1', 'asauth'] },
+  // authCookies unconfirmed (coda.io's actual session cookie name hasn't been
+  // inspected live yet) — login itself works regardless per this file's own
+  // note above; only the "ready" badge accuracy is approximate until confirmed.
+  coda:         { key: 'coda',         label: 'Coda',         group: 'blog', loginUrl: 'https://coda.io/login',          homeUrl: 'https://coda.io/docs',                     registryFile: '.accounts/accounts-coda.json',         authCookies: ['coda_session', 'session'] },
 
   // ── Engine (blog generation, not a posting target) ──
   // ChatGPT session used by generate_blog_chatgpt.ts to write the article HTML.

@@ -39,6 +39,8 @@ import { loginToNote, closeNoteBrowser, getNoteAccountByNickname, getActiveNoteA
 import { postToNote } from '../browser/note/poster.js';
 import { loginToParagraph, closeParagraphBrowser } from '../browser/paragraph/login.js';
 import { postToParagraph } from '../browser/paragraph/poster.js';
+import { loginToCoda, closeCodaBrowser, getCodaAccountByNickname } from '../browser/coda/login.js';
+import { postToCoda } from '../browser/coda/poster.js';
 import { getAccountByHandle } from '../config/accounts.js';
 export interface Tool {
   name: string;
@@ -53,6 +55,8 @@ let xPage: Page | null = null;
 let fbPage: Page | null = null;
 let liPage: Page | null = null;
 let hackmdPage: Page | null = null;
+let codaPage: Page | null = null;
+let codaNickname: string | null = null;
 let mediumPage: Page | null = null;
 let wordpressPage: Page | null = null;
 let bloggerPage: Page | null = null;
@@ -131,6 +135,29 @@ export const BROWSER_TOOLS: Tool[] = [
         postText: { type: 'string', description: 'LinkedIn post text' },
       },
       required: ['postText'],
+    },
+  },
+  {
+    name: 'login_coda',
+    description: 'Login to Coda with account credentials',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        nickname: { type: 'string', description: 'Coda account nickname' },
+      },
+      required: ['nickname'],
+    },
+  },
+  {
+    name: 'post_coda',
+    description: 'Post to Coda (coda.io). Must call login_coda first.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        title: { type: 'string', description: 'Page title' },
+        htmlContent: { type: 'string', description: 'Page content (HTML)' },
+      },
+      required: ['title', 'htmlContent'],
     },
   },
   {
@@ -432,6 +459,12 @@ export async function executeBrowserTool(toolName: string, input: Record<string,
     if (toolName === 'post_linkedin') {
       return await postLiTool(input.postText);
     }
+    if (toolName === 'login_coda') {
+      return await loginCodaTool(input.nickname);
+    }
+    if (toolName === 'post_coda') {
+      return await postCodaTool(input.title, input.htmlContent);
+    }
     if (toolName === 'login_hackmd') {
       return await loginHackmdTool(input.nickname);
     }
@@ -655,6 +688,51 @@ async function postLiTool(postText: string): Promise<any> {
         console.warn('Failed to close LI browser:', e);
       }
       liPage = null;
+    }
+  }
+}
+
+/**
+ * Coda Tools
+ */
+async function loginCodaTool(nickname: string): Promise<any> {
+  console.log(`   [login_coda] Attempting to login as: ${nickname}`);
+  try {
+    codaPage = await loginToCoda({ nickname });
+    codaNickname = nickname;
+    console.log(`   [login_coda] ✅ Success - page is set`);
+    return { success: true, message: `Logged in to Coda (${nickname})` };
+  } catch (err: any) {
+    console.log(`   [login_coda] ❌ Failed:`, err.message);
+    try { await closeCodaBrowser(); } catch { /* ignore */ }
+    codaPage = null;
+    codaNickname = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postCodaTool(title: string, htmlContent: string): Promise<any> {
+  try {
+    if (!codaPage) {
+      return { error: 'Not logged in. Call login_coda first.', success: false };
+    }
+    const account = codaNickname ? getCodaAccountByNickname(codaNickname) : null;
+    const result = await postToCoda(codaPage, title, htmlContent, account?.docUrl);
+    return {
+      success: result.success,
+      postUrl: result.postUrl,
+    };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (codaPage) {
+      try {
+        await closeCodaBrowser();
+      } catch (e) {
+        console.warn('Failed to close Coda browser:', e);
+      }
+      codaPage = null;
+      codaNickname = null;
     }
   }
 }
@@ -966,7 +1044,7 @@ async function postLinkmateTool(title: string, htmlContent: string, seedKeyword?
 /**
  * Get current page state (for debugging)
  */
-export function getPageState(): { x: boolean; fb: boolean; li: boolean; hackmd: boolean; medium: boolean; googleSite: boolean; linkedInPulse: boolean; devto: boolean; linkmate: boolean } {
+export function getPageState(): { x: boolean; fb: boolean; li: boolean; hackmd: boolean; medium: boolean; googleSite: boolean; linkedInPulse: boolean; devto: boolean; linkmate: boolean; coda: boolean } {
   return {
     x: xPage !== null,
     fb: fbPage !== null,
@@ -977,6 +1055,7 @@ export function getPageState(): { x: boolean; fb: boolean; li: boolean; hackmd: 
     linkedInPulse: linkedInPulsePage !== null,
     devto: devtoPage !== null,
     linkmate: linkmatePage !== null,
+    coda: codaPage !== null,
   };
 }
 
@@ -1007,6 +1086,13 @@ export async function closeAllBrowsers(): Promise<void> {
       await closeHackMDBrowser();
     } catch (e) {}
     hackmdPage = null;
+  }
+  if (codaPage) {
+    try {
+      await closeCodaBrowser();
+    } catch (e) {}
+    codaPage = null;
+    codaNickname = null;
   }
   if (mediumPage) {
     try {

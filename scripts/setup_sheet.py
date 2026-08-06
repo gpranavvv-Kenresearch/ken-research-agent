@@ -59,6 +59,8 @@ BLOG_HEADERS = [
     "Calisthenics Post URL", "Calisthenics Status", "Calisthenics Batch", "Calisthenics Error",
     # Linkmate
     "Linkmate Post URL", "Linkmate Status", "Linkmate Batch", "Linkmate Error",
+    # Coda
+    "Coda Post URL", "Coda Status", "Coda Batch", "Coda Error",
 ]
 
 # ── Auth ──────────────────────────────────────────────────────────────────────

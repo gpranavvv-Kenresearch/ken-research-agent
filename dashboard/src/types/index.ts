@@ -204,6 +204,14 @@ export const BLOG_PLATFORMS: PlatformDef[] = [
     errorCols: ['Linkmate Error', 'linkMateError'],
     dateCols: ['lastPostedLinkmate'],
   },
+  {
+    key: 'coda', label: 'Coda', icon: 'C', color: '#F46A54',
+    statusCols: ['Coda Status', 'codaStatus'],
+    urlCols: ['Coda Post URL', 'codaPostUrl'],
+    batchCols: ['Coda Batch', 'codaBatch'],
+    errorCols: ['Coda Error', 'codaError'],
+    dateCols: ['Last Posted Coda', 'lastPostedCoda'],
+  },
 ];
 
 export const ACCOUNT_NICKNAMES = [
