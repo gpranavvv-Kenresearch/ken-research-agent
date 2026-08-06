@@ -10,5 +10,11 @@
     "date": "2026-08-06",
     "title": "New social bookmarking platform added: Tumblr",
     "description": "Log in via your Logins page to start using it. Posting and generation will happen automatically after that — just check the Track section regularly."
+  },
+  {
+    "id": "2026-08-06-auto-posting-reminder",
+    "date": "2026-08-06",
+    "title": "Posting happens automatically now",
+    "description": "You don't need to click Generate Blogs or Post Now — it all runs on its own. Just keep an eye on the Track section of the dashboard to see what's gone out and catch any failures."
   }
 ]
