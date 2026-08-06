@@ -33,6 +33,7 @@ import { startPostCycle, stopPostCycle, postCycleStatus } from './postCycle.js';
 import { getQueueStatus, estimateWaitMs, CATEGORIES } from '../utils/jobQueue.js';
 import { proxySummary, rotateProxy } from '../health/proxyPool.js';
 import { checkProxies } from '../health/proxyCheck.js';
+import { getAccountCounts, setAccountCount } from '../utils/accountRotation.js';
 
 let websockifyProc: ChildProcess | null = null;
 
@@ -94,6 +95,26 @@ app.post('/api/agent/:agent/auth', (req: Request, res: Response) => {
 // GET /api/agent/:agent/status — fleet login status per platform.
 app.get('/api/agent/:agent/status', requireAgentToken, (req: Request, res: Response) => {
   res.json(listAgentStatus(req.params.agent));
+});
+
+// GET /api/agent/:agent/account-counts — declared "how many accounts do I
+// have" per platform, e.g. { x: 2, fb: 3 } — used by the round-robin
+// posting rotation (src/utils/accountRotation.ts), not session detection.
+app.get('/api/agent/:agent/account-counts', requireAgentToken, (req: Request, res: Response) => {
+  res.json(getAccountCounts(req.params.agent));
+});
+
+// POST /api/agent/:agent/account-counts { platform, count } — declare how
+// many accounts this agent has logged in for one platform.
+app.post('/api/agent/:agent/account-counts', requireAgentToken, (req: Request, res: Response) => {
+  const platform = String(req.body?.platform || '');
+  const count = Number(req.body?.count);
+  if (!platform || !Number.isFinite(count) || count < 1) {
+    res.status(400).json({ error: 'platform and a count >= 1 are required' });
+    return;
+  }
+  setAccountCount(req.params.agent, platform, count);
+  res.json({ ok: true, platform, count: Math.floor(count) });
 });
 
 // POST /api/agent/:agent/login  { platform, index? } — start an embedded login.

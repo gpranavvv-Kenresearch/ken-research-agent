@@ -132,6 +132,24 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
     { refreshInterval: 5000, shouldRetryOnError: false }
   );
 
+  const { data: accountCounts, mutate: mutateCounts } = useSWR<Record<string, number>>(
+    hydrated && token ? `/api/agent/${agentId}/account-counts` : null,
+    authedFetcher,
+    { refreshInterval: 15000, shouldRetryOnError: false }
+  );
+
+  async function saveAccountCount(platform: string, count: number) {
+    if (!token || count < 1) return;
+    try {
+      await fetch(`/api/agent/${agentId}/account-counts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Agent-Token': token },
+        body: JSON.stringify({ platform, count }),
+      });
+      void mutateCounts();
+    } catch { /* best-effort — next save retries */ }
+  }
+
   const [modal, setModal] = useState<LoginModal | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
@@ -529,6 +547,23 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {grp === 'social' && (
+                      <label
+                        className="flex items-center gap-1.5 text-xs text-slate-400"
+                        title="How many logged-in accounts you have for this platform — posting rotates through them in order (1, 2, 3, 1...). Leave at 1 if you only have one."
+                      >
+                        Accounts
+                        <input
+                          type="number"
+                          min={1}
+                          max={10}
+                          defaultValue={accountCounts?.[p.key] ?? 1}
+                          key={`${p.key}-${accountCounts?.[p.key] ?? 1}`} // resync the field if the server value changes elsewhere
+                          onBlur={(e) => saveAccountCount(p.key, Number(e.target.value))}
+                          className="w-14 bg-slate-800 border border-border rounded px-2 py-1 text-white text-center focus:outline-none focus:border-blue-500"
+                        />
+                      </label>
+                    )}
                     {grp !== 'engine' && (
                       <button
                         onClick={() => startLoginBatch(p.key)}
