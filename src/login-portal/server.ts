@@ -109,8 +109,8 @@ app.get('/api/agent/:agent/account-counts', requireAgentToken, (req: Request, re
 app.post('/api/agent/:agent/account-counts', requireAgentToken, (req: Request, res: Response) => {
   const platform = String(req.body?.platform || '');
   const count = Number(req.body?.count);
-  if (!platform || !Number.isFinite(count) || count < 1) {
-    res.status(400).json({ error: 'platform and a count >= 1 are required' });
+  if (!platform || !Number.isFinite(count) || count < 0) {
+    res.status(400).json({ error: 'platform and a count >= 0 are required' });
     return;
   }
   setAccountCount(req.params.agent, platform, count);

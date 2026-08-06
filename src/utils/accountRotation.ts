@@ -50,7 +50,7 @@ export function getAccountCounts(agent: string): Record<string, number> {
 export function setAccountCount(agent: string, platformKey: string, count: number): void {
   const counts = loadJson<CountsByAgent>(COUNTS_FILE, {});
   const key = agent.toLowerCase();
-  counts[key] = { ...(counts[key] ?? {}), [platformKey]: Math.max(1, Math.floor(count)) };
+  counts[key] = { ...(counts[key] ?? {}), [platformKey]: Math.max(0, Math.floor(count)) };
   saveJson(COUNTS_FILE, counts);
 }
 

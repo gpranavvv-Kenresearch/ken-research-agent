@@ -139,7 +139,7 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
   );
 
   async function saveAccountCount(platform: string, count: number) {
-    if (!token || count < 1) return;
+    if (!token || count < 0 || !Number.isFinite(count)) return;
     try {
       await fetch(`/api/agent/${agentId}/account-counts`, {
         method: 'POST',
@@ -550,15 +550,15 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
                     {grp !== 'engine' && (
                       <label
                         className="flex items-center gap-1.5 text-xs text-slate-400"
-                        title="How many logged-in accounts you have for this platform — posting rotates through them in order (1, 2, 3, 1...). Leave at 1 if you only have one."
+                        title="How many logged-in accounts you have for this platform — posting rotates through them in order (1, 2, 3, 1...). 0 = not set up yet (uses the default account)."
                       >
                         Accounts
                         <input
                           type="number"
-                          min={1}
+                          min={0}
                           max={10}
-                          defaultValue={accountCounts?.[p.key] ?? 1}
-                          key={`${p.key}-${accountCounts?.[p.key] ?? 1}`} // resync the field if the server value changes elsewhere
+                          defaultValue={accountCounts?.[p.key] ?? 0}
+                          key={`${p.key}-${accountCounts?.[p.key] ?? 0}`} // resync the field if the server value changes elsewhere
                           onBlur={(e) => saveAccountCount(p.key, Number(e.target.value))}
                           className="w-14 bg-slate-800 border border-border rounded px-2 py-1 text-white text-center focus:outline-none focus:border-blue-500"
                         />
