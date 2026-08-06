@@ -547,7 +547,7 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {grp === 'social' && (
+                    {grp !== 'engine' && (
                       <label
                         className="flex items-center gap-1.5 text-xs text-slate-400"
                         title="How many logged-in accounts you have for this platform — posting rotates through them in order (1, 2, 3, 1...). Leave at 1 if you only have one."
