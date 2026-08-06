@@ -3,6 +3,7 @@ import useSWR from 'swr';
 import { useState, useEffect, useRef, use } from 'react';
 import { getUser, type UserConfig } from '@/lib/userConfig';
 import { IMAGE_PROMPT_OPTIONS } from '@/types';
+import { AutomationNoticeContent } from '@/components/AutomationNoticeModal';
 
 const PLATFORMS = [
   // Social
@@ -254,6 +255,7 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const [showGen, setShowGen] = useState(false);
+  const [showAutomationNotice, setShowAutomationNotice] = useState(false);
   const [genBusy, setGenBusy] = useState(false);
   async function submitGenerate(count: number, format: string, sample: string, imagePrompt: string, force: boolean) {
     if (!token) return;
@@ -370,11 +372,11 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => (genStatus?.generating ? stopGenerate() : setShowGen(true))}
-            disabled={genStopBusy || isAutomated}
+            onClick={() => (isAutomated ? setShowAutomationNotice(true) : genStatus?.generating ? stopGenerate() : setShowGen(true))}
+            disabled={genStopBusy}
             title={isAutomated ? 'Generation is automatic for this account — check Track for progress' : undefined}
             className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-              genStatus?.generating ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+              isAutomated ? 'bg-slate-700 hover:bg-slate-600 text-slate-300' : genStatus?.generating ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'
             }`}
           >
             {genStopBusy ? 'Working…' : genStatus?.generating ? '⏹ Stop Generating' : isAutomated ? '✨ Generate Blogs (Automatic)' : '✨ Generate Blogs'}
@@ -400,11 +402,11 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
             const othersTurn = postCycleStatus?.running && postCycleStatus.agent !== agentId;
             return (
               <button
-                onClick={() => (mine ? stopPostCycle() : setShowPostCounts(true))}
-                disabled={postCycleBusy || othersTurn || isAutomated}
+                onClick={() => (isAutomated ? setShowAutomationNotice(true) : mine ? stopPostCycle() : setShowPostCounts(true))}
+                disabled={postCycleBusy || othersTurn}
                 title={isAutomated ? 'Posting is automatic for this account — check Track for progress' : othersTurn ? `Running for ${postCycleStatus?.agent}` : 'Choose how many posts per platform, then runs in rounds (1 post/platform/round) until every count reaches 0, 30 min between rounds'}
                 className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                  mine ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-sky-600 hover:bg-sky-500 text-white'
+                  isAutomated ? 'bg-slate-700 hover:bg-slate-600 text-slate-300' : mine ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-sky-600 hover:bg-sky-500 text-white'
                 }`}
               >
                 {postCycleBusy ? 'Working…' : mine ? '⏹ Stop Posting' : othersTurn ? `🔒 Running for ${postCycleStatus?.agent}` : isAutomated ? '📮 Post Now (Automatic)' : '📮 Post Now'}
@@ -650,6 +652,7 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
       {modal && <LoginOverlay modal={modal} onDone={finishLogin} />}
       {showGen && <GenerateModal agentId={agentId} token={token} busy={genBusy} onClose={() => setShowGen(false)} onSubmit={submitGenerate} />}
       {showPostCounts && <PostCountsModal agentId={agentId} token={token} busy={postCycleBusy} onClose={() => setShowPostCounts(false)} onSubmit={submitPostCounts} />}
+      {showAutomationNotice && <AutomationNoticeContent onClose={() => setShowAutomationNotice(false)} />}
     </div>
   );
 }

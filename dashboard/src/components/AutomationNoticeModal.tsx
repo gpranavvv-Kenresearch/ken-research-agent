@@ -5,20 +5,7 @@ import { useEffect, useState } from 'react';
 // everyone who already dismissed the previous version.
 const DISMISS_KEY = 'kr_automation_notice_dismissed_v1';
 
-export default function AutomationNoticeModal() {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (!localStorage.getItem(DISMISS_KEY)) setOpen(true);
-  }, []);
-
-  function dismiss() {
-    localStorage.setItem(DISMISS_KEY, '1');
-    setOpen(false);
-  }
-
-  if (!open) return null;
-
+export function AutomationNoticeContent({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4">
       <div className="bg-card border border-border rounded-xl w-full max-w-lg p-6">
@@ -33,7 +20,7 @@ export default function AutomationNoticeModal() {
         </ul>
         <p className="text-sm text-slate-300 mb-6">Please use the Track section for all posting updates, status checks, and failed-post retries.</p>
         <div className="flex justify-end">
-          <button onClick={dismiss}
+          <button onClick={onClose}
             className="px-5 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white"
           >
             Got it
@@ -42,4 +29,21 @@ export default function AutomationNoticeModal() {
       </div>
     </div>
   );
+}
+
+/** Shows once ever per browser (localStorage-gated) — mounted globally in ClientShell. */
+export default function AutomationNoticeModal() {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!localStorage.getItem(DISMISS_KEY)) setOpen(true);
+  }, []);
+
+  function dismiss() {
+    localStorage.setItem(DISMISS_KEY, '1');
+    setOpen(false);
+  }
+
+  if (!open) return null;
+  return <AutomationNoticeContent onClose={dismiss} />;
 }
