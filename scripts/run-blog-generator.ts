@@ -192,6 +192,28 @@ function generateImage(marketName: string, reportUrl: string, imagePromptChoice:
   });
 }
 
+// A failed image (rate-limit modal, a transient DOM glitch) is worth one retry
+// before giving up on it — but NOT unbounded retries: a genuinely exhausted
+// ChatGPT Plus image quota can take hours to reset (confirmed 2026-08-06 — "You're
+// out of image creations for now... wait until 2:18 PM"), and retrying into that
+// would just stall the whole batch for hours instead of one row. 2 total
+// attempts catches transient failures without risking that.
+const MAX_IMAGE_ATTEMPTS = 2;
+
+/** Generate the cover image, retrying once on failure before giving up on this row. */
+async function generateImageWithRetry(marketName: string, reportUrl: string, imagePromptChoice: string): Promise<string> {
+  for (let attempt = 1; attempt <= MAX_IMAGE_ATTEMPTS; attempt++) {
+    const url = await generateImage(marketName, reportUrl, imagePromptChoice);
+    if (url) return url;
+    if (attempt < MAX_IMAGE_ATTEMPTS) {
+      console.log(`⏳ Cover image attempt ${attempt}/${MAX_IMAGE_ATTEMPTS} failed — retrying for: "${marketName}"`);
+      await new Promise((r) => setTimeout(r, 15000));
+    }
+  }
+  console.log(`✗ Cover image failed after ${MAX_IMAGE_ATTEMPTS} attempts — saving this row without one.`);
+  return '';
+}
+
 /** Force the real cover image into the article HTML — replaces a model-written <img> if any, else prepends one. */
 function injectCoverImage(html: string, imageUrl: string, altText: string): string {
   if (!imageUrl) return html;
@@ -286,7 +308,7 @@ async function pass() {
         // Separate ChatGPT profiles (chatgpt-image-profile vs chatgpt-profile) — safe to run together.
         console.log(`\n🖼️  Generating cover image + article in parallel for: "${marketName}"`);
         [coverImageUrl, res] = await Promise.all([
-          withCoverLog(generateImage(marketName, String(row.targetUrl || ''), imagePromptChoice)),
+          withCoverLog(generateImageWithRetry(marketName, String(row.targetUrl || ''), imagePromptChoice)),
           generate(row),
         ]);
       } else {
@@ -297,7 +319,7 @@ async function pass() {
         // process per profile dir at a time either way — so these run one after
         // another instead.
         console.log(`\n🖼️  Generating cover image for: "${marketName}"`);
-        coverImageUrl = await withCoverLog(generateImage(marketName, String(row.targetUrl || ''), imagePromptChoice));
+        coverImageUrl = await withCoverLog(generateImageWithRetry(marketName, String(row.targetUrl || ''), imagePromptChoice));
         res = await generate(row);
       }
 
