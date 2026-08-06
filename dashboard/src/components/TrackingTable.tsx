@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import type { RawRow } from '@/types';
-import { getField, SOCIAL_PLATFORMS, BLOG_PLATFORMS } from '@/types';
+import { getField, latestPostDate, SOCIAL_PLATFORMS, BLOG_PLATFORMS } from '@/types';
 import PlatformBadge from './PlatformBadge';
 import RowDetailModal from './RowDetailModal';
 
@@ -31,14 +31,19 @@ function ProgressBar({ row, tab }: { row: RawRow; tab: 'social' | 'blog' }) {
 export default function TrackingTable({ rows, tab, agentId }: Props) {
   const [selected, setSelected] = useState<RawRow | null>(null);
   const [search, setSearch] = useState('');
+  const [dateFilter, setDateFilter] = useState(''); // "YYYY-MM-DD", '' = no filter
   const platforms = tab === 'social' ? SOCIAL_PLATFORMS : BLOG_PLATFORMS;
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   const filtered = rows.filter((r) => {
-    if (!search) return true;
-    const title = getField(r, 'Blog Title', 'Title', 'title').toLowerCase();
-    const url = getField(r, 'targetUrl', 'Target URL').toLowerCase();
-    const name = getField(r, 'Name', 'name').toLowerCase();
-    return title.includes(search.toLowerCase()) || url.includes(search.toLowerCase()) || name.includes(search.toLowerCase());
+    if (search) {
+      const title = getField(r, 'Blog Title', 'Title', 'title').toLowerCase();
+      const url = getField(r, 'targetUrl', 'Target URL').toLowerCase();
+      const name = getField(r, 'Name', 'name').toLowerCase();
+      if (!title.includes(search.toLowerCase()) && !url.includes(search.toLowerCase()) && !name.includes(search.toLowerCase())) return false;
+    }
+    if (dateFilter && latestPostDate(r, platforms) !== dateFilter) return false;
+    return true;
   });
 
   if (!rows.length) {
@@ -53,8 +58,8 @@ export default function TrackingTable({ rows, tab, agentId }: Props) {
 
   return (
     <div>
-      {/* Search */}
-      <div className="mb-4">
+      {/* Search + date filter */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <input
           type="text"
           placeholder="Search by title, URL, or account…"
@@ -62,8 +67,25 @@ export default function TrackingTable({ rows, tab, agentId }: Props) {
           onChange={(e) => setSearch(e.target.value)}
           className="w-full max-w-md bg-card border border-border rounded-lg px-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
         />
-        {search && (
-          <span className="ml-3 text-xs text-slate-500">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-slate-400">Posted on</label>
+          <input
+            type="date"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="bg-card border border-border rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
+          />
+          <button onClick={() => setDateFilter(todayStr)}
+            className={`text-xs px-2.5 py-1.5 rounded-lg transition-colors ${dateFilter === todayStr ? 'bg-blue-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-300'}`}
+          >
+            Today
+          </button>
+          {dateFilter && (
+            <button onClick={() => setDateFilter('')} className="text-xs text-slate-500 hover:text-white">✕ clear</button>
+          )}
+        </div>
+        {(search || dateFilter) && (
+          <span className="text-xs text-slate-500">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
         )}
       </div>
 
@@ -78,6 +100,7 @@ export default function TrackingTable({ rows, tab, agentId }: Props) {
               <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider w-24">Format</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider w-24">Content</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider w-28">Progress</th>
+              <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider w-24">Last Posted</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Platforms</th>
             </tr>
           </thead>
@@ -94,6 +117,7 @@ export default function TrackingTable({ rows, tab, agentId }: Props) {
               const hasContent = tab === 'social'
                 ? !!(xPost || fbPost || liPost)
                 : !!blogContent;
+              const lastPosted = latestPostDate(row, platforms);
 
               return (
                 <tr
@@ -128,6 +152,12 @@ export default function TrackingTable({ rows, tab, agentId }: Props) {
                   </td>
                   <td className="px-4 py-3">
                     <ProgressBar row={row} tab={tab} />
+                  </td>
+                  <td className="px-4 py-3">
+                    {lastPosted
+                      ? <span className={`text-xs tabular-nums ${lastPosted === todayStr ? 'text-emerald-400 font-medium' : 'text-slate-400'}`}>{lastPosted}{lastPosted === todayStr ? ' (today)' : ''}</span>
+                      : <span className="text-slate-600 text-xs">—</span>
+                    }
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1.5 max-w-[480px]">

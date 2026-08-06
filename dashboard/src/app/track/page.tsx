@@ -3,7 +3,7 @@ import useSWR from 'swr';
 import { useState } from 'react';
 import TrackingTable from '@/components/TrackingTable';
 import type { RawRow } from '@/types';
-import { BLOG_PLATFORMS, SOCIAL_PLATFORMS, getField } from '@/types';
+import { BLOG_PLATFORMS, SOCIAL_PLATFORMS, getField, latestPostDate } from '@/types';
 import { useUser } from '@/context/UserContext';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -89,10 +89,16 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
   );
 }
 
+/** Row has generated content ready to post — same check TrackingTable uses for its Ready/Pending badge. */
+function hasGeneratedContent(row: RawRow, tab: 'blog' | 'social'): boolean {
+  if (tab === 'blog') return !!getField(row, 'Blog Content', 'blogContent');
+  return !!(getField(row, 'X Post', 'xPost') || getField(row, 'FB Post', 'fbPost') || getField(row, 'LinkedIn Post', 'linkedinPost'));
+}
+
 function StatsBar({ rows, tab }: { rows: RawRow[]; tab: 'blog' | 'social' }) {
   const platforms = tab === 'blog' ? BLOG_PLATFORMS : SOCIAL_PLATFORMS;
-  const totalCells = rows.length * platforms.length;
-  let posted = 0, failed = 0;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  let posted = 0, failed = 0, postedToday = 0;
 
   for (const row of rows) {
     for (const p of platforms) {
@@ -100,14 +106,28 @@ function StatsBar({ rows, tab }: { rows: RawRow[]; tab: 'blog' | 'social' }) {
       if (s === 'posted' || s === 'success' || s === 'done') posted++;
       else if (s === 'failed' || s === 'error') failed++;
     }
+    if (latestPostDate(row, platforms) === todayStr) postedToday++;
   }
 
+  // Pending = rows with content generated but not yet posted to any platform —
+  // e.g. 60 rows, 25 have generated content, 10 of those got posted -> pending = 15.
+  const withContent = rows.filter((row) => hasGeneratedContent(row, tab));
+  const withContentPosted = withContent.filter((row) =>
+    platforms.some((p) => {
+      const s = getField(row, ...p.statusCols).toLowerCase();
+      return s === 'posted' || s === 'success' || s === 'done';
+    })
+  );
+  const pending = withContent.length - withContentPosted.length;
+
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
       <StatCard label="Total Rows" value={rows.length} color="text-white" />
+      <StatCard label="Generated" value={withContent.length} color="text-blue-400" />
       <StatCard label="Posts Live" value={posted} color="text-green-400" />
+      <StatCard label="Posted Today" value={postedToday} color="text-emerald-400" />
       <StatCard label="Failed" value={failed} color="text-red-400" />
-      <StatCard label="Pending" value={totalCells - posted - failed} color="text-slate-400" />
+      <StatCard label="Pending" value={pending} color="text-slate-400" />
     </div>
   );
 }

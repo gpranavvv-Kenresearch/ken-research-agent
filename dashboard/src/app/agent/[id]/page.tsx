@@ -29,6 +29,12 @@ const PLATFORMS = [
   { key: 'chatgpt-image', label: 'ChatGPT (image gen)', group: 'engine', icon: '🖼', color: 'bg-fuchsia-700 text-white' },
 ];
 
+// These 5 agents now run on the fully automatic nightly blog-generation +
+// daily posting rotation (scripts/nightly-blog-rotation.ts / nightly-post-rotation.ts
+// on the VPS) — manual Generate Blogs / Post Now is disabled for them so nobody
+// accidentally double-runs alongside the automation. Check progress in Track.
+const AUTOMATED_AGENTS = ['sanya', 'meenakshi', 'vansh', 'sameeksha', 'hritika'];
+
 // Platforms the counted, round-based "Post Now" cycle can post to — keys match
 // scheduler-new.ts's COUNTED_PLATFORMS exactly (sent straight through as the
 // POST body, no translation).
@@ -349,6 +355,7 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
   if (!token) return <PinGate agentId={agentId} user={user} onAuthed={saveToken} />;
 
   const platforms = data?.platforms ?? {};
+  const isAutomated = AUTOMATED_AGENTS.includes(agentId.toLowerCase());
 
   return (
     <div>
@@ -364,12 +371,13 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
         <div className="flex items-center gap-2">
           <button
             onClick={() => (genStatus?.generating ? stopGenerate() : setShowGen(true))}
-            disabled={genStopBusy}
-            className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+            disabled={genStopBusy || isAutomated}
+            title={isAutomated ? 'Generation is automatic for this account — check Track for progress' : undefined}
+            className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
               genStatus?.generating ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'
             }`}
           >
-            {genStopBusy ? 'Working…' : genStatus?.generating ? '⏹ Stop Generating' : '✨ Generate Blogs'}
+            {genStopBusy ? 'Working…' : genStatus?.generating ? '⏹ Stop Generating' : isAutomated ? '✨ Generate Blogs (Automatic)' : '✨ Generate Blogs'}
           </button>
           {(() => {
             const mine = cycleStatus?.running && cycleStatus.agent === agentId;
@@ -393,13 +401,13 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
             return (
               <button
                 onClick={() => (mine ? stopPostCycle() : setShowPostCounts(true))}
-                disabled={postCycleBusy || othersTurn}
-                title={othersTurn ? `Running for ${postCycleStatus?.agent}` : 'Choose how many posts per platform, then runs in rounds (1 post/platform/round) until every count reaches 0, 30 min between rounds'}
-                className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+                disabled={postCycleBusy || othersTurn || isAutomated}
+                title={isAutomated ? 'Posting is automatic for this account — check Track for progress' : othersTurn ? `Running for ${postCycleStatus?.agent}` : 'Choose how many posts per platform, then runs in rounds (1 post/platform/round) until every count reaches 0, 30 min between rounds'}
+                className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                   mine ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-sky-600 hover:bg-sky-500 text-white'
                 }`}
               >
-                {postCycleBusy ? 'Working…' : mine ? '⏹ Stop Posting' : othersTurn ? `🔒 Running for ${postCycleStatus?.agent}` : '📮 Post Now'}
+                {postCycleBusy ? 'Working…' : mine ? '⏹ Stop Posting' : othersTurn ? `🔒 Running for ${postCycleStatus?.agent}` : isAutomated ? '📮 Post Now (Automatic)' : '📮 Post Now'}
               </button>
             );
           })()}

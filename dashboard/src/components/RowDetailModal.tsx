@@ -100,6 +100,7 @@ function PlatformSection({ title, platforms, row, name, tab, agentId }: {
           const batch   = getField(row, ...p.batchCols);
           const error   = getField(row, ...p.errorCols);
           const isPosted = status === 'posted' || status === 'success' || status === 'done';
+          const isFailed = status === 'failed' || status === 'error';
           const hasContent = tab === 'social' ? !!contentMap[p.key] : !!blogContentLocal;
           const canPost = hasContent && !isPosted;
 
@@ -120,9 +121,11 @@ function PlatformSection({ title, platforms, row, name, tab, agentId }: {
                 <button
                   onClick={() => handlePostNow(p.key)}
                   disabled={posting === p.key}
-                  className="shrink-0 text-xs px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-wait text-white font-medium transition-colors"
+                  className={`shrink-0 text-xs px-2.5 py-1 rounded-md disabled:opacity-50 disabled:cursor-wait text-white font-medium transition-colors ${
+                    isFailed ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'
+                  }`}
                 >
-                  {posting === p.key ? 'Queuing…' : 'Post Now'}
+                  {posting === p.key ? 'Queuing…' : isFailed ? '🔄 Retry' : 'Post Now'}
                 </button>
               )}
             </div>

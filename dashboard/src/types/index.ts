@@ -12,6 +12,7 @@ export interface PlatformDef {
   urlCols: string[];
   batchCols: string[];
   errorCols: string[];
+  dateCols: string[]; // real "last posted" timestamp column(s) — batchCols is just a label like "Batch 1", not a date
   color: string;
 }
 
@@ -27,6 +28,26 @@ export function getField(row: RawRow, ...cols: string[]): string {
   return '';
 }
 
+/** dateCols cells accumulate history as "stamp1 | stamp2 | ..." (sheets.ts's appendValue) — last segment is the most recent. Returns "YYYY-MM-DD" or ''. */
+export function latestDateFromCell(raw: string): string {
+  if (!raw) return '';
+  const parts = raw.split('|').map((s) => s.trim()).filter(Boolean);
+  const last = parts[parts.length - 1] || '';
+  const m = last.match(/\d{4}-\d{2}-\d{2}/);
+  return m ? m[0] : '';
+}
+
+/** The most recent "last posted" date across every platform on this row, "YYYY-MM-DD" or ''. */
+export function latestPostDate(row: RawRow, platforms: PlatformDef[]): string {
+  let latest = '';
+  for (const p of platforms) {
+    if (!p.dateCols.length) continue;
+    const d = latestDateFromCell(getField(row, ...p.dateCols));
+    if (d && d > latest) latest = d;
+  }
+  return latest;
+}
+
 export const SOCIAL_PLATFORMS: PlatformDef[] = [
   {
     key: 'x', label: 'X / Twitter', icon: '𝕏', color: '#1DA1F2',
@@ -34,6 +55,7 @@ export const SOCIAL_PLATFORMS: PlatformDef[] = [
     urlCols: ['X Post URL', 'xPostUrl'],
     batchCols: ['X Batch', 'xBatch'],
     errorCols: ['X Error', 'xError'],
+    dateCols: ['lastPostedX'],
   },
   {
     key: 'facebook', label: 'Facebook', icon: 'f', color: '#4267B2',
@@ -41,6 +63,7 @@ export const SOCIAL_PLATFORMS: PlatformDef[] = [
     urlCols: ['FB Post URL', 'fbPostUrl'],
     batchCols: ['FB Batch', 'fbBatch'],
     errorCols: ['FB Error', 'fbError'],
+    dateCols: ['lastPostedFb'],
   },
   {
     key: 'linkedin', label: 'LinkedIn', icon: 'in', color: '#0077B5',
@@ -48,6 +71,7 @@ export const SOCIAL_PLATFORMS: PlatformDef[] = [
     urlCols: ['LinkedIn Post URL', 'linkedinPostUrl'],
     batchCols: ['liBatch', 'LI Batch'],
     errorCols: ['LinkedIn Error', 'linkedinError'],
+    dateCols: ['lastPostedLi'],
   },
   {
     key: 'threads', label: 'Threads', icon: '@', color: '#000000',
@@ -55,6 +79,7 @@ export const SOCIAL_PLATFORMS: PlatformDef[] = [
     urlCols: ['Thread Post URl'],
     batchCols: ['Thread Batch'],
     errorCols: ['Thread Error'],
+    dateCols: [], // no lastPosted column tracked for this platform yet
   },
   {
     key: 'instagram', label: 'Instagram', icon: '📷', color: '#E1306C',
@@ -62,6 +87,7 @@ export const SOCIAL_PLATFORMS: PlatformDef[] = [
     urlCols: ['Instagram Post URl'],
     batchCols: ['instagram Batch'],
     errorCols: ['Instagram Error'],
+    dateCols: [], // no lastPosted column tracked for this platform yet
   },
 ];
 
@@ -72,6 +98,7 @@ export const BLOG_PLATFORMS: PlatformDef[] = [
     urlCols: ['Medium Post URL', 'mediumPostUrl'],
     batchCols: ['Medium Batch', 'mediumBatch'],
     errorCols: ['Medium Error', 'mediumError'],
+    dateCols: ['lastPostedMedium'],
   },
   {
     key: 'devto', label: 'Dev.to', icon: 'DEV', color: '#0a0a0a',
@@ -79,6 +106,7 @@ export const BLOG_PLATFORMS: PlatformDef[] = [
     urlCols: ['Dev.to Post URL', 'devtoPostUrl'],
     batchCols: ['Dev.to Batch', 'devtoBatch'],
     errorCols: ['Dev.to Error', 'devtoError'],
+    dateCols: ['lastPostedDevto'],
   },
   {
     key: 'substack', label: 'Substack', icon: 'S', color: '#FF6719',
@@ -86,6 +114,7 @@ export const BLOG_PLATFORMS: PlatformDef[] = [
     urlCols: ['Substack Post URL', 'substackPostUrl'],
     batchCols: ['Substack Batch', 'substackBatch'],
     errorCols: ['Substack Error', 'substackError'],
+    dateCols: ['lastPostedSubstack'],
   },
   {
     key: 'hackmd', label: 'HackMD', icon: 'H', color: '#1E90FF',
@@ -93,6 +122,7 @@ export const BLOG_PLATFORMS: PlatformDef[] = [
     urlCols: ['HackMD Post URL', 'hackmdPostUrl'],
     batchCols: ['HackMD Batch', 'hackmdBatch'],
     errorCols: ['HackMD Error', 'hackmdError'],
+    dateCols: ['lastPostedHackmd', 'lastPostedHackMD'],
   },
   {
     key: 'linkedinPulse', label: 'LI Pulse', icon: 'LP', color: '#0077B5',
@@ -100,6 +130,7 @@ export const BLOG_PLATFORMS: PlatformDef[] = [
     urlCols: ['LinkedIn Pulse URL', 'LinkedIn Pulse Post URL', 'linkedinPulsePostUrl'],
     batchCols: ['LinkedIn Pulse Batch', 'linkedinPulseBatch'],
     errorCols: ['LinkedIn Pulse Error', 'linkedinPulseError'],
+    dateCols: ['lastPosted linkedin Pulse', 'lastPostedLinkedinPulse'],
   },
   {
     key: 'wordpress', label: 'WordPress', icon: 'WP', color: '#21759B',
@@ -107,6 +138,7 @@ export const BLOG_PLATFORMS: PlatformDef[] = [
     urlCols: ['WordPress Post URL', 'wordpressPostUrl'],
     batchCols: ['WordPress Batch', 'wordpressBatch'],
     errorCols: ['WordPress Error', 'wordpressError'],
+    dateCols: ['lastPostedWordpress'],
   },
   {
     key: 'blogger', label: 'Blogger', icon: 'B', color: '#FF5722',
@@ -114,6 +146,7 @@ export const BLOG_PLATFORMS: PlatformDef[] = [
     urlCols: ['Blogger Post URL', 'bloggerPostUrl'],
     batchCols: ['Blogger Batch', 'bloggerBatch'],
     errorCols: ['Blogger Error', 'bloggerError'],
+    dateCols: ['Last Posted Blogger', 'lastPostedBlogger'],
   },
   {
     key: 'notion', label: 'Notion', icon: 'N', color: '#888',
@@ -121,6 +154,7 @@ export const BLOG_PLATFORMS: PlatformDef[] = [
     urlCols: ['Notion Post URL', 'notionPostUrl'],
     batchCols: ['Notion Batch', 'notionBatch'],
     errorCols: ['Notion Error', 'notionError'],
+    dateCols: ['Last Posted Notion', 'lastPostedNotion'],
   },
   {
     key: 'googlesite', label: 'Google Sites', icon: 'G', color: '#4285F4',
@@ -128,6 +162,7 @@ export const BLOG_PLATFORMS: PlatformDef[] = [
     urlCols: ['Google Site Post URL', 'googleSitePostUrl'],
     batchCols: ['Google Site Batch', 'googleSiteBatch'],
     errorCols: ['Google Site Error', 'googleSiteError'],
+    dateCols: ['lastPostedGoogleSite'],
   },
   {
     key: 'note', label: 'Note', icon: '📝', color: '#4DB6AC',
@@ -135,6 +170,7 @@ export const BLOG_PLATFORMS: PlatformDef[] = [
     urlCols: ['Note Post URL', 'notePostUrl'],
     batchCols: ['Note Batch', 'noteBatch'],
     errorCols: ['Note Error', 'noteError'],
+    dateCols: ['Last Posted Note', 'lastPostedNote'],
   },
   {
     key: 'paragraph', label: 'Paragraph', icon: '¶', color: '#9C27B0',
@@ -142,6 +178,7 @@ export const BLOG_PLATFORMS: PlatformDef[] = [
     urlCols: ['Paragraph Post URL', 'paragraphPostUrl'],
     batchCols: ['Paragraph Batch', 'paragraphBatch'],
     errorCols: ['Paragraph Error', 'paragraphError'],
+    dateCols: ['Last Posted Paragraph', 'lastPostedParagraph'],
   },
   {
     key: 'patreon', label: 'Patreon', icon: 'P', color: '#F96854',
@@ -149,6 +186,7 @@ export const BLOG_PLATFORMS: PlatformDef[] = [
     urlCols: ['Patreon Post URL', 'patreonPostUrl'],
     batchCols: ['Patreon Batch', 'patreonBatch'],
     errorCols: ['Patreon Error', 'patreonError'],
+    dateCols: ['Last Posted Patreon', 'lastPostedPatreon'],
   },
   {
     key: 'calisthenics', label: 'Calisthenics', icon: 'C', color: '#4CAF50',
@@ -156,6 +194,7 @@ export const BLOG_PLATFORMS: PlatformDef[] = [
     urlCols: ['Calisthenics Post URL', 'calisthenicsPostUrl'],
     batchCols: ['Calisthenics Batch', 'calisthenicsNBatch'],
     errorCols: ['Calisthenics Error', 'calisthenicsError'],
+    dateCols: ['lastPosted Calisthenics', 'lastPostedCalisthenics'],
   },
   {
     key: 'linkmate', label: 'Linkmate', icon: '🔗', color: '#FF9800',
@@ -163,6 +202,7 @@ export const BLOG_PLATFORMS: PlatformDef[] = [
     urlCols: ['Linkmate Post URL', 'linkMatePostUrl'],
     batchCols: ['Linkmate Batch', 'linkmateBatch'],
     errorCols: ['Linkmate Error', 'linkMateError'],
+    dateCols: ['lastPostedLinkmate'],
   },
 ];
 
