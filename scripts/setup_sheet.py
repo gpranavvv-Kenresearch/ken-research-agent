@@ -26,6 +26,7 @@ SOCIAL_HEADERS = [
     "X Post", "X Post URL", "X Status", "X Batch", "X Error", "lastPostedX",
     "FB Post", "FB Post URL", "FB Status", "FB Batch", "FB Error", "lastPostedFb",
     "LinkedIn Post", "LinkedIn Post URL", "LinkedIn Status", "LI Batch", "LinkedIn Error", "lastPostedLi",
+    "Tumblr Post", "Tumblr Post URL", "Tumblr Status", "Tumblr Batch", "Tumblr Error", "lastPostedTumblr",
 ]
 
 BLOG_HEADERS = [

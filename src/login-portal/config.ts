@@ -32,6 +32,10 @@ export const PLATFORMS: Record<string, PortalPlatform> = {
   x:  { key: 'x',  label: 'X (Twitter)', group: 'social', loginUrl: 'https://x.com/login',                homeUrl: 'https://x.com/home',                        registryFile: '.accounts/accounts.json',          authCookies: ['auth_token'] },
   fb: { key: 'fb', label: 'Facebook',    group: 'social', loginUrl: 'https://www.facebook.com/login',      homeUrl: 'https://www.facebook.com/me',               registryFile: '.accounts/facebook-accounts.json', authCookies: ['c_user'] },
   li: { key: 'li', label: 'LinkedIn',    group: 'social', loginUrl: 'https://www.linkedin.com/login',      homeUrl: 'https://www.linkedin.com/feed/',            registryFile: '.accounts/linkedin-accounts.json', authCookies: ['li_at'] },
+  // authCookies unconfirmed (tumblr.com's actual session cookie name hasn't
+  // been inspected live yet) — login itself works regardless, per this
+  // file's own note above; only the "ready" badge accuracy is approximate.
+  tumblr: { key: 'tumblr', label: 'Tumblr', group: 'social', loginUrl: 'https://www.tumblr.com/login', homeUrl: 'https://www.tumblr.com/', registryFile: '.accounts/accounts-tumblr.json', authCookies: ['pfg', 'pfp'] },
 
   // ── Blog ──
   medium:       { key: 'medium',       label: 'Medium',       group: 'blog', loginUrl: 'https://medium.com/m/signin',    homeUrl: 'https://medium.com/',                      registryFile: '.accounts/accounts-medium.json',       authCookies: ['sid', 'uid'] },

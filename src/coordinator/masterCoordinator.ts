@@ -125,7 +125,7 @@ import { addFailure, printDiagnostics, type FailureEntry } from '../utils/diagno
 import { recordError } from '../errorInterceptor.js';
 import { applyFix } from '../autoFix.js';
 import { runSeoAnalysis } from '../agents/seoAgentNew.js';
-import { generateTweet, generateXThread, generateFbPost, generateLiPost, generateMediumPost, generateGoogleSitePost, generateDevtoPost, generateLinkedinPulsePost, generateCalisthenicsPost, generateSubstackPost, generateHackmdPost, generateLinkmatePost } from '../agents/contentAgentNew.js';
+import { generateTweet, generateXThread, generateFbPost, generateLiPost, generateTumblrPost, generateMediumPost, generateGoogleSitePost, generateDevtoPost, generateLinkedinPulsePost, generateCalisthenicsPost, generateSubstackPost, generateHackmdPost, generateLinkmatePost } from '../agents/contentAgentNew.js';
 import { runXAgent, runXThreadAgent } from '../agents/xAgentNew.js';
 import { executeBrowserTool } from '../tools/browserTools.js';
 import {
@@ -134,6 +134,8 @@ import {
   getRowsForContinuousXPosting,
   getRowsForContinuousFbPosting,
   getRowsForContinuousLiPosting,
+  getRowsForContinuousTumblrPosting,
+  saveUnifiedTumblrResult,
   getRowsForContinuousMediumPosting,
   getRowsForContinuousLinkmatePosting,
   getRowsForContinuousDevtoPosting,
@@ -521,6 +523,117 @@ async function postToFbAccount(accountName: string, postText: string): Promise<{
   } catch (err: any) {
     return { success: false, error: err.message };
   }
+}
+
+// ── Tumblr Batch ───────────────────────────────────────────────────────────────
+
+// Helper: Post to single Tumblr account
+async function postToTumblrAccount(accountName: string, postText: string, targetUrl: string): Promise<{
+  success: boolean;
+  postUrl?: string;
+  error?: string;
+}> {
+  try {
+    const loginResult = await executeBrowserTool('login_tumblr', { nickname: accountName });
+    if (!loginResult.success) {
+      return { success: false, error: loginResult.error || 'Tumblr login failed' };
+    }
+    const postResult = await executeBrowserTool('post_tumblr', { postText, targetUrl });
+    return {
+      success: postResult.success ?? false,
+      postUrl: postResult.postUrl,
+      error: postResult.error,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function runTumblrBatch(batchNum: number = 1, limit: number = 12): Promise<void> {
+  const rows = await getRowsForContinuousTumblrPosting(capToLiveAccounts(limit, 'tumblr'));
+
+  if (rows.length === 0) {
+    console.log('[TUMBLR BATCH] No rows available');
+    return;
+  }
+
+  const batchLabel = `Batch ${batchNum}`;
+
+  console.log(`\n[TUMBLR BATCH] Starting ${batchLabel}...`);
+  console.log(`  Found ${rows.length} rows ready for Tumblr posting`);
+
+  let posted = 0;
+  let failed = 0;
+  const failures: FailureEntry[] = [];
+
+  for (const row of rows) {
+    try {
+      console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
+      if (!healthGate('Tumblr', row.name)) continue;
+
+      // Use sheet content if available, otherwise generate (same prompt/history as X)
+      let tumblrPost = row.tumblrPost?.trim() || '';
+      if (!tumblrPost) {
+        console.log(`    ℹ️  No sheet content — generating Tumblr caption for: ${row.title.slice(0, 50)}`);
+        try {
+          tumblrPost = await generateTumblrPost({ url: row.targetUrl, title: row.title, seoRanking: 999, priority: row.priority ?? 'P3', marketValue: row.marketValue });
+        } catch (genErr: any) {
+          console.log(`    ⏭ Skipping — generation failed: ${genErr.message}`);
+          continue;
+        }
+        if (!tumblrPost?.trim()) { console.log(`    ⏭ Skipping — generated content empty`); continue; }
+      }
+      row.tumblrPost = tumblrPost;
+
+      console.log(`    Posting to Tumblr (account: ${row.name})...`);
+      const postResult = await retryOnSelectorTimeout(() => postToTumblrAccount(row.name, tumblrPost, row.targetUrl), { label: 'Tumblr post' });
+      healthRecordSafe('Tumblr', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
+
+      if (postResult.success) {
+        await saveUnifiedTumblrResult(row, {
+          post: tumblrPost,
+          postUrl: postResult.postUrl || '',
+          status: 'Posted',
+          batch: batchLabel,
+        });
+        console.log(`    ✅ Posted → ${postResult.postUrl}`);
+        posted++;
+      } else {
+        await saveUnifiedTumblrResult(row, {
+          post: tumblrPost,
+          postUrl: '',
+          status: 'Failed',
+          batch: '',
+          error: postResult.error,
+        });
+        console.log(`    ❌ Failed: ${postResult.error}`);
+        failed++;
+        addFailure(failures, row.name, postResult.error);
+      }
+
+      await new Promise(r => setTimeout(r, 1000));
+    } catch (err: any) {
+      const kbEntry = recordError({ rawError: err.message, platform: 'tumblr', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
+      await applyFix(kbEntry, { platform: 'tumblr', accountName: row.name, rowIndex: row.rowIndex });
+      console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      addFailure(failures, row.name, err.message);
+      try {
+        await saveUnifiedTumblrResult(row, {
+          post: row.tumblrPost || '',
+          postUrl: '',
+          status: 'Error',
+          batch: '',
+          error: err.message,
+        });
+      } catch (saveErr: any) {
+        console.error(`  ⚠️ Row ${row.rowIndex} SHEET SAVE ALSO FAILED: ${saveErr.message}`);
+      }
+      failed++;
+    }
+  }
+
+  printDiagnostics('Tumblr', failures, posted, rows.length);
+  console.log(`\n[TUMBLR BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
 // ── LI Batch ───────────────────────────────────────────────────────────────────

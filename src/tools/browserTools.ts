@@ -41,6 +41,8 @@ import { loginToParagraph, closeParagraphBrowser } from '../browser/paragraph/lo
 import { postToParagraph } from '../browser/paragraph/poster.js';
 import { loginToCoda, closeCodaBrowser, getCodaAccountByNickname } from '../browser/coda/login.js';
 import { postToCoda } from '../browser/coda/poster.js';
+import { loginToTumblr, closeTumblrBrowser } from '../browser/tumblr/login.js';
+import { postToTumblr } from '../browser/tumblr/poster.js';
 import { getAccountByHandle } from '../config/accounts.js';
 export interface Tool {
   name: string;
@@ -57,6 +59,7 @@ let liPage: Page | null = null;
 let hackmdPage: Page | null = null;
 let codaPage: Page | null = null;
 let codaNickname: string | null = null;
+let tumblrPage: Page | null = null;
 let mediumPage: Page | null = null;
 let wordpressPage: Page | null = null;
 let bloggerPage: Page | null = null;
@@ -169,6 +172,29 @@ export const BROWSER_TOOLS: Tool[] = [
         nickname: { type: 'string', description: 'HackMD account nickname' },
       },
       required: ['nickname'],
+    },
+  },
+  {
+    name: 'login_tumblr',
+    description: 'Login to Tumblr with account credentials',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        nickname: { type: 'string', description: 'Tumblr account nickname' },
+      },
+      required: ['nickname'],
+    },
+  },
+  {
+    name: 'post_tumblr',
+    description: 'Post a Tumblr Link post (URL + caption). Must call login_tumblr first.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        postText: { type: 'string', description: 'Caption text (with hashtags)' },
+        targetUrl: { type: 'string', description: 'URL to attach as the Link block' },
+      },
+      required: ['postText', 'targetUrl'],
     },
   },
   {
@@ -468,6 +494,12 @@ export async function executeBrowserTool(toolName: string, input: Record<string,
     if (toolName === 'login_hackmd') {
       return await loginHackmdTool(input.nickname);
     }
+    if (toolName === 'login_tumblr') {
+      return await loginTumblrTool(input.nickname);
+    }
+    if (toolName === 'post_tumblr') {
+      return await postTumblrTool(input.postText, input.targetUrl);
+    }
     if (toolName === 'login_medium') {
       return await loginMediumTool(input.nickname);
     }
@@ -733,6 +765,47 @@ async function postCodaTool(title: string, htmlContent: string): Promise<any> {
       }
       codaPage = null;
       codaNickname = null;
+    }
+  }
+}
+
+/**
+ * Tumblr Tools
+ */
+async function loginTumblrTool(nickname: string): Promise<any> {
+  console.log(`   [login_tumblr] Attempting to login as: ${nickname}`);
+  try {
+    tumblrPage = await loginToTumblr({ nickname });
+    console.log(`   [login_tumblr] ✅ Success - page is set`);
+    return { success: true, message: `Logged in to Tumblr (${nickname})` };
+  } catch (err: any) {
+    console.log(`   [login_tumblr] ❌ Failed:`, err.message);
+    try { await closeTumblrBrowser(); } catch { /* ignore */ }
+    tumblrPage = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postTumblrTool(postText: string, targetUrl: string): Promise<any> {
+  try {
+    if (!tumblrPage) {
+      return { error: 'Not logged in. Call login_tumblr first.', success: false };
+    }
+    const result = await postToTumblr(tumblrPage, postText, targetUrl);
+    return {
+      success: result.success,
+      postUrl: result.postUrl,
+    };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (tumblrPage) {
+      try {
+        await closeTumblrBrowser();
+      } catch (e) {
+        console.warn('Failed to close Tumblr browser:', e);
+      }
+      tumblrPage = null;
     }
   }
 }
@@ -1044,7 +1117,7 @@ async function postLinkmateTool(title: string, htmlContent: string, seedKeyword?
 /**
  * Get current page state (for debugging)
  */
-export function getPageState(): { x: boolean; fb: boolean; li: boolean; hackmd: boolean; medium: boolean; googleSite: boolean; linkedInPulse: boolean; devto: boolean; linkmate: boolean; coda: boolean } {
+export function getPageState(): { x: boolean; fb: boolean; li: boolean; hackmd: boolean; medium: boolean; googleSite: boolean; linkedInPulse: boolean; devto: boolean; linkmate: boolean; coda: boolean; tumblr: boolean } {
   return {
     x: xPage !== null,
     fb: fbPage !== null,
@@ -1056,6 +1129,7 @@ export function getPageState(): { x: boolean; fb: boolean; li: boolean; hackmd: 
     devto: devtoPage !== null,
     linkmate: linkmatePage !== null,
     coda: codaPage !== null,
+    tumblr: tumblrPage !== null,
   };
 }
 
@@ -1093,6 +1167,12 @@ export async function closeAllBrowsers(): Promise<void> {
     } catch (e) {}
     codaPage = null;
     codaNickname = null;
+  }
+  if (tumblrPage) {
+    try {
+      await closeTumblrBrowser();
+    } catch (e) {}
+    tumblrPage = null;
   }
   if (mediumPage) {
     try {

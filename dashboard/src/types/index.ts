@@ -120,12 +120,12 @@ export const SOCIAL_PLATFORMS: PlatformDef[] = [
     dateCols: ['lastPostedLi'],
   },
   {
-    key: 'threads', label: 'Threads', icon: '@', color: '#000000',
-    statusCols: ['Thread status'],
-    urlCols: ['Thread Post URl'],
-    batchCols: ['Thread Batch'],
-    errorCols: ['Thread Error'],
-    dateCols: [], // no lastPosted column tracked for this platform yet
+    key: 'tumblr', label: 'Tumblr', icon: 't', color: '#36465D',
+    statusCols: ['Tumblr Status', 'tumblrStatus'],
+    urlCols: ['Tumblr Post URL', 'tumblrPostUrl'],
+    batchCols: ['Tumblr Batch', 'tumblrBatch'],
+    errorCols: ['Tumblr Error', 'tumblrError'],
+    dateCols: ['lastPostedTumblr'],
   },
   {
     key: 'instagram', label: 'Instagram', icon: '📷', color: '#E1306C',

@@ -22,6 +22,7 @@ export const UTM_PARAMS = {
   Ameba: '?utm_source=Ameba&utm_medium=Referral&utm_campaign=Automation',
   Paragraph: '?utm_source=Paragraph&utm_medium=Referral&utm_campaign=Automation',
   Coda: '?utm_source=Coda&utm_medium=Referral&utm_campaign=Automation',
+  Tumblr: '?utm_source=Tumblr&utm_medium=Referral&utm_campaign=Automation',
 };
 
 /**

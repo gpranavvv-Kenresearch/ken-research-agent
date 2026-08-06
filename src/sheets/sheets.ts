@@ -142,6 +142,13 @@ export interface SheetRow {
   linkedinPostUrl?: string;
   linkedinStatus?: string;
   linkedinError?: string;
+  // Tumblr columns
+  tumblrPost?: string;
+  tumblrPostUrl?: string;
+  tumblrStatus?: string;
+  tumblrError?: string;
+  tumblrBatch?: string;
+  lastPostedTumblr?: string;
   // Result columns
   messageStatus?: string;
   sanityIssues?: string;
@@ -345,6 +352,13 @@ function mapRow(row: string[], colMap: ColMap, rowIndex: number, sheetType: Shee
     linkedinPostUrl: g(colMap, 'LinkedIn Post URL', 'linkedin post url'),
     linkedinStatus:  g(colMap, 'LinkedIn Status', 'linkedin status'),
     linkedinError:   g(colMap, 'LinkedIn Error', 'linkedin error'),
+    // Tumblr columns
+    tumblrPost:      g(colMap, 'Tumblr Post', 'tumblr post'),
+    tumblrPostUrl:   g(colMap, 'Tumblr Post URL', 'tumblr post url'),
+    tumblrStatus:    g(colMap, 'Tumblr Status', 'tumblr status'),
+    tumblrError:     g(colMap, 'Tumblr Error', 'tumblr error'),
+    tumblrBatch:     g(colMap, 'Tumblr Batch', 'tumblr batch'),
+    lastPostedTumblr: g(colMap, 'lastPostedTumblr', 'lastpostedtumblr'),
     // Shared blog-posting slots (max 2 platforms/row — see claimNextBlogSlot)
     blogPlatform1:  g(colMap, 'Blog Platform 1', 'blog platform 1'),
     blogUrl1:       g(colMap, 'Blog URL 1', 'blog url 1'),
@@ -1044,6 +1058,56 @@ export async function getRowsForContinuousLiPosting(limit: number = 15): Promise
   }), 'getRowsForContinuousLiPosting');
   const rows: string[][] = res.data.values ?? [];
   return pickNextSequentialBlogRows(rows, colMap, ['LinkedIn Status', 'linkedin status', 'liStatus'], limit, 'LI', 'social');
+}
+
+export async function getRowsForContinuousTumblrPosting(limit: number = 15): Promise<SheetRow[]> {
+  const sheets = await getSheetsClient();
+  const colMap = await getColumnMap(sheets);
+  const res = await withRetry(() => sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID, range: `${SHEET_NAME}!A:AZ`,
+  }), 'getRowsForContinuousTumblrPosting');
+  const rows: string[][] = res.data.values ?? [];
+  return pickNextSequentialBlogRows(rows, colMap, ['Tumblr Status', 'tumblr status', 'tumblrStatus'], limit, 'Tumblr', 'social');
+}
+
+export async function saveUnifiedTumblrResult(
+  row: SheetRow,
+  result: { post: string; postUrl: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  const sheets = await getSheetsClient();
+  const colMap = await getColumnMap(sheets);
+  const today = nowStamp();
+
+  let liveTumblrPostUrl = row.tumblrPostUrl ?? '';
+  let liveLastPostedTumblr = row.lastPostedTumblr ?? '';
+  try {
+    const liveRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_NAME}!${row.rowIndex}:${row.rowIndex}`,
+    });
+    const liveRow: string[] = liveRes.data.values?.[0] ?? [];
+    const urlIdx = col(colMap, 'Tumblr Post URL', 'tumblr post url');
+    const dateIdx = col(colMap, 'lastPostedTumblr', 'lastpostedtumblr');
+    if (urlIdx !== undefined) liveTumblrPostUrl = (liveRow[urlIdx] ?? '').trim();
+    if (dateIdx !== undefined) liveLastPostedTumblr = (liveRow[dateIdx] ?? '').trim();
+  } catch { /* non-critical — fall back to row object */ }
+
+  const newUrl = appendValue(liveTumblrPostUrl, result.postUrl);
+  const newLastPosted = result.status?.toLowerCase() === 'posted'
+    ? appendValue(liveLastPostedTumblr, today)
+    : liveLastPostedTumblr;
+
+  const data = buildUpdates(colMap, row.rowIndex, [
+    { names: ['Tumblr Post', 'tumblr post'],           value: result.post },
+    { names: ['Tumblr Post URL', 'tumblr post url'],   value: newUrl },
+    { names: ['Tumblr Status', 'tumblr status'],       value: result.status },
+    { names: ['Tumblr Error', 'tumblr error'],         value: result.error ?? '' },
+    { names: ['Tumblr Batch', 'tumblr batch'],         value: result.batch ?? '' },
+    { names: ['lastPostedTumblr', 'lastpostedtumblr'], value: newLastPosted },
+  ]);
+
+  await batchWrite(sheets, data);
+  console.log(`   📝 Tumblr updated for row ${row.rowIndex}: ${result.status}`);
 }
 
 /**

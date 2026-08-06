@@ -324,6 +324,122 @@ ${pastTweetsSection}`;
 }
 
 /**
+ * Generate a Tumblr Link-post caption — same voice/style/prompt as
+ * generateTweet(), sharing its market-data lookup and past-post history (so
+ * Tumblr never repeats an angle X already used for the same URL). The one
+ * difference: Tumblr's Link block attaches the URL as its own card, so the
+ * caption text must NOT repeat the raw URL — it ends on the CTA + hashtags.
+ */
+export async function generateTumblrPost(params: {
+  url: string;
+  title: string;
+  seoRanking: number;
+  priority: string;
+  marketValue?: string;
+  overLimitBy?: number;
+}): Promise<string> {
+  const mv = (params.marketValue ?? '').trim();
+  const marketValueLine = mv && mv !== '0' && mv !== 'null'
+    ? mv
+    : '(not available — skip any market size number)';
+
+  const marketData = await fetchMarketData(params.title);
+  const marketDataSection = marketData
+    ? `REAL MARKET DATA (from web search — use specific numbers if present):\n${marketData}`
+    : 'No web data available — use general market language.';
+
+  const pastTweets = getPastTweets(params.url);
+  const pastTweetsSection = pastTweets.length > 0
+    ? `──────────────────────
+PREVIOUSLY POSTED CAPTIONS FOR THIS URL (${pastTweets.length} total, across platforms) — DO NOT reuse:
+- Same opening word or phrase
+- Same CTA phrase
+- Same power phrase
+- Same sentence structure or angle
+
+Past captions:
+${pastTweets.map((t, i) => `[${i + 1}] ${t}`).join('\n')}
+──────────────────────`
+    : '';
+
+  const prompt = `You are a market insights social media writer for Tumblr.
+
+STEP 1 – Extract the market name from this URL:
+${params.url}
+
+Rules:
+- Take only the last path segment
+- Replace hyphens with spaces
+- Keep ALL words including geo (country, region) – do NOT remove any words
+- Example: "bahrain-aerogel-market" → "Bahrain aerogel market"
+- Example: "australia-renewable-hydrogen-transport-market" → "Australia renewable hydrogen transport market"
+
+STEP 2 – Write the Tumblr caption in this EXACT style:
+
+Study these real examples carefully – match the tone, structure, and phrasing:
+
+Example A: "Aerogel market in Bahrain is gearing up for a game-changing outlook with surging demand and innovation accelerating growth. Explore the momentum building now: #Aerogel #BahrainMarket"
+
+Example B: "Global woodpulp market valued at $52B is set for a 4.2% CAGR through 2030 as sustainable packaging demand and Asia-Pacific capacity expansion reshape the competitive landscape. See what's driving the shift: #WoodPulp #Sustainability"
+
+Example C: "Big shifts ahead in the oil gas epc services market as industry momentum builds with exciting changes on the horizon. Full outlook: #OilGas #EPCServices"
+
+──────────────────────
+FORMAT RULES:
+- ONE flowing block – no blank lines anywhere in the caption
+- 1 or 2 sentences max – no em dashes; use "with", "as", "while", "and" for flow
+- If real market data has CAGR, market size, or competitor names – weave ONE specific number naturally into the caption
+- End with a short CTA phrase + colon, then 2-3 hashtags on the same line — do NOT include the URL itself, Tumblr attaches the link as its own card
+- Rotate CTA phrases: "Explore the momentum building now:", "Explore the surge shaping the future:", "Full outlook:", "Dive into the full picture:", "See what's driving the shift:"
+- Hashtag 1 = core market keyword (no geo), hashtag 2 = industry sector or geo, optional hashtag 3 = a broader theme (e.g. #MarketResearch, #Growth)
+
+──────────────────────
+POWER PHRASES – use and rotate:
+- "game-changing outlook"
+- "big shifts ahead"
+- "industry momentum builds"
+- "surging demand"
+- "exciting changes on the horizon"
+- "gearing up for"
+- "innovation accelerating growth"
+
+──────────────────────
+MARKET VALUE (from sheet):
+${marketValueLine}
+
+${marketDataSection}
+
+Priority: weave in CAGR or market size from web data if available. If no numbers found, use general language.
+
+──────────────────────
+CHARACTER RULE:
+The full caption must be ${230 - (params.overLimitBy ?? 0)} characters or fewer.${params.overLimitBy ? `\nPrevious attempt was ${params.overLimitBy} characters over — write a shorter, more concise version.` : ''}
+
+──────────────────────
+OUTPUT RULES:
+- First character must be a letter
+- No quotes around the output
+- No JSON, no labels, no explanation
+- No emojis
+- No bullet points
+- No URL anywhere in the output — Tumblr's Link block already shows the link as a card
+- Output ONLY the caption text, nothing else
+- Never use: "projected to reach", "anticipated to grow", "value expected to reach", "driving innovation", "growing demand for"
+- Every caption must feel unique – vary the opening structure each time
+
+${pastTweetsSection}`;
+
+  const raw = await callLLM(prompt, 400);
+  const caption = raw.trim();
+
+  // Save to the same shared history as X so future calls for this URL (on
+  // any platform) avoid repeating this angle.
+  saveTweetToHistory(params.url, caption);
+
+  return caption;
+}
+
+/**
  * Generate a 3-5 tweet thread for a Ken Research report.
  * Returns an array of tweet strings. Last tweet contains the UTM URL.
  */
