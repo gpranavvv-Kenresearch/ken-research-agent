@@ -120,12 +120,6 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
     { refreshInterval: 5000, shouldRetryOnError: false }
   );
 
-  const { data: cycleStatus, mutate: mutateCycle } = useSWR<{ running: boolean; agent?: string; startedAt?: number; log?: string }>(
-    hydrated && token ? `/api/agent/${agentId}/blog-cycle/status` : null,
-    authedFetcher,
-    { refreshInterval: 5000, shouldRetryOnError: false }
-  );
-
   const { data: postCycleStatus, mutate: mutatePostCycle } = useSWR<{ running: boolean; agent?: string; startedAt?: number; log?: string; detail?: { stage?: number; round?: number; currentPlatform?: string; phase?: string; remainingCounts?: Record<string, number>; position?: number; waitingFor?: string[]; etaMs?: number } }>(
     hydrated && token ? `/api/agent/${agentId}/post-cycle/status` : null,
     authedFetcher,
@@ -273,23 +267,6 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
-  const [cycleBusy, setCycleBusy] = useState(false);
-  async function toggleCycle() {
-    if (!token) return;
-    setCycleBusy(true);
-    try {
-      const running = cycleStatus?.running && cycleStatus.agent === agentId;
-      const res = await fetch(`/api/agent/${agentId}/blog-cycle/${running ? 'stop' : 'start'}`, {
-        method: 'POST',
-        headers: { 'X-Agent-Token': token },
-      }).then((r) => r.json());
-      if (res.error) alert(res.error);
-      mutateCycle();
-    } finally {
-      setCycleBusy(false);
-    }
-  }
-
   const [postCycleBusy, setPostCycleBusy] = useState(false);
   const [showPostCounts, setShowPostCounts] = useState(false);
 
@@ -382,22 +359,6 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
             {genStopBusy ? 'Working…' : genStatus?.generating ? '⏹ Stop Generating' : isAutomated ? '✨ Generate Blogs (Automatic)' : '✨ Generate Blogs'}
           </button>
           {(() => {
-            const mine = cycleStatus?.running && cycleStatus.agent === agentId;
-            const othersTurn = cycleStatus?.running && cycleStatus.agent !== agentId;
-            return (
-              <button
-                onClick={toggleCycle}
-                disabled={cycleBusy || othersTurn}
-                title={othersTurn ? `Running for ${cycleStatus?.agent} — only one cycle can run at a time (shared ChatGPT session)` : undefined}
-                className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${
-                  mine ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-purple-600 hover:bg-purple-500 text-white'
-                }`}
-              >
-                {cycleBusy ? 'Working…' : mine ? '⏹ Stop Blog Cycle' : othersTurn ? `🔒 Running for ${cycleStatus?.agent}` : '🔁 Start Blog Cycle'}
-              </button>
-            );
-          })()}
-          {(() => {
             const mine = postCycleStatus?.running && postCycleStatus.agent === agentId;
             const othersTurn = postCycleStatus?.running && postCycleStatus.agent !== agentId;
             return (
@@ -445,19 +406,6 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
           </div>
           {genStatus.log && (
             <pre className="mt-2 text-xs text-slate-400 whitespace-pre-wrap max-h-40 overflow-y-auto font-mono">{genStatus.log}</pre>
-          )}
-        </div>
-      )}
-
-      {/* Continuous blog-cycle status */}
-      {cycleStatus?.running && cycleStatus.agent === agentId && (
-        <div className="mb-6 rounded-xl p-4 border bg-purple-950/40 border-purple-800/40">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <span className="inline-block w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
-            <span className="text-purple-300">Blog cycle running — 5 blogs, then a 30 min pause, repeating until stopped</span>
-          </div>
-          {cycleStatus.log && (
-            <pre className="mt-2 text-xs text-slate-400 whitespace-pre-wrap max-h-40 overflow-y-auto font-mono">{cycleStatus.log}</pre>
           )}
         </div>
       )}
