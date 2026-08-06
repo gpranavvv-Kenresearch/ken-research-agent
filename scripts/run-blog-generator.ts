@@ -237,10 +237,17 @@ function writeFormatCol(dataRow: number, value: string): void {
   fs.rmSync(tmp, { force: true });
 }
 
+/** "YYYY-MM-DD-HH:MM:SS" in IST — used to timestamp blogBatch so generation duration is derivable later. */
+function istTimestamp(): string {
+  const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  const iso = ist.toISOString(); // e.g. 2026-08-06T00:14:32.000Z (already IST-shifted above)
+  return `${iso.slice(0, 10)}-${iso.slice(11, 19)}`;
+}
+
 function writeRow(dataRow: number, res: { title: string; description: string; html: string }, coverImageUrl: string): void {
   const updates: Record<string, string> = {
     'Blog Content': res.html,
-    'blogBatch': `BLOG-${new Date().toISOString().slice(0, 10)}-CG`,
+    'blogBatch': `BLOG-${istTimestamp()}-CG`,
   };
   if (res.title) updates['Blog Title'] = res.title;
   if (res.description) updates['Blog Description'] = res.description;
