@@ -128,12 +128,12 @@ export const SOCIAL_PLATFORMS: PlatformDef[] = [
     dateCols: ['lastPostedTumblr'],
   },
   {
-    key: 'instagram', label: 'Instagram', icon: '📷', color: '#E1306C',
-    statusCols: ['Instagram Status'],
-    urlCols: ['Instagram Post URl'],
-    batchCols: ['instagram Batch'],
-    errorCols: ['Instagram Error'],
-    dateCols: [], // no lastPosted column tracked for this platform yet
+    key: 'mastodon', label: 'Mastodon', icon: 'M', color: '#6364FF',
+    statusCols: ['Mastodon Status', 'mastodonStatus'],
+    urlCols: ['Mastodon Post URL', 'mastodonPostUrl'],
+    batchCols: ['Mastodon Batch', 'mastodonBatch'],
+    errorCols: ['Mastodon Error', 'mastodonError'],
+    dateCols: ['lastPostedMastodon'],
   },
 ];
 

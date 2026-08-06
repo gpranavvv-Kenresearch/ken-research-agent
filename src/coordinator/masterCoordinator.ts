@@ -125,7 +125,7 @@ import { addFailure, printDiagnostics, type FailureEntry } from '../utils/diagno
 import { recordError } from '../errorInterceptor.js';
 import { applyFix } from '../autoFix.js';
 import { runSeoAnalysis } from '../agents/seoAgentNew.js';
-import { generateTweet, generateXThread, generateFbPost, generateLiPost, generateTumblrPost, generateMediumPost, generateGoogleSitePost, generateDevtoPost, generateLinkedinPulsePost, generateCalisthenicsPost, generateSubstackPost, generateHackmdPost, generateLinkmatePost } from '../agents/contentAgentNew.js';
+import { generateTweet, generateXThread, generateFbPost, generateLiPost, generateTumblrPost, generateMastodonPost, generateMediumPost, generateGoogleSitePost, generateDevtoPost, generateLinkedinPulsePost, generateCalisthenicsPost, generateSubstackPost, generateHackmdPost, generateLinkmatePost } from '../agents/contentAgentNew.js';
 import { runXAgent, runXThreadAgent } from '../agents/xAgentNew.js';
 import { executeBrowserTool } from '../tools/browserTools.js';
 import {
@@ -136,6 +136,8 @@ import {
   getRowsForContinuousLiPosting,
   getRowsForContinuousTumblrPosting,
   saveUnifiedTumblrResult,
+  getRowsForContinuousMastodonPosting,
+  saveUnifiedMastodonResult,
   getRowsForContinuousMediumPosting,
   getRowsForContinuousLinkmatePosting,
   getRowsForContinuousDevtoPosting,
@@ -634,6 +636,117 @@ export async function runTumblrBatch(batchNum: number = 1, limit: number = 12): 
 
   printDiagnostics('Tumblr', failures, posted, rows.length);
   console.log(`\n[TUMBLR BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
+}
+
+// ── Mastodon Batch ───────────────────────────────────────────────────────────
+
+// Helper: Post to single Mastodon account
+async function postToMastodonAccount(accountName: string, postText: string): Promise<{
+  success: boolean;
+  postUrl?: string;
+  error?: string;
+}> {
+  try {
+    const loginResult = await executeBrowserTool('login_mastodon', { nickname: accountName });
+    if (!loginResult.success) {
+      return { success: false, error: loginResult.error || 'Mastodon login failed' };
+    }
+    const postResult = await executeBrowserTool('post_mastodon', { postText });
+    return {
+      success: postResult.success ?? false,
+      postUrl: postResult.postUrl,
+      error: postResult.error,
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function runMastodonBatch(batchNum: number = 1, limit: number = 12): Promise<void> {
+  const rows = await getRowsForContinuousMastodonPosting(capToLiveAccounts(limit, 'mastodon'));
+
+  if (rows.length === 0) {
+    console.log('[MASTODON BATCH] No rows available');
+    return;
+  }
+
+  const batchLabel = `Batch ${batchNum}`;
+
+  console.log(`\n[MASTODON BATCH] Starting ${batchLabel}...`);
+  console.log(`  Found ${rows.length} rows ready for Mastodon posting`);
+
+  let posted = 0;
+  let failed = 0;
+  const failures: FailureEntry[] = [];
+
+  for (const row of rows) {
+    try {
+      console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
+      if (!healthGate('Mastodon', row.name)) continue;
+
+      // Use sheet content if available, otherwise generate (same prompt/history as X, capped at 500 chars total)
+      let mastodonPost = row.mastodonPost?.trim() || '';
+      if (!mastodonPost) {
+        console.log(`    ℹ️  No sheet content — generating Mastodon post for: ${row.title.slice(0, 50)}`);
+        try {
+          mastodonPost = await generateMastodonPost({ url: row.targetUrl, title: row.title, seoRanking: 999, priority: row.priority ?? 'P3', marketValue: row.marketValue });
+        } catch (genErr: any) {
+          console.log(`    ⏭ Skipping — generation failed: ${genErr.message}`);
+          continue;
+        }
+        if (!mastodonPost?.trim()) { console.log(`    ⏭ Skipping — generated content empty`); continue; }
+      }
+      row.mastodonPost = mastodonPost;
+
+      console.log(`    Posting to Mastodon (account: ${row.name})...`);
+      const postResult = await retryOnSelectorTimeout(() => postToMastodonAccount(row.name, mastodonPost), { label: 'Mastodon post' });
+      healthRecordSafe('Mastodon', row.name, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
+
+      if (postResult.success) {
+        await saveUnifiedMastodonResult(row, {
+          post: mastodonPost,
+          postUrl: postResult.postUrl || '',
+          status: 'Posted',
+          batch: batchLabel,
+        });
+        console.log(`    ✅ Posted → ${postResult.postUrl}`);
+        posted++;
+      } else {
+        await saveUnifiedMastodonResult(row, {
+          post: mastodonPost,
+          postUrl: '',
+          status: 'Failed',
+          batch: '',
+          error: postResult.error,
+        });
+        console.log(`    ❌ Failed: ${postResult.error}`);
+        failed++;
+        addFailure(failures, row.name, postResult.error);
+      }
+
+      await new Promise(r => setTimeout(r, 1000));
+    } catch (err: any) {
+      const kbEntry = recordError({ rawError: err.message, platform: 'mastodon', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
+      await applyFix(kbEntry, { platform: 'mastodon', accountName: row.name, rowIndex: row.rowIndex });
+      console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      addFailure(failures, row.name, err.message);
+      try {
+        await saveUnifiedMastodonResult(row, {
+          post: row.mastodonPost || '',
+          postUrl: '',
+          status: 'Error',
+          batch: '',
+          error: err.message,
+        });
+      } catch (saveErr: any) {
+        console.error(`  ⚠️ Row ${row.rowIndex} SHEET SAVE ALSO FAILED: ${saveErr.message}`);
+      }
+      failed++;
+    }
+  }
+
+  printDiagnostics('Mastodon', failures, posted, rows.length);
+  console.log(`\n[MASTODON BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
 // ── LI Batch ───────────────────────────────────────────────────────────────────

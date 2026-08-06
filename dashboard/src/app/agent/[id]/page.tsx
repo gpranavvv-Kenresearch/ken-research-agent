@@ -11,6 +11,7 @@ const PLATFORMS = [
   { key: 'fb', label: 'Facebook', group: 'social', icon: 'f', color: 'bg-blue-600 text-white' },
   { key: 'li', label: 'LinkedIn', group: 'social', icon: 'in', color: 'bg-sky-700 text-white' },
   { key: 'tumblr', label: 'Tumblr', group: 'social', icon: 't', color: 'bg-slate-800 text-white' },
+  { key: 'mastodon', label: 'Mastodon', group: 'social', icon: 'M', color: 'bg-indigo-600 text-white' },
   // Blog
   { key: 'medium', label: 'Medium', group: 'blog', icon: 'M', color: 'bg-neutral-800 text-white' },
   { key: 'notion', label: 'Notion', group: 'blog', icon: 'N', color: 'bg-slate-100 text-slate-900' },
@@ -46,6 +47,7 @@ const POST_COUNT_PLATFORMS = [
   { key: 'fb', label: 'Facebook' },
   { key: 'lipost', label: 'LinkedIn (post)' },
   { key: 'tumblr', label: 'Tumblr' },
+  { key: 'mastodon', label: 'Mastodon' },
   { key: 'lipulse', label: 'LinkedIn Pulse' },
   { key: 'medium', label: 'Medium' },
   { key: 'wordpress', label: 'WordPress' },

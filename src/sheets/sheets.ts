@@ -149,6 +149,13 @@ export interface SheetRow {
   tumblrError?: string;
   tumblrBatch?: string;
   lastPostedTumblr?: string;
+  // Mastodon columns
+  mastodonPost?: string;
+  mastodonPostUrl?: string;
+  mastodonStatus?: string;
+  mastodonError?: string;
+  mastodonBatch?: string;
+  lastPostedMastodon?: string;
   // Result columns
   messageStatus?: string;
   sanityIssues?: string;
@@ -359,6 +366,13 @@ function mapRow(row: string[], colMap: ColMap, rowIndex: number, sheetType: Shee
     tumblrError:     g(colMap, 'Tumblr Error', 'tumblr error'),
     tumblrBatch:     g(colMap, 'Tumblr Batch', 'tumblr batch'),
     lastPostedTumblr: g(colMap, 'lastPostedTumblr', 'lastpostedtumblr'),
+    // Mastodon columns
+    mastodonPost:      g(colMap, 'Mastodon Post', 'mastodon post'),
+    mastodonPostUrl:   g(colMap, 'Mastodon Post URL', 'mastodon post url'),
+    mastodonStatus:    g(colMap, 'Mastodon Status', 'mastodon status'),
+    mastodonError:     g(colMap, 'Mastodon Error', 'mastodon error'),
+    mastodonBatch:     g(colMap, 'Mastodon Batch', 'mastodon batch'),
+    lastPostedMastodon: g(colMap, 'lastPostedMastodon', 'lastpostedmastodon'),
     // Shared blog-posting slots (max 2 platforms/row — see claimNextBlogSlot)
     blogPlatform1:  g(colMap, 'Blog Platform 1', 'blog platform 1'),
     blogUrl1:       g(colMap, 'Blog URL 1', 'blog url 1'),
@@ -1108,6 +1122,56 @@ export async function saveUnifiedTumblrResult(
 
   await batchWrite(sheets, data);
   console.log(`   📝 Tumblr updated for row ${row.rowIndex}: ${result.status}`);
+}
+
+export async function getRowsForContinuousMastodonPosting(limit: number = 15): Promise<SheetRow[]> {
+  const sheets = await getSheetsClient();
+  const colMap = await getColumnMap(sheets);
+  const res = await withRetry(() => sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID, range: `${SHEET_NAME}!A:AZ`,
+  }), 'getRowsForContinuousMastodonPosting');
+  const rows: string[][] = res.data.values ?? [];
+  return pickNextSequentialBlogRows(rows, colMap, ['Mastodon Status', 'mastodon status', 'mastodonStatus'], limit, 'Mastodon', 'social');
+}
+
+export async function saveUnifiedMastodonResult(
+  row: SheetRow,
+  result: { post: string; postUrl: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  const sheets = await getSheetsClient();
+  const colMap = await getColumnMap(sheets);
+  const today = nowStamp();
+
+  let liveMastodonPostUrl = row.mastodonPostUrl ?? '';
+  let liveLastPostedMastodon = row.lastPostedMastodon ?? '';
+  try {
+    const liveRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_NAME}!${row.rowIndex}:${row.rowIndex}`,
+    });
+    const liveRow: string[] = liveRes.data.values?.[0] ?? [];
+    const urlIdx = col(colMap, 'Mastodon Post URL', 'mastodon post url');
+    const dateIdx = col(colMap, 'lastPostedMastodon', 'lastpostedmastodon');
+    if (urlIdx !== undefined) liveMastodonPostUrl = (liveRow[urlIdx] ?? '').trim();
+    if (dateIdx !== undefined) liveLastPostedMastodon = (liveRow[dateIdx] ?? '').trim();
+  } catch { /* non-critical — fall back to row object */ }
+
+  const newUrl = appendValue(liveMastodonPostUrl, result.postUrl);
+  const newLastPosted = result.status?.toLowerCase() === 'posted'
+    ? appendValue(liveLastPostedMastodon, today)
+    : liveLastPostedMastodon;
+
+  const data = buildUpdates(colMap, row.rowIndex, [
+    { names: ['Mastodon Post', 'mastodon post'],           value: result.post },
+    { names: ['Mastodon Post URL', 'mastodon post url'],   value: newUrl },
+    { names: ['Mastodon Status', 'mastodon status'],       value: result.status },
+    { names: ['Mastodon Error', 'mastodon error'],         value: result.error ?? '' },
+    { names: ['Mastodon Batch', 'mastodon batch'],         value: result.batch ?? '' },
+    { names: ['lastPostedMastodon', 'lastpostedmastodon'], value: newLastPosted },
+  ]);
+
+  await batchWrite(sheets, data);
+  console.log(`   📝 Mastodon updated for row ${row.rowIndex}: ${result.status}`);
 }
 
 /**

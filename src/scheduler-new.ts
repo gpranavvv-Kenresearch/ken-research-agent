@@ -39,7 +39,7 @@ import cron from 'node-cron';
 import fs from 'fs';
 import path from 'path';
 import {
-  runXBatch, runFbBatch, runLiBatch, runTumblrBatch,
+  runXBatch, runFbBatch, runLiBatch, runTumblrBatch, runMastodonBatch,
   runMediumBatch, runLinkmateBatch, runGoogleSiteBatch,
   runDevtoBatch, runLinkedinPulseBatch, runCalisthenicsNBatch,
   runWordpressBatch, runBloggerBatch, runHackmdBatch,
@@ -79,6 +79,7 @@ const CALISTHENICS: PlatformDef = { label: 'Calisthenics',   run: runCalisthenic
 const NOTION:       PlatformDef = { label: 'Notion',         run: runNotionBatch };
 const CODA:         PlatformDef = { label: 'Coda',           run: runCodaBatch };
 const TUMBLR:       PlatformDef = { label: 'Tumblr',         run: runTumblrBatch };
+const MASTODON:     PlatformDef = { label: 'Mastodon',       run: runMastodonBatch };
 
 // Key map for the counted, round-based "Post Now" cycle (runCountedPostCycle) —
 // the dashboard form's platform keys to the PlatformDef objects above.
@@ -86,7 +87,7 @@ const COUNTED_PLATFORMS: Record<string, PlatformDef> = {
   x: X, fb: FB, lipost: LI, lipulse: LI_PULSE, medium: MEDIUM,
   wordpress: WORDPRESS, blogger: BLOGGER, googlepost: GOOGLESITE, note: NOTE,
   hackmd: HACKMD, linkmate: LINKMATE, calisthenics: CALISTHENICS, notion: NOTION, devto: DEVTO,
-  coda: CODA, tumblr: TUMBLR,
+  coda: CODA, tumblr: TUMBLR, mastodon: MASTODON,
 };
 
 // ── The 5 stages, exactly as agreed ────────────────────────────────────────────

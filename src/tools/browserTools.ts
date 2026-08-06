@@ -43,6 +43,8 @@ import { loginToCoda, closeCodaBrowser, getCodaAccountByNickname } from '../brow
 import { postToCoda } from '../browser/coda/poster.js';
 import { loginToTumblr, closeTumblrBrowser } from '../browser/tumblr/login.js';
 import { postToTumblr } from '../browser/tumblr/poster.js';
+import { loginToMastodon, closeMastodonBrowser } from '../browser/mastodon/login.js';
+import { postToMastodon } from '../browser/mastodon/poster.js';
 import { getAccountByHandle } from '../config/accounts.js';
 export interface Tool {
   name: string;
@@ -60,6 +62,7 @@ let hackmdPage: Page | null = null;
 let codaPage: Page | null = null;
 let codaNickname: string | null = null;
 let tumblrPage: Page | null = null;
+let mastodonPage: Page | null = null;
 let mediumPage: Page | null = null;
 let wordpressPage: Page | null = null;
 let bloggerPage: Page | null = null;
@@ -195,6 +198,28 @@ export const BROWSER_TOOLS: Tool[] = [
         targetUrl: { type: 'string', description: 'URL to attach as the Link block' },
       },
       required: ['postText', 'targetUrl'],
+    },
+  },
+  {
+    name: 'login_mastodon',
+    description: 'Login to Mastodon with account credentials',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        nickname: { type: 'string', description: 'Mastodon account nickname' },
+      },
+      required: ['nickname'],
+    },
+  },
+  {
+    name: 'post_mastodon',
+    description: 'Post to Mastodon (single text box, under 500 chars, URL+UTM+hashtags included). Must call login_mastodon first.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        postText: { type: 'string', description: 'Full post text including URL and hashtags' },
+      },
+      required: ['postText'],
     },
   },
   {
@@ -499,6 +524,12 @@ export async function executeBrowserTool(toolName: string, input: Record<string,
     }
     if (toolName === 'post_tumblr') {
       return await postTumblrTool(input.postText, input.targetUrl);
+    }
+    if (toolName === 'login_mastodon') {
+      return await loginMastodonTool(input.nickname);
+    }
+    if (toolName === 'post_mastodon') {
+      return await postMastodonTool(input.postText);
     }
     if (toolName === 'login_medium') {
       return await loginMediumTool(input.nickname);
@@ -811,6 +842,47 @@ async function postTumblrTool(postText: string, targetUrl: string): Promise<any>
 }
 
 /**
+ * Mastodon Tools
+ */
+async function loginMastodonTool(nickname: string): Promise<any> {
+  console.log(`   [login_mastodon] Attempting to login as: ${nickname}`);
+  try {
+    mastodonPage = await loginToMastodon({ nickname });
+    console.log(`   [login_mastodon] ✅ Success - page is set`);
+    return { success: true, message: `Logged in to Mastodon (${nickname})` };
+  } catch (err: any) {
+    console.log(`   [login_mastodon] ❌ Failed:`, err.message);
+    try { await closeMastodonBrowser(); } catch { /* ignore */ }
+    mastodonPage = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postMastodonTool(postText: string): Promise<any> {
+  try {
+    if (!mastodonPage) {
+      return { error: 'Not logged in. Call login_mastodon first.', success: false };
+    }
+    const result = await postToMastodon(mastodonPage, postText);
+    return {
+      success: result.success,
+      postUrl: result.postUrl,
+    };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (mastodonPage) {
+      try {
+        await closeMastodonBrowser();
+      } catch (e) {
+        console.warn('Failed to close Mastodon browser:', e);
+      }
+      mastodonPage = null;
+    }
+  }
+}
+
+/**
  * HackMD Tools
  */
 async function loginHackmdTool(nickname: string): Promise<any> {
@@ -1117,7 +1189,7 @@ async function postLinkmateTool(title: string, htmlContent: string, seedKeyword?
 /**
  * Get current page state (for debugging)
  */
-export function getPageState(): { x: boolean; fb: boolean; li: boolean; hackmd: boolean; medium: boolean; googleSite: boolean; linkedInPulse: boolean; devto: boolean; linkmate: boolean; coda: boolean; tumblr: boolean } {
+export function getPageState(): { x: boolean; fb: boolean; li: boolean; hackmd: boolean; medium: boolean; googleSite: boolean; linkedInPulse: boolean; devto: boolean; linkmate: boolean; coda: boolean; tumblr: boolean; mastodon: boolean } {
   return {
     x: xPage !== null,
     fb: fbPage !== null,
@@ -1130,6 +1202,7 @@ export function getPageState(): { x: boolean; fb: boolean; li: boolean; hackmd: 
     linkmate: linkmatePage !== null,
     coda: codaPage !== null,
     tumblr: tumblrPage !== null,
+    mastodon: mastodonPage !== null,
   };
 }
 
@@ -1173,6 +1246,12 @@ export async function closeAllBrowsers(): Promise<void> {
       await closeTumblrBrowser();
     } catch (e) {}
     tumblrPage = null;
+  }
+  if (mastodonPage) {
+    try {
+      await closeMastodonBrowser();
+    } catch (e) {}
+    mastodonPage = null;
   }
   if (mediumPage) {
     try {

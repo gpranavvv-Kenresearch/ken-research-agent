@@ -23,6 +23,7 @@ export const UTM_PARAMS = {
   Paragraph: '?utm_source=Paragraph&utm_medium=Referral&utm_campaign=Automation',
   Coda: '?utm_source=Coda&utm_medium=Referral&utm_campaign=Automation',
   Tumblr: '?utm_source=Tumblr&utm_medium=Referral&utm_campaign=Automation',
+  Mastodon: '?utm_source=Mastodon&utm_medium=Referral&utm_campaign=Automation',
 };
 
 /**

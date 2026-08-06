@@ -36,6 +36,9 @@ export const PLATFORMS: Record<string, PortalPlatform> = {
   // been inspected live yet) — login itself works regardless, per this
   // file's own note above; only the "ready" badge accuracy is approximate.
   tumblr: { key: 'tumblr', label: 'Tumblr', group: 'social', loginUrl: 'https://www.tumblr.com/login', homeUrl: 'https://www.tumblr.com/', registryFile: '.accounts/accounts-tumblr.json', authCookies: ['pfg', 'pfp'] },
+  // authCookies unconfirmed (mastodon.social's actual session cookie name
+  // hasn't been inspected live yet) — same caveat as Tumblr above.
+  mastodon: { key: 'mastodon', label: 'Mastodon', group: 'social', loginUrl: 'https://mastodon.social/auth/sign_in', homeUrl: 'https://mastodon.social/', registryFile: '.accounts/accounts-mastodon.json', authCookies: ['_mastodon_session'] },
 
   // ── Blog ──
   medium:       { key: 'medium',       label: 'Medium',       group: 'blog', loginUrl: 'https://medium.com/m/signin',    homeUrl: 'https://medium.com/',                      registryFile: '.accounts/accounts-medium.json',       authCookies: ['sid', 'uid'] },

@@ -324,6 +324,157 @@ ${pastTweetsSection}`;
 }
 
 /**
+ * Generate a Mastodon post — same voice/style/prompt as generateTweet(),
+ * sharing its market-data lookup and past-post history. Unlike X, Mastodon's
+ * compose box is a single field with no separate URL slot, so the URL (with
+ * UTM) is embedded in the text itself and DOES count toward the 500-char
+ * limit — the character budget below is computed dynamically around it.
+ */
+export async function generateMastodonPost(params: {
+  url: string;
+  title: string;
+  seoRanking: number;
+  priority: string;
+  marketValue?: string;
+  overLimitBy?: number;
+}): Promise<string> {
+  const utmUrl = `${params.url}${personalizeUtm(UTM_PARAMS.Mastodon)}`;
+  // 500 total, minus the URL, minus a safety buffer.
+  const textBudget = Math.max(80, 500 - utmUrl.length - 15 - (params.overLimitBy ?? 0));
+
+  const mv = (params.marketValue ?? '').trim();
+  const marketValueLine = mv && mv !== '0' && mv !== 'null'
+    ? mv
+    : '(not available — skip any market size number)';
+
+  const marketData = await fetchMarketData(params.title);
+  const marketDataSection = marketData
+    ? `REAL MARKET DATA (from web search — use specific numbers if present):\n${marketData}`
+    : 'No web data available — use general market language.';
+
+  const pastTweets = getPastTweets(params.url);
+  const pastTweetsSection = pastTweets.length > 0
+    ? `──────────────────────
+PREVIOUSLY POSTED CONTENT FOR THIS URL (${pastTweets.length} total, across platforms) — DO NOT reuse:
+- Same opening word or phrase
+- Same CTA phrase
+- Same power phrase
+- Same sentence structure or angle
+
+Past posts:
+${pastTweets.map((t, i) => `[${i + 1}] ${t}`).join('\n')}
+──────────────────────`
+    : '';
+
+  const prompt = `You are a market insights social media writer for Mastodon.
+
+STEP 1 – Extract the market name from this URL:
+${params.url}
+
+Rules:
+- Take only the last path segment
+- Replace hyphens with spaces
+- Keep ALL words including geo (country, region) – do NOT remove any words
+- Example: "bahrain-aerogel-market" → "Bahrain aerogel market"
+- Example: "australia-renewable-hydrogen-transport-market" → "Australia renewable hydrogen transport market"
+
+STEP 2 – Write the Mastodon post in this EXACT style:
+
+Study these real examples carefully – match the tone, structure, and phrasing:
+
+Example A: "Aerogel market in Bahrain is gearing up for a game-changing outlook with surging demand and innovation accelerating growth. Explore the momentum building now: https://example.com"
+
+Example B: "Global woodpulp market valued at $52B is set for a 4.2% CAGR through 2030 as sustainable packaging demand and Asia-Pacific capacity expansion reshape the competitive landscape. See what's driving the shift: https://example.com"
+
+Example C: "Big shifts ahead in the oil gas epc services market as industry momentum builds with exciting changes on the horizon. Full outlook: https://example.com"
+
+──────────────────────
+FORMAT RULES:
+- ONE flowing block – no blank lines anywhere in the post body
+- 1 or 2 sentences max – no em dashes; use "with", "as", "while", "and" for flow
+- If real market data has CAGR, market size, or competitor names – weave ONE specific number naturally into the post
+- End with a short CTA phrase + colon, then the URL on the same line — nothing after the URL
+- Rotate CTA phrases: "Explore the momentum building now:", "Explore the surge shaping the future:", "Full outlook:", "Dive into the full picture:", "See what's driving the shift:"
+- NO hashtags anywhere in the post
+
+──────────────────────
+POWER PHRASES – use and rotate:
+- "game-changing outlook"
+- "big shifts ahead"
+- "industry momentum builds"
+- "surging demand"
+- "exciting changes on the horizon"
+- "gearing up for"
+- "innovation accelerating growth"
+
+──────────────────────
+MARKET VALUE (from sheet):
+${marketValueLine}
+
+${marketDataSection}
+
+Priority: weave in CAGR or market size from web data if available. If no numbers found, use general language.
+
+──────────────────────
+CHARACTER RULE:
+The text portion (everything except the URL) must be ${textBudget} characters or fewer.
+The ENTIRE post including the URL must be under 500 characters total — Mastodon's own hard limit.${params.overLimitBy ? `\nPrevious attempt was ${params.overLimitBy} characters over — write a shorter, more concise version.` : ''}
+
+──────────────────────
+OUTPUT RULES:
+- First character must be a letter
+- No quotes around the output
+- No JSON, no labels, no explanation
+- No emojis
+- No bullet points
+- No hashtags — none, anywhere
+- Output ONLY the post text, nothing else
+- The URL in your output must be exactly: ${utmUrl}
+- Never use: "projected to reach", "anticipated to grow", "value expected to reach", "driving innovation", "growing demand for"
+- Every post must feel unique – vary the opening structure each time
+
+${pastTweetsSection}`;
+
+  const raw = await callLLM(prompt, 400);
+  const post = raw.trim();
+
+  let finalPost = post;
+  if (!finalPost.includes(utmUrl)) {
+    const fixed = finalPost.replace(/https?:\/\/[^\s]+kenresearch[^\s]*/gi, utmUrl);
+    finalPost = fixed.includes(utmUrl) ? fixed : `${finalPost}\n${utmUrl}`;
+  }
+
+  // Safety net: strip any hashtags the model added anyway, despite the
+  // instruction not to (only outside the URL — never touch query-string #s).
+  {
+    const urlIdx = finalPost.indexOf(utmUrl);
+    const before = urlIdx >= 0 ? finalPost.slice(0, urlIdx) : finalPost;
+    const after = urlIdx >= 0 ? finalPost.slice(urlIdx + utmUrl.length) : '';
+    const stripped = (before.replace(/#\w+/g, '').replace(/[ \t]+/g, ' ').trimEnd()) + (urlIdx >= 0 ? utmUrl : '') + after.replace(/#\w+/g, '').replace(/[ \t]+/g, ' ');
+    finalPost = stripped.trim();
+  }
+
+  // Hard safety cap: LLMs occasionally overshoot the budget even when told
+  // not to — Mastodon rejects anything over 500 chars outright, so truncate
+  // the text portion (never the URL) rather than risk a failed post.
+  if (finalPost.length > 500) {
+    const overshoot = finalPost.length - 500;
+    const urlIdx = finalPost.indexOf(utmUrl);
+    if (urlIdx > 0) {
+      const textPart = finalPost.slice(0, urlIdx).trimEnd();
+      const rest = finalPost.slice(urlIdx);
+      finalPost = `${textPart.slice(0, Math.max(0, textPart.length - overshoot - 1))}… ${rest}`;
+    } else {
+      finalPost = finalPost.slice(0, 500);
+    }
+  }
+
+  saveTweetToHistory(params.url, finalPost);
+
+  return finalPost;
+}
+
+/**
  * Generate a Tumblr Link-post caption — same voice/style/prompt as
  * generateTweet(), sharing its market-data lookup and past-post history (so
  * Tumblr never repeats an angle X already used for the same URL). The one
