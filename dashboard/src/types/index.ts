@@ -48,6 +48,52 @@ export function latestPostDate(row: RawRow, platforms: PlatformDef[]): string {
   return latest;
 }
 
+// ──── Blog posting slots ────────────────────────────────────────────────
+// Every blog platform now posts through 2 shared slots per row (max 2
+// platforms/row) instead of a dedicated column set per platform — see
+// claimNextBlogSlot/saveBlogSlotResult in src/sheets/sheets.ts. A row's
+// "platform" is dynamic (whichever platform claimed that slot), so unlike
+// SOCIAL_PLATFORMS this isn't a fixed PlatformDef[] — it's read per row.
+
+export interface BlogSlot {
+  slot: 1 | 2;
+  platform: string; // e.g. "Blogger", '' if unclaimed
+  url: string;
+  status: string;   // this slot's status, e.g. "Posted" / "Failed" / "Error" / ''
+  error: string;
+}
+
+/** Parses "P1:<state>|P2:<state>" (written by saveBlogSlotResult) into { 1: state, 2: state }. */
+function parseBlogSlotState(raw: string): Record<1 | 2, string> {
+  const out: Record<1 | 2, string> = { 1: '', 2: '' };
+  raw.split('|').map((s) => s.trim()).filter(Boolean).forEach((part) => {
+    const m = part.match(/^P([12]):(.*)$/);
+    if (m) out[Number(m[1]) as 1 | 2] = m[2].trim();
+  });
+  return out;
+}
+
+export function getBlogSlots(row: RawRow): BlogSlot[] {
+  const statusState = parseBlogSlotState(getField(row, 'Blog Status', 'blogStatus'));
+  const errorState = parseBlogSlotState(getField(row, 'Blog Error', 'blogError'));
+  return [
+    { slot: 1, platform: getField(row, 'Blog Platform 1', 'blogPlatform1'), url: getField(row, 'Blog URL 1', 'blogUrl1'), status: statusState[1], error: errorState[1] },
+    { slot: 2, platform: getField(row, 'Blog Platform 2', 'blogPlatform2'), url: getField(row, 'Blog URL 2', 'blogUrl2'), status: statusState[2], error: errorState[2] },
+  ];
+}
+
+export function latestBlogPostDate(row: RawRow): string {
+  return latestDateFromCell(getField(row, 'Last Posted Blog', 'lastPostedBlog'));
+}
+
+/** Maps a claimed platform label (as stored in "Blog Platform 1/2") to the lowercase key runRetryRow/post-now expect. */
+export const BLOG_PLATFORM_KEY_BY_LABEL: Record<string, string> = {
+  'Google Sites': 'googlesite', HackMD: 'hackmd', 'Dev.to': 'devto', Medium: 'medium',
+  Linkmate: 'linkmate', 'LinkedIn Pulse': 'linkedin-pulse', Calisthenics: 'calisthenics',
+  Substack: 'substack', WordPress: 'wordpress', Blogger: 'blogger', Patreon: 'patreon',
+  Notion: 'notion', Note: 'note', Paragraph: 'paragraph', Coda: 'coda', Ameba: 'ameba',
+};
+
 export const SOCIAL_PLATFORMS: PlatformDef[] = [
   {
     key: 'x', label: 'X / Twitter', icon: '𝕏', color: '#1DA1F2',
@@ -91,128 +137,25 @@ export const SOCIAL_PLATFORMS: PlatformDef[] = [
   },
 ];
 
-export const BLOG_PLATFORMS: PlatformDef[] = [
-  {
-    key: 'medium', label: 'Medium', icon: 'M', color: '#000000',
-    statusCols: ['Medium Status', 'mediumStatus'],
-    urlCols: ['Medium Post URL', 'mediumPostUrl'],
-    batchCols: ['Medium Batch', 'mediumBatch'],
-    errorCols: ['Medium Error', 'mediumError'],
-    dateCols: ['lastPostedMedium'],
-  },
-  {
-    key: 'devto', label: 'Dev.to', icon: 'DEV', color: '#0a0a0a',
-    statusCols: ['Dev.to Status', 'devtoStatus'],
-    urlCols: ['Dev.to Post URL', 'devtoPostUrl'],
-    batchCols: ['Dev.to Batch', 'devtoBatch'],
-    errorCols: ['Dev.to Error', 'devtoError'],
-    dateCols: ['lastPostedDevto'],
-  },
-  {
-    key: 'substack', label: 'Substack', icon: 'S', color: '#FF6719',
-    statusCols: ['Substack Status', 'substackStatus'],
-    urlCols: ['Substack Post URL', 'substackPostUrl'],
-    batchCols: ['Substack Batch', 'substackBatch'],
-    errorCols: ['Substack Error', 'substackError'],
-    dateCols: ['lastPostedSubstack'],
-  },
-  {
-    key: 'hackmd', label: 'HackMD', icon: 'H', color: '#1E90FF',
-    statusCols: ['HackMD Status', 'hackmdStatus'],
-    urlCols: ['HackMD Post URL', 'hackmdPostUrl'],
-    batchCols: ['HackMD Batch', 'hackmdBatch'],
-    errorCols: ['HackMD Error', 'hackmdError'],
-    dateCols: ['lastPostedHackmd', 'lastPostedHackMD'],
-  },
-  {
-    key: 'linkedinPulse', label: 'LI Pulse', icon: 'LP', color: '#0077B5',
-    statusCols: ['LinkedIn Pulse Status', 'linkedinPulseStatus', 'Linkedin Pulse Status'],
-    urlCols: ['LinkedIn Pulse URL', 'LinkedIn Pulse Post URL', 'linkedinPulsePostUrl'],
-    batchCols: ['LinkedIn Pulse Batch', 'linkedinPulseBatch'],
-    errorCols: ['LinkedIn Pulse Error', 'linkedinPulseError'],
-    dateCols: ['lastPosted linkedin Pulse', 'lastPostedLinkedinPulse'],
-  },
-  {
-    key: 'wordpress', label: 'WordPress', icon: 'WP', color: '#21759B',
-    statusCols: ['WordPress Status', 'wordpressStatus'],
-    urlCols: ['WordPress Post URL', 'wordpressPostUrl'],
-    batchCols: ['WordPress Batch', 'wordpressBatch'],
-    errorCols: ['WordPress Error', 'wordpressError'],
-    dateCols: ['lastPostedWordpress'],
-  },
-  {
-    key: 'blogger', label: 'Blogger', icon: 'B', color: '#FF5722',
-    statusCols: ['Blogger Status', 'bloggerStatus'],
-    urlCols: ['Blogger Post URL', 'bloggerPostUrl'],
-    batchCols: ['Blogger Batch', 'bloggerBatch'],
-    errorCols: ['Blogger Error', 'bloggerError'],
-    dateCols: ['Last Posted Blogger', 'lastPostedBlogger'],
-  },
-  {
-    key: 'notion', label: 'Notion', icon: 'N', color: '#888',
-    statusCols: ['Notion Status', 'notionStatus'],
-    urlCols: ['Notion Post URL', 'notionPostUrl'],
-    batchCols: ['Notion Batch', 'notionBatch'],
-    errorCols: ['Notion Error', 'notionError'],
-    dateCols: ['Last Posted Notion', 'lastPostedNotion'],
-  },
-  {
-    key: 'googlesite', label: 'Google Sites', icon: 'G', color: '#4285F4',
-    statusCols: ['Google Site Status', 'googleSiteStatus'],
-    urlCols: ['Google Site Post URL', 'googleSitePostUrl'],
-    batchCols: ['Google Site Batch', 'googleSiteBatch'],
-    errorCols: ['Google Site Error', 'googleSiteError'],
-    dateCols: ['lastPostedGoogleSite'],
-  },
-  {
-    key: 'note', label: 'Note', icon: '📝', color: '#4DB6AC',
-    statusCols: ['Note Status', 'noteStatus'],
-    urlCols: ['Note Post URL', 'notePostUrl'],
-    batchCols: ['Note Batch', 'noteBatch'],
-    errorCols: ['Note Error', 'noteError'],
-    dateCols: ['Last Posted Note', 'lastPostedNote'],
-  },
-  {
-    key: 'paragraph', label: 'Paragraph', icon: '¶', color: '#9C27B0',
-    statusCols: ['Paragraph Status', 'paragraphStatus'],
-    urlCols: ['Paragraph Post URL', 'paragraphPostUrl'],
-    batchCols: ['Paragraph Batch', 'paragraphBatch'],
-    errorCols: ['Paragraph Error', 'paragraphError'],
-    dateCols: ['Last Posted Paragraph', 'lastPostedParagraph'],
-  },
-  {
-    key: 'patreon', label: 'Patreon', icon: 'P', color: '#F96854',
-    statusCols: ['Patreon Status', 'patreonStatus'],
-    urlCols: ['Patreon Post URL', 'patreonPostUrl'],
-    batchCols: ['Patreon Batch', 'patreonBatch'],
-    errorCols: ['Patreon Error', 'patreonError'],
-    dateCols: ['Last Posted Patreon', 'lastPostedPatreon'],
-  },
-  {
-    key: 'calisthenics', label: 'Calisthenics', icon: 'C', color: '#4CAF50',
-    statusCols: ['Calisthenics Status', 'calisthenicsStatus'],
-    urlCols: ['Calisthenics Post URL', 'calisthenicsPostUrl'],
-    batchCols: ['Calisthenics Batch', 'calisthenicsNBatch'],
-    errorCols: ['Calisthenics Error', 'calisthenicsError'],
-    dateCols: ['lastPosted Calisthenics', 'lastPostedCalisthenics'],
-  },
-  {
-    key: 'linkmate', label: 'Linkmate', icon: '🔗', color: '#FF9800',
-    statusCols: ['Linkmate Status', 'linkMateStatus'],
-    urlCols: ['Linkmate Post URL', 'linkMatePostUrl'],
-    batchCols: ['Linkmate Batch', 'linkmateBatch'],
-    errorCols: ['Linkmate Error', 'linkMateError'],
-    dateCols: ['lastPostedLinkmate'],
-  },
-  {
-    key: 'coda', label: 'Coda', icon: 'C', color: '#F46A54',
-    statusCols: ['Coda Status', 'codaStatus'],
-    urlCols: ['Coda Post URL', 'codaPostUrl'],
-    batchCols: ['Coda Batch', 'codaBatch'],
-    errorCols: ['Coda Error', 'codaError'],
-    dateCols: ['Last Posted Coda', 'lastPostedCoda'],
-  },
-];
+/** Icon/color per blog platform label, purely cosmetic for BlogSlotBadge — same set previously listed per-platform in BLOG_PLATFORMS. */
+export const BLOG_PLATFORM_META: Record<string, { icon: string; color: string }> = {
+  Medium: { icon: 'M', color: '#000000' },
+  'Dev.to': { icon: 'DEV', color: '#0a0a0a' },
+  Substack: { icon: 'S', color: '#FF6719' },
+  HackMD: { icon: 'H', color: '#1E90FF' },
+  'LinkedIn Pulse': { icon: 'LP', color: '#0077B5' },
+  WordPress: { icon: 'WP', color: '#21759B' },
+  Blogger: { icon: 'B', color: '#FF5722' },
+  Notion: { icon: 'N', color: '#888' },
+  'Google Sites': { icon: 'G', color: '#4285F4' },
+  Note: { icon: '📝', color: '#4DB6AC' },
+  Paragraph: { icon: '¶', color: '#9C27B0' },
+  Patreon: { icon: 'P', color: '#F96854' },
+  Calisthenics: { icon: 'C', color: '#4CAF50' },
+  Linkmate: { icon: '🔗', color: '#FF9800' },
+  Coda: { icon: 'C', color: '#F46A54' },
+  Ameba: { icon: 'A', color: '#2D8CFF' },
+};
 
 export const ACCOUNT_NICKNAMES = [
   'aniket', 'krishi', 'sameeksha', 'hritika', 'meenakshi',

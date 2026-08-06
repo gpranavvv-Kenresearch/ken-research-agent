@@ -1,8 +1,9 @@
 'use client';
 import { useState } from 'react';
 import type { RawRow } from '@/types';
-import { getField, latestPostDate, SOCIAL_PLATFORMS, BLOG_PLATFORMS } from '@/types';
+import { getField, latestPostDate, latestBlogPostDate, getBlogSlots, SOCIAL_PLATFORMS } from '@/types';
 import PlatformBadge from './PlatformBadge';
+import BlogSlotBadge from './BlogSlotBadge';
 import RowDetailModal from './RowDetailModal';
 
 interface Props {
@@ -12,18 +13,20 @@ interface Props {
 }
 
 function ProgressBar({ row, tab }: { row: RawRow; tab: 'social' | 'blog' }) {
-  const platforms = tab === 'social' ? SOCIAL_PLATFORMS : BLOG_PLATFORMS;
-  const posted = platforms.filter((p) => {
-    const s = getField(row, ...p.statusCols).toLowerCase();
-    return s === 'posted' || s === 'success' || s === 'done';
-  }).length;
-  const pct = Math.round((posted / platforms.length) * 100);
+  const total = tab === 'social' ? SOCIAL_PLATFORMS.length : 2;
+  const posted = tab === 'social'
+    ? SOCIAL_PLATFORMS.filter((p) => {
+        const s = getField(row, ...p.statusCols).toLowerCase();
+        return s === 'posted' || s === 'success' || s === 'done';
+      }).length
+    : getBlogSlots(row).filter((s) => s.status.toLowerCase() === 'posted').length;
+  const pct = Math.round((posted / total) * 100);
   return (
     <div className="flex items-center gap-2 min-w-[80px]">
       <div className="flex-1 bg-slate-700 rounded-full h-1.5 overflow-hidden">
         <div className="h-1.5 rounded-full bg-blue-500 transition-all" style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs text-slate-400 tabular-nums w-10">{posted}/{platforms.length}</span>
+      <span className="text-xs text-slate-400 tabular-nums w-10">{posted}/{total}</span>
     </div>
   );
 }
@@ -32,8 +35,8 @@ export default function TrackingTable({ rows, tab, agentId }: Props) {
   const [selected, setSelected] = useState<RawRow | null>(null);
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState(''); // "YYYY-MM-DD", '' = no filter
-  const platforms = tab === 'social' ? SOCIAL_PLATFORMS : BLOG_PLATFORMS;
   const todayStr = new Date().toISOString().slice(0, 10);
+  const getLastPosted = (r: RawRow) => tab === 'social' ? latestPostDate(r, SOCIAL_PLATFORMS) : latestBlogPostDate(r);
 
   const filtered = rows.filter((r) => {
     if (search) {
@@ -42,7 +45,7 @@ export default function TrackingTable({ rows, tab, agentId }: Props) {
       const name = getField(r, 'Name', 'name').toLowerCase();
       if (!title.includes(search.toLowerCase()) && !url.includes(search.toLowerCase()) && !name.includes(search.toLowerCase())) return false;
     }
-    if (dateFilter && latestPostDate(r, platforms) !== dateFilter) return false;
+    if (dateFilter && getLastPosted(r) !== dateFilter) return false;
     return true;
   });
 
@@ -117,7 +120,7 @@ export default function TrackingTable({ rows, tab, agentId }: Props) {
               const hasContent = tab === 'social'
                 ? !!(xPost || fbPost || liPost)
                 : !!blogContent;
-              const lastPosted = latestPostDate(row, platforms);
+              const lastPosted = getLastPosted(row);
 
               return (
                 <tr
@@ -161,9 +164,10 @@ export default function TrackingTable({ rows, tab, agentId }: Props) {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1.5 max-w-[480px]">
-                      {platforms.map((p) => (
-                        <PlatformBadge key={p.key} platform={p} row={row} compact />
-                      ))}
+                      {tab === 'social'
+                        ? SOCIAL_PLATFORMS.map((p) => <PlatformBadge key={p.key} platform={p} row={row} compact />)
+                        : getBlogSlots(row).map((s) => <BlogSlotBadge key={s.slot} slot={s} compact />)
+                      }
                     </div>
                   </td>
                 </tr>

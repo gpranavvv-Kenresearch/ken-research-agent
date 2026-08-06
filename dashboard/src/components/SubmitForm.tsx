@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FORMATS, BLOG_PLATFORMS, SOCIAL_PLATFORMS, IMAGE_PROMPT_OPTIONS } from '@/types';
+import { FORMATS, SOCIAL_PLATFORMS, IMAGE_PROMPT_OPTIONS } from '@/types';
 import { useUser } from '@/context/UserContext';
 import { SHARED_SHEET_ID, resolveSheetId } from '@/lib/userConfig';
 
@@ -18,7 +18,7 @@ export default function SubmitForm() {
     targetUrl: '',
     format: 'seo-li',
     description: '',
-    platforms: BLOG_PLATFORMS.map((p) => p.key),
+    platforms: [] as string[],
     social: [] as string[],
     customPrompt: '',
     imagePrompt: '1',
@@ -227,35 +227,10 @@ export default function SubmitForm() {
             </div>
           </section>
 
-          {/* Blog platforms */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Blog Platforms</h2>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setForm({ ...form, platforms: BLOG_PLATFORMS.map((p) => p.key) })}
-                  className="text-xs text-blue-400 hover:text-blue-300">All</button>
-                <span className="text-slate-600">·</span>
-                <button type="button" onClick={() => setForm({ ...form, platforms: [] })}
-                  className="text-xs text-slate-400 hover:text-slate-300">None</button>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {BLOG_PLATFORMS.map((p) => {
-                const checked = form.platforms.includes(p.key);
-                return (
-                  <label key={p.key}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm transition-colors ${
-                      checked ? 'border-blue-500/60 bg-blue-950/30 text-white' : 'border-border bg-card text-slate-400 hover:border-slate-500'
-                    }`}
-                  >
-                    <input type="checkbox" checked={checked}
-                      onChange={() => toggle(p.key, form.platforms, (v) => setForm({ ...form, platforms: v }))}
-                      className="accent-blue-500" />
-                    {p.label}
-                  </label>
-                );
-              })}
-            </div>
+          {/* Blog platforms — assigned automatically now (max 2 per row, round-robin across all blog platforms), no per-row picker needed */}
+          <section className="space-y-1">
+            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Blog Platforms</h2>
+            <p className="text-xs text-slate-500">Automatically assigned — up to 2 blog platforms will post this row's content, rotated across every platform so no single row hogs the whole lineup. Check the Track page once generated.</p>
           </section>
 
           {/* Social platforms */}
@@ -406,35 +381,10 @@ export default function SubmitForm() {
         </div>
       </section>
 
-      {/* Blog platforms */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Blog Platforms</h2>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setForm({ ...form, platforms: BLOG_PLATFORMS.map((p) => p.key) })}
-              className="text-xs text-blue-400 hover:text-blue-300">All</button>
-            <span className="text-slate-600">·</span>
-            <button type="button" onClick={() => setForm({ ...form, platforms: [] })}
-              className="text-xs text-slate-400 hover:text-slate-300">None</button>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {BLOG_PLATFORMS.map((p) => {
-            const checked = form.platforms.includes(p.key);
-            return (
-              <label key={p.key}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm transition-colors ${
-                  checked ? 'border-blue-500/60 bg-blue-950/30 text-white' : 'border-border bg-card text-slate-400 hover:border-slate-500'
-                }`}
-              >
-                <input type="checkbox" checked={checked}
-                  onChange={() => toggle(p.key, form.platforms, (v) => setForm({ ...form, platforms: v }))}
-                  className="accent-blue-500" />
-                {p.label}
-              </label>
-            );
-          })}
-        </div>
+      {/* Blog platforms — assigned automatically now (max 2 per row, round-robin across all blog platforms), no per-row picker needed */}
+      <section className="space-y-1">
+        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Blog Platforms</h2>
+        <p className="text-xs text-slate-500">Automatically assigned — up to 2 blog platforms will post this row's content, rotated across every platform so no single row hogs the whole lineup. Check the Track page once generated.</p>
       </section>
 
       {/* Social platforms */}

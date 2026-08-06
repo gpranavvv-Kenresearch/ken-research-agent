@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
-import type { RawRow, PlatformDef } from '@/types';
-import { getField, SOCIAL_PLATFORMS, BLOG_PLATFORMS } from '@/types';
+import type { RawRow, PlatformDef, BlogSlot } from '@/types';
+import { getField, SOCIAL_PLATFORMS, getBlogSlots, BLOG_PLATFORM_KEY_BY_LABEL } from '@/types';
 import PlatformBadge from './PlatformBadge';
+import BlogSlotBadge from './BlogSlotBadge';
 
 interface Props {
   row: RawRow;
@@ -136,6 +137,95 @@ function PlatformSection({ title, platforms, row, name, tab, agentId }: {
   );
 }
 
+function BlogSlotSection({ row, agentId }: { row: RawRow; agentId: string }) {
+  const [posting, setPosting] = useState<number | null>(null);
+  const [msgs, setMsgs] = useState<Record<number, string>>({});
+
+  const targetUrl = getField(row, 'targetUrl', 'Target URL');
+  const rowTitle = getField(row, 'Title', 'title', 'Blog Title');
+  const blogContentLocal = getField(row, 'Blog Content', 'blogContent');
+  const blogTitleLocal = getField(row, 'Blog Title', 'blogTitle');
+  const blogDesc = getField(row, 'Blog Description', 'blogDescription');
+  const liCaption = getField(row, 'LinkedIn Caption', 'linkedinCaption', 'caption');
+  const seoTitle = getField(row, 'SEO Title', 'seoTitle');
+  const seoDesc = getField(row, 'SEO Description', 'seoDescription', 'seoDesc');
+  const coverImage = getField(row, 'Cover Image URL', 'coverImageUrl', 'imageUrl');
+
+  async function handlePostNow(slot: BlogSlot) {
+    const platformKey = BLOG_PLATFORM_KEY_BY_LABEL[slot.platform];
+    if (!platformKey) return;
+    setPosting(slot.slot);
+    setMsgs((m) => ({ ...m, [slot.slot]: '' }));
+    try {
+      const res = await fetch('/api/post-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agent: agentId,
+          sheetRow: row._sheetRow,
+          platform: platformKey,
+          tab: 'blog',
+          targetUrl,
+          title: rowTitle,
+          blogContent: blogContentLocal,
+          blogTitle: blogTitleLocal,
+          blogDescription: blogDesc,
+          linkedinCaption: liCaption,
+          seoTitle,
+          seoDescription: seoDesc,
+          coverImageUrl: coverImage,
+        }),
+      });
+      const data = await res.json();
+      setMsgs((m) => ({ ...m, [slot.slot]: res.ok ? 'Queued! Worker will post shortly.' : (data.error ?? 'Failed') }));
+    } catch {
+      setMsgs((m) => ({ ...m, [slot.slot]: 'Network error' }));
+    } finally {
+      setPosting(null);
+    }
+  }
+
+  const slots = getBlogSlots(row);
+
+  return (
+    <div>
+      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Blog Platforms (max 2 per row)</h3>
+      <div className="grid grid-cols-1 gap-2">
+        {slots.map((s) => {
+          const isPosted = s.status.toLowerCase() === 'posted';
+          const isFailed = s.status.toLowerCase() === 'failed' || s.status.toLowerCase() === 'error';
+          const canPost = !!s.platform && !!blogContentLocal && !isPosted;
+
+          return (
+            <div key={s.slot} className="flex items-center justify-between bg-slate-800/60 rounded-lg px-3 py-2 gap-3">
+              <div className="flex items-center gap-2 min-w-[110px]">
+                <span className="text-sm text-slate-300">{s.platform || `Slot ${s.slot}`}</span>
+              </div>
+              <BlogSlotBadge slot={s} />
+              <div className="text-xs text-slate-500 flex-1 text-right truncate">
+                {s.error && <span className="text-red-400 truncate" title={s.error}>⚠ {s.error.slice(0, 50)}</span>}
+                {s.url && !s.error && <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-green-500 hover:underline">↗ view post</a>}
+                {msgs[s.slot] && <span className={msgs[s.slot].includes('Queued') ? 'text-green-400' : 'text-red-400'}>{msgs[s.slot]}</span>}
+              </div>
+              {canPost && (
+                <button
+                  onClick={() => handlePostNow(s)}
+                  disabled={posting === s.slot}
+                  className={`shrink-0 text-xs px-2.5 py-1 rounded-md disabled:opacity-50 disabled:cursor-wait text-white font-medium transition-colors ${
+                    isFailed ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'
+                  }`}
+                >
+                  {posting === s.slot ? 'Queuing…' : isFailed ? '🔄 Retry' : 'Post Now'}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function RowDetailModal({ row, tab, agentId, onClose }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -219,7 +309,7 @@ export default function RowDetailModal({ row, tab, agentId, onClose }: Props) {
           {/* Platform statuses */}
           {tab === 'social'
             ? <PlatformSection title="Social Platforms" platforms={SOCIAL_PLATFORMS} row={row} name={name} tab={tab} agentId={agentId} />
-            : <PlatformSection title="Blog Platforms"   platforms={BLOG_PLATFORMS}   row={row} name={name} tab={tab} agentId={agentId} />
+            : <BlogSlotSection row={row} agentId={agentId} />
           }
         </div>
       </div>

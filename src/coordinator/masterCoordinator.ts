@@ -685,7 +685,6 @@ export async function runMediumBatch(batchNum: number = 1, limit: number = 12): 
       console.log(`    Preparing Medium content...`);
       let mediumPost = await generateMediumPost(row);
       mediumPost = ensureTargetUrl(mediumPost, row.targetUrl);
-      row.mediumPost = mediumPost;
 
       // 3. Post to Medium — always use "New Name" column (J), never Name (G)
       const mediumNickname = (row.newName || '').trim();
@@ -712,7 +711,7 @@ export async function runMediumBatch(batchNum: number = 1, limit: number = 12): 
           mediumPost,
           mediumPostUrl: '',
           mediumStatus: 'Failed',
-          mediumBatch: row.mediumBatch || '',  // Keep existing batch, don't assign new one
+          mediumBatch: '',  // Keep existing batch, don't assign new one
           mediumError: postResult.error,
         });
         console.log(`    ❌ Failed: ${postResult.error}`);
@@ -728,10 +727,10 @@ export async function runMediumBatch(batchNum: number = 1, limit: number = 12): 
       addFailure(failures, row.newName || row.name, err.message);
       try {
         await saveMediumBatchResult(row, {
-          mediumPost: row.mediumPost || '',
+          mediumPost: '',
           mediumPostUrl: '',
           mediumStatus: 'Error',
-          mediumBatch: row.mediumBatch || '',  // Keep existing batch, don't assign new one
+          mediumBatch: '',  // Keep existing batch, don't assign new one
           mediumError: err.message,
         });
       } catch (saveErr: any) {
@@ -851,7 +850,7 @@ export async function runLinkmateBatch(batchNum: number = 1, limit: number = 12)
       addFailure(failures, row.name, err.message);
       try {
         await saveLinkmateBatchResult(row, {
-          linkMateContent: row.linkMateContent || '',
+          linkMateContent: '',
           linkMatePostUrl: '',
           linkMateStatus: 'Error',
           linkmateBatch: batchLabel,
@@ -930,7 +929,6 @@ export async function runGoogleSiteBatch(batchNum: number = 1, limit: number = 1
       console.log(`    Preparing Google Sites content...`);
       let googleSitePost = await generateGoogleSitePost(row);
       googleSitePost = ensureTargetUrl(googleSitePost, row.targetUrl);
-      row.googleSitePost = googleSitePost;
 
       // 3. Post to Google Sites — always use "New Name" column, never Name
       const googleSiteNickname = (row.newName || '').trim();
@@ -956,7 +954,7 @@ export async function runGoogleSiteBatch(batchNum: number = 1, limit: number = 1
           googleSitePost,
           googleSitePostUrl: '',
           googleSiteStatus: 'Failed',
-          googleSiteBatch: row.googleSiteBatch || '',
+          googleSiteBatch: '',
           googleSiteError: postResult.error,
         });
         console.log(`    ❌ Failed: ${postResult.error}`);
@@ -972,10 +970,10 @@ export async function runGoogleSiteBatch(batchNum: number = 1, limit: number = 1
       addFailure(failures, row.newName || row.name, err.message);
       try {
         await saveGoogleSiteBatchResult(row, {
-          googleSitePost: row.googleSitePost || '',
+          googleSitePost: '',
           googleSitePostUrl: '',
           googleSiteStatus: 'Error',
-          googleSiteBatch: row.googleSiteBatch || '',
+          googleSiteBatch: '',
           googleSiteError: err.message,
         });
       } catch (saveErr: any) {
@@ -1068,7 +1066,7 @@ export async function runDevtoBatch(batchNum: number = 1, limit: number = 12): P
         await saveDevtoBatchResult(row, {
           devtoPostUrl: '',
           devtoStatus: 'Failed',
-          devtoBatch: row.devtoBatch || '',
+          devtoBatch: '',
           devtoError: postResult.error || 'Unknown error',
         });
         failed++;
@@ -1083,7 +1081,7 @@ export async function runDevtoBatch(batchNum: number = 1, limit: number = 12): P
         await saveDevtoBatchResult(row, {
           devtoPostUrl: '',
           devtoStatus: 'Error',
-          devtoBatch: row.devtoBatch || '',
+          devtoBatch: '',
           devtoError: err.message,
         });
       } catch (saveErr: any) {
@@ -1210,7 +1208,7 @@ export async function runLinkedinPulseBatch(batchNum: number = 1, limit: number 
           await saveLinkedinPulseBatchResult(row, {
             linkedinPulsePostUrl: '',
             linkedinPulseStatus: 'Failed',
-            linkedinPulseBatch: row.linkedinPulseBatch || '',
+            linkedinPulseBatch: '',
             linkedinPulseError: postResult.error,
           });
           console.log(`      ❌ Failed: ${postResult.error}`);
@@ -1228,7 +1226,7 @@ export async function runLinkedinPulseBatch(batchNum: number = 1, limit: number 
           await saveLinkedinPulseBatchResult(row, {
             linkedinPulsePostUrl: '',
             linkedinPulseStatus: 'Error',
-            linkedinPulseBatch: row.linkedinPulseBatch || '',
+            linkedinPulseBatch: '',
             linkedinPulseError: err.message,
           });
         } catch (saveErr: any) {
@@ -1340,7 +1338,7 @@ export async function runCalisthenicsNBatch(batchNum: number = 1, limit: number 
         await saveCalisthenicsResultBatch(row, {
           calisthenicsPostUrl: '',
           calisthenicsStatus: 'Failed',
-          calisthenicssBatch: row.calisthenicsNBatch || '',
+          calisthenicssBatch: '',
           calisthenicsError: postResult.error,
         });
         console.log(`    ❌ Failed: ${postResult.error}`);
@@ -1358,7 +1356,7 @@ export async function runCalisthenicsNBatch(batchNum: number = 1, limit: number 
         await saveCalisthenicsResultBatch(row, {
           calisthenicsPostUrl: '',
           calisthenicsStatus: 'Error',
-          calisthenicssBatch: row.calisthenicsNBatch || '',
+          calisthenicssBatch: '',
           calisthenicsError: err.message,
         });
       } catch (saveErr: any) {
@@ -1419,7 +1417,7 @@ export async function runSubstackBatch(batchNum: number = 1): Promise<void> {
         await saveSubstackBatchResult(row, {
           substackPostUrl: '',
           substackStatus: 'Failed',
-          substackBatch: row.substackBatch || '',
+          substackBatch: '',
           substackError: postResult.error,
         });
         console.log(`    ❌ Failed: ${postResult.error}`);
@@ -1437,7 +1435,7 @@ export async function runSubstackBatch(batchNum: number = 1): Promise<void> {
         await saveSubstackBatchResult(row, {
           substackPostUrl: '',
           substackStatus: 'Error',
-          substackBatch: row.substackBatch || '',
+          substackBatch: '',
           substackError: err.message,
         });
       } catch (saveErr: any) {
@@ -1659,7 +1657,7 @@ export async function runHackmdBatch(batchNum: number = 1, limit: number = 12): 
         await saveHackmdBatchResult(row, {
           hackmdPostUrl: '',
           hackmdStatus: 'Failed',
-          hackmdBatch: row.hackmdBatch || '',
+          hackmdBatch: '',
           hackmdError: postResult.error,
         });
         console.log(`    ❌ Failed: ${postResult.error}`);
@@ -1677,7 +1675,7 @@ export async function runHackmdBatch(batchNum: number = 1, limit: number = 12): 
         await saveHackmdBatchResult(row, {
           hackmdPostUrl: '',
           hackmdStatus: 'Error',
-          hackmdBatch: row.hackmdBatch || '',
+          hackmdBatch: '',
           hackmdError: err.message,
         });
       } catch (saveErr: any) {
@@ -2266,6 +2264,15 @@ export async function runAmebaBatch(batchNum: number = 1): Promise<void> {
 const BLOG_PLATFORMS  = ['googlesite', 'hackmd', 'devto', 'medium', 'linkmate', 'linkedin-pulse', 'calisthenics', 'substack', 'wordpress', 'blogger', 'patreon', 'notion', 'note'];
 const SOCIAL_PLATFORMS = ['x', 'facebook', 'linkedin'];
 
+// Maps runRetryRow's lowercase platform key to the exact label claimNextBlogSlot
+// writes into "Blog Platform 1/2" — needed to find which slot to retry into.
+const BLOG_PLATFORM_LABELS: Record<string, string> = {
+  googlesite: 'Google Sites', hackmd: 'HackMD', devto: 'Dev.to', medium: 'Medium',
+  linkmate: 'Linkmate', 'linkedin-pulse': 'LinkedIn Pulse', calisthenics: 'Calisthenics',
+  substack: 'Substack', wordpress: 'WordPress', blogger: 'Blogger', patreon: 'Patreon',
+  notion: 'Notion', note: 'Note', paragraph: 'Paragraph', coda: 'Coda', ameba: 'Ameba',
+};
+
 export async function runRetryRow(rowIndex: number, platform: string): Promise<void> {
   const p = platform.toLowerCase().replace(/_/g, '-');
   const sheetType = SOCIAL_PLATFORMS.includes(p) ? 'social' : 'blog';
@@ -2276,6 +2283,12 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
   if (!row) {
     console.error(`❌ Row ${rowIndex} not found in ${sheetType} sheet`);
     return;
+  }
+  if (sheetType === 'blog') {
+    const label = BLOG_PLATFORM_LABELS[p];
+    if (row.blogPlatform1 === label) row.blogSlot = 1;
+    else if (row.blogPlatform2 === label) row.blogSlot = 2;
+    else console.warn(`   ⚠️ "${label}" not claimed on row ${rowIndex} (slots: "${row.blogPlatform1}", "${row.blogPlatform2}") — save will no-op`);
   }
 
   console.log(`   Title   : ${row.title?.slice(0, 70)}`);

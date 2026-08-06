@@ -3,7 +3,7 @@ import useSWR from 'swr';
 import { useState } from 'react';
 import TrackingTable from '@/components/TrackingTable';
 import type { RawRow } from '@/types';
-import { BLOG_PLATFORMS, SOCIAL_PLATFORMS, getField, latestPostDate } from '@/types';
+import { SOCIAL_PLATFORMS, getField, latestPostDate, latestBlogPostDate, getBlogSlots } from '@/types';
 import { useUser } from '@/context/UserContext';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -96,28 +96,38 @@ function hasGeneratedContent(row: RawRow, tab: 'blog' | 'social'): boolean {
 }
 
 function StatsBar({ rows, tab }: { rows: RawRow[]; tab: 'blog' | 'social' }) {
-  const platforms = tab === 'blog' ? BLOG_PLATFORMS : SOCIAL_PLATFORMS;
   const todayStr = new Date().toISOString().slice(0, 10);
   let posted = 0, failed = 0, postedToday = 0;
 
+  const rowIsPosted = (row: RawRow): boolean => tab === 'blog'
+    ? getBlogSlots(row).some((s) => s.status.toLowerCase() === 'posted')
+    : SOCIAL_PLATFORMS.some((p) => {
+        const s = getField(row, ...p.statusCols).toLowerCase();
+        return s === 'posted' || s === 'success' || s === 'done';
+      });
+
   for (const row of rows) {
-    for (const p of platforms) {
-      const s = getField(row, ...p.statusCols).toLowerCase();
-      if (s === 'posted' || s === 'success' || s === 'done') posted++;
-      else if (s === 'failed' || s === 'error') failed++;
+    if (tab === 'blog') {
+      for (const s of getBlogSlots(row)) {
+        const st = s.status.toLowerCase();
+        if (st === 'posted') posted++;
+        else if (st === 'failed' || st === 'error') failed++;
+      }
+      if (latestBlogPostDate(row) === todayStr) postedToday++;
+    } else {
+      for (const p of SOCIAL_PLATFORMS) {
+        const s = getField(row, ...p.statusCols).toLowerCase();
+        if (s === 'posted' || s === 'success' || s === 'done') posted++;
+        else if (s === 'failed' || s === 'error') failed++;
+      }
+      if (latestPostDate(row, SOCIAL_PLATFORMS) === todayStr) postedToday++;
     }
-    if (latestPostDate(row, platforms) === todayStr) postedToday++;
   }
 
   // Pending = rows with content generated but not yet posted to any platform —
   // e.g. 60 rows, 25 have generated content, 10 of those got posted -> pending = 15.
   const withContent = rows.filter((row) => hasGeneratedContent(row, tab));
-  const withContentPosted = withContent.filter((row) =>
-    platforms.some((p) => {
-      const s = getField(row, ...p.statusCols).toLowerCase();
-      return s === 'posted' || s === 'success' || s === 'done';
-    })
-  );
+  const withContentPosted = withContent.filter(rowIsPosted);
   const pending = withContent.length - withContentPosted.length;
 
   return (

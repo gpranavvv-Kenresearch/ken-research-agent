@@ -142,21 +142,6 @@ export interface SheetRow {
   linkedinPostUrl?: string;
   linkedinStatus?: string;
   linkedinError?: string;
-  // Medium columns
-  mediumPost?: string;
-  mediumPostUrl?: string;
-  mediumStatus?: string;
-  mediumError?: string;
-  // Linkmate columns
-  linkMateContent?: string;
-  linkMatePostUrl?: string;
-  linkMateStatus?: string;
-  linkMateError?: string;
-  // Google Sites columns
-  googleSitePost?: string;
-  googleSitePostUrl?: string;
-  googleSiteStatus?: string;
-  googleSiteError?: string;
   // Result columns
   messageStatus?: string;
   sanityIssues?: string;
@@ -165,82 +150,20 @@ export interface SheetRow {
   xBatch?: string;        // "Batch 1" ... "Batch 13"
   fbBatch?: string;       // "Batch 1" ... "Batch 5"
   liBatch?: string;       // "Batch 1" ... "Batch 3"
-  mediumBatch?: string;      // "Batch 1" ... Medium batches (max 1/day)
-  linkmateBatch?: string;    // "Batch 1" ... Linkmate batches (max 3/day)
-  googleSiteBatch?: string;  // "Batch 1" ... Google Sites batches
-  lastPostedGoogleSite?: string; // last Google Sites post date
-  // Dev.to columns
-  devtoPostUrl?: string;
-  devtoStatus?: string;
-  devtoError?: string;
-  devtoBatch?: string;
-  lastPostedDevto?: string; // last Dev.to post date
-  // LinkedIn Pulse columns
-  linkedinPulsePostUrl?: string;
-  linkedinPulseStatus?: string;
-  linkedinPulseError?: string;
-  linkedinPulseBatch?: string;
-  lastPostedLinkedinPulse?: string; // last LinkedIn Pulse post date
-  // Calisthenics columns
-  calisthenicsPostUrl?: string;
-  calisthenicsStatus?: string;
-  calisthenicsError?: string;
-  calisthenicsNBatch?: string;
-  lastPostedCalisthenics?: string; // last Calisthenics post date
-  // Substack columns
-  substackPostUrl?: string;
-  substackStatus?: string;
-  substackError?: string;
-  substackBatch?: string;
-  lastPostedSubstack?: string; // last Substack post date
-  // HackMD columns
-  hackmdPostUrl?: string;
-  hackmdStatus?: string;
-  hackmdError?: string;
-  hackmdBatch?: string;
-  lastPostedHackmd?: string; // last HackMD post date
-  // WordPress columns
-  wordpressPostUrl?: string;
-  wordpressStatus?: string;
-  wordpressError?: string;
-  wordpressBatch?: string;
-  lastPostedWordpress?: string;
-  // Blogger columns
-  bloggerPostUrl?: string;
-  bloggerStatus?: string;
-  bloggerError?: string;
-  bloggerBatch?: string;
-  lastPostedBlogger?: string;
-  // Patreon columns
-  patreonPostUrl?: string;
-  patreonStatus?: string;
-  patreonError?: string;
-  patreonBatch?: string;
-  lastPostedPatreon?: string;
-  // Notion columns
-  notionPostUrl?: string;
-  notionStatus?: string;
-  notionError?: string;
-  notionBatch?: string;
-  lastPostedNotion?: string;
-  // Note columns
-  notePostUrl?: string;
-  noteStatus?: string;
-  noteError?: string;
-  noteBatch?: string;
-  lastPostedNote?: string;
-  // Paragraph columns
-  paragraphPostUrl?: string;
-  paragraphStatus?: string;
-  paragraphError?: string;
-  paragraphBatch?: string;
-  lastPostedParagraph?: string;
-  // Coda columns
-  codaPostUrl?: string;
-  codaStatus?: string;
-  codaError?: string;
-  codaBatch?: string;
-  lastPostedCoda?: string;
+  // Shared blog-posting slots — every blog platform posts through these same
+  // 2 slots per row (max 2 platforms/row) instead of its own dedicated
+  // columns, so a row's content promotes 2 distinct platforms, not all of
+  // them. See claimNextBlogSlot/saveBlogSlotResult.
+  blogPlatform1?: string;
+  blogUrl1?: string;
+  blogPlatform2?: string;
+  blogUrl2?: string;
+  blogStatus?: string;   // "P1:<state>|P2:<state>"
+  blogError?: string;    // "P1:<msg>|P2:<msg>"
+  blogBatch?: string;
+  lastPostedBlog?: string;
+  /** Runtime-only: which slot claimNextBlogSlot just claimed on this row (not a sheet column). */
+  blogSlot?: 1 | 2;
 }
 
 // Backwards-compatible alias used by facebookPostingAgent and linkedinPostingAgent
@@ -422,98 +345,15 @@ function mapRow(row: string[], colMap: ColMap, rowIndex: number, sheetType: Shee
     linkedinPostUrl: g(colMap, 'LinkedIn Post URL', 'linkedin post url'),
     linkedinStatus:  g(colMap, 'LinkedIn Status', 'linkedin status'),
     linkedinError:   g(colMap, 'LinkedIn Error', 'linkedin error'),
-    // Medium columns
-    mediumPost:      g(colMap, 'Medium Post', 'medium post'),
-    mediumPostUrl:   g(colMap, 'Medium Post URL', 'medium post url'),
-    mediumStatus:    g(colMap, 'Medium Status', 'medium status'),
-    mediumError:     g(colMap, 'Medium Error', 'medium error'),
-    mediumBatch:     g(colMap, 'mediumBatch', 'medium batch', 'Medium Batch'),
-    lastPostedMedium: g(colMap, 'lastPostedMedium', 'lastpostedmedium'),
-    // Linkmate columns
-    linkMateContent: g(colMap, 'Linkmate Content', 'linkmate content'),
-    linkMatePostUrl: g(colMap, 'Linkmate Post URL', 'linkmate post url'),
-    linkMateStatus:  g(colMap, 'Linkmate Status', 'linkmate status'),
-    linkMateError:   g(colMap, 'Linkmate Error', 'linkmate error'),
-    linkmateBatch:   g(colMap, 'linkmateBatch', 'linkmate batch', 'Linkmate Batch'),
-    lastPostedLinkmate: g(colMap, 'lastPostedLinkmate', 'lastpostedlinkmate'),
-    // Google Sites columns
-    googleSitePostUrl:   g(colMap, 'Google Site Post URL', 'google site post url'),
-    googleSiteStatus:    g(colMap, 'Google Site Status', 'google site status'),
-    googleSiteError:     g(colMap, 'Google Site Error', 'google site error'),
-    googleSiteBatch:     g(colMap, 'GoogleSite Batch', 'googleSiteBatch', 'google site batch', 'Google Site Batch', 'googlesite batch'),
-    lastPostedGoogleSite: g(colMap, 'lastPostedGoogleSite', 'lastpostedgooglesite'),
-    // Dev.to columns
-    devtoPostUrl:    g(colMap, 'Dev.to Post URL', 'dev.to post url'),
-    devtoStatus:     g(colMap, 'Dev.to Status', 'dev.to status'),
-    devtoError:      g(colMap, 'Dev.to Error', 'dev.to error'),
-    devtoBatch:      g(colMap, 'Devto Batch', 'devtoBatch', 'dev.to batch', 'Dev.to Batch', 'devto batch'),
-    lastPostedDevto: g(colMap, 'lastPostedDevto', 'lastposteddevto'),
-    // LinkedIn Pulse columns
-    linkedinPulsePostUrl:    g(colMap, 'Linkedin Pulse URL', 'LinkedIn Pulse Post URL', 'linkedin pulse post url', 'linkedin pulse url'),
-    linkedinPulseStatus:     g(colMap, 'LinkedIn Pulse Status', 'linkedin pulse status'),
-    linkedinPulseError:      g(colMap, 'LinkedIn Pulse Error', 'linkedin pulse error'),
-    linkedinPulseBatch:      g(colMap, 'linkedinPulseBatch', 'linkedin pulse batch', 'LinkedIn Pulse Batch'),
-    lastPostedLinkedinPulse: g(colMap, 'lastPosted linkedin Pulse', 'lastPostedLinkedinPulse', 'lastpostedlinkedinpulse'),
-    // Calisthenics columns
-    calisthenicsPostUrl: g(colMap, 'Calisthenics Post URL', 'calisthenics post url'),
-    calisthenicsStatus:  g(colMap, 'Calisthenics Status', 'calisthenics status'),
-    calisthenicsError:   g(colMap, 'Calisthenics Error', 'calisthenics error'),
-    calisthenicsNBatch:  g(colMap, 'calisthenicsNBatch', 'calisthenics batch', 'Calisthenics Batch'),
-    lastPostedCalisthenics: g(colMap, 'lastPosted Calisthenics', 'lastPostedCalisthenics', 'lastpostedcalisthenics'),
-    // Substack columns
-    substackPostUrl: g(colMap, 'Substack Post URL', 'substack post url'),
-    substackStatus:  g(colMap, 'Substack Status', 'substack status'),
-    substackError:   g(colMap, 'Substack  Error', 'Substack Error', 'substack  error', 'substack error'),
-    substackBatch:   g(colMap, 'substackBatch', 'substack batch', 'Substack Batch'),
-    lastPostedSubstack: g(colMap, 'lastPostedSubstack', 'lastpostedsubstack'),
-    // HackMD columns
-    hackmdPostUrl: g(colMap, 'HackMD Post URL', 'hackmd post url'),
-    hackmdStatus:  g(colMap, 'HackMD Status', 'hackmd status'),
-    hackmdError:   g(colMap, 'HackMD Error', 'hackmd error'),
-    hackmdBatch:   g(colMap, 'hackmdBatch', 'hackmd batch', 'HackMD Batch'),
-    lastPostedHackmd: g(colMap, 'lastPostedHackMD', 'lastPostedHackmd', 'lastpostedhackmd'),
-    // WordPress columns
-    wordpressPostUrl: g(colMap, 'WordPress Post URL', 'wordpress post url'),
-    wordpressStatus:  g(colMap, 'WordPress Status', 'wordpress status'),
-    wordpressError:   g(colMap, 'WordPress Error', 'wordpress error'),
-    wordpressBatch:   g(colMap, 'wordpressBatch', 'wordpress batch', 'WordPress Batch'),
-    lastPostedWordpress: g(colMap, 'lastPostedWordpress', 'lastpostedwordpress'),
-    // Blogger columns
-    bloggerPostUrl: g(colMap, 'Blogger Post URL', 'blogger post url'),
-    bloggerStatus:  g(colMap, 'Blogger Status', 'blogger status'),
-    bloggerError:   g(colMap, 'Blogger Error', 'blogger error'),
-    bloggerBatch:   g(colMap, 'bloggerBatch', 'blogger batch', 'Blogger Batch'),
-    lastPostedBlogger: g(colMap, 'Last Posted Blogger', 'lastPostedBlogger', 'lastpostedblogger'),
-    // Patreon columns
-    patreonPostUrl: g(colMap, 'Patreon Post URL', 'patreon post url'),
-    patreonStatus:  g(colMap, 'Patreon Status', 'patreon status'),
-    patreonError:   g(colMap, 'Patreon Error', 'patreon error'),
-    patreonBatch:   g(colMap, 'patreonBatch', 'patreon batch', 'Patreon Batch'),
-    lastPostedPatreon: g(colMap, 'Last Posted Patreon', 'lastPostedPatreon', 'lastpostedpatreon'),
-    // Notion columns
-    notionPostUrl: g(colMap, 'Notion Post URL', 'notion post url'),
-    notionStatus:  g(colMap, 'Notion Status', 'notion status'),
-    notionError:   g(colMap, 'Notion Error', 'notion error'),
-    notionBatch:   g(colMap, 'notionBatch', 'notion batch', 'Notion Batch'),
-    lastPostedNotion: g(colMap, 'Last Posted Notion', 'lastPostedNotion', 'lastpostednotion'),
-    // Note columns
-    notePostUrl: g(colMap, 'Note Post URL', 'note post url'),
-    noteStatus:  g(colMap, 'Note Status', 'note status'),
-    noteError:   g(colMap, 'Note Error', 'note error'),
-    noteBatch:   g(colMap, 'noteBatch', 'note batch', 'Note Batch'),
-    lastPostedNote: g(colMap, 'Last Posted Note', 'lastPostedNote', 'lastpostednote'),
-    // Paragraph columns
-    paragraphPostUrl:    g(colMap, 'Paragraph Post URL', 'paragraph post url'),
-    paragraphStatus:     g(colMap, 'Paragraph Status', 'paragraph status'),
-    paragraphError:      g(colMap, 'Paragraph Error', 'paragraph error'),
-    paragraphBatch:      g(colMap, 'Paragraph Batch', 'paragraph batch', 'paragraphBatch'),
-    lastPostedParagraph: g(colMap, 'Last Posted Paragraph', 'lastPostedParagraph', 'lastpostedparagraph'),
-    // Coda columns
-    codaPostUrl:    g(colMap, 'Coda Post URL', 'coda post url'),
-    codaStatus:     g(colMap, 'Coda Status', 'coda status'),
-    codaError:      g(colMap, 'Coda Error', 'coda error'),
-    codaBatch:      g(colMap, 'Coda Batch', 'coda batch', 'codaBatch'),
-    lastPostedCoda: g(colMap, 'Last Posted Coda', 'lastPostedCoda', 'lastpostedcoda'),
+    // Shared blog-posting slots (max 2 platforms/row — see claimNextBlogSlot)
+    blogPlatform1:  g(colMap, 'Blog Platform 1', 'blog platform 1'),
+    blogUrl1:       g(colMap, 'Blog URL 1', 'blog url 1'),
+    blogPlatform2:  g(colMap, 'Blog Platform 2', 'blog platform 2'),
+    blogUrl2:       g(colMap, 'Blog URL 2', 'blog url 2'),
+    blogStatus:     g(colMap, 'Blog Status', 'blog status'),
+    blogError:      g(colMap, 'Blog Error', 'blog error'),
+    blogBatch:      g(colMap, 'Blog Batch', 'blog batch'),
+    lastPostedBlog: g(colMap, 'Last Posted Blog', 'lastPostedBlog', 'lastpostedblog'),
     // Result columns
     messageStatus:   g(colMap, 'Message Status', 'message status'),
     sanityIssues:    g(colMap, 'Sanity Issues', 'sanity issues'),
@@ -742,26 +582,7 @@ export async function saveUnifiedMediumResult(
   row: SheetRow,
   result: { post: string; postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig('blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-
-  const today = nowStamp();
-  const newUrl = appendValue(row.mediumPostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(row.lastPostedMedium, today)
-    : (row.lastPostedMedium ?? '');
-
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['Medium Post URL', 'medium post url'],                        value: newUrl },
-    { names: ['Medium Status',   'medium status'],                          value: result.status  },
-    { names: ['Medium Error',    'medium error'],                           value: result.error ?? '' },
-    { names: ['mediumBatch',     'medium batch',    'Medium Batch'],        value: result.batch ?? '' },
-    { names: ['lastPostedMedium','lastpostedmedium'],                       value: newLastPosted },
-  ], sheetConfig.name);
-
-  await batchWrite(sheets, data, sheetConfig.id);
-  console.log(`   📝 Medium updated for row ${row.rowIndex}: ${result.status}`);
+  await saveBlogSlotResult(row, result);
 }
 
 // ──── Write Linkmate posting result to unified sheet ────────────────────
@@ -770,27 +591,7 @@ export async function saveUnifiedLinkmateResult(
   row: SheetRow,
   result: { content: string; postUrl: string; status: string; error?: string; batch?: string; lastPosted?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig('blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-
-  const today = nowStamp();
-  const newUrl = appendValue(row.linkMatePostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(row.lastPostedLinkmate, today)
-    : (row.lastPostedLinkmate ?? '');
-
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['Linkmate Content', 'linkmate content'],                       value: result.content    },
-    { names: ['Linkmate Post URL', 'linkmate post url'],                     value: newUrl },
-    { names: ['Linkmate Status',   'linkmate status'],                       value: result.status  },
-    { names: ['Linkmate Error',    'linkmate error'],                        value: result.error ?? '' },
-    { names: ['linkmateBatch',     'linkmate batch',    'Linkmate Batch'],   value: result.batch ?? '' },
-    { names: ['lastPostedLinkmate','lastpostedlinkmate'],                    value: newLastPosted },
-  ], sheetConfig.name);
-
-  await batchWrite(sheets, data, sheetConfig.id);
-  console.log(`   📝 Linkmate updated for row ${row.rowIndex}: ${result.status}`);
+  await saveBlogSlotResult(row, result);
 }
 
 // ──── Write Google Sites posting result to unified sheet ────────────────
@@ -799,26 +600,7 @@ export async function saveUnifiedGoogleSiteResult(
   row: SheetRow,
   result: { post: string; postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig('blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-
-  const today = nowStamp();
-  const newUrl = appendValue(row.googleSitePostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(row.lastPostedGoogleSite, today)
-    : (row.lastPostedGoogleSite ?? '');
-
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['Google Site Post URL', 'google site post url'],                value: newUrl },
-    { names: ['Google Site Status',   'google site status'],                  value: result.status  },
-    { names: ['Google Site Error',    'google site error'],                   value: result.error ?? '' },
-    { names: ['GoogleSite Batch', 'googleSiteBatch', 'google site batch', 'Google Site Batch'], value: result.batch ?? '' },
-    { names: ['lastPostedGoogleSite', 'lastpostedgooglesite'],                value: newLastPosted },
-  ], sheetConfig.name);
-
-  await batchWrite(sheets, data, sheetConfig.id);
-  console.log(`   📝 Google Sites updated for row ${row.rowIndex}: ${result.status}`);
+  await saveBlogSlotResult(row, result);
 }
 
 /**
@@ -863,26 +645,7 @@ export async function saveUnifiedDevtoResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig('blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-
-  const today = nowStamp();
-  const newUrl = appendValue(row.devtoPostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(row.lastPostedDevto, today)
-    : (row.lastPostedDevto ?? '');
-
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['Dev.to Post URL', 'dev.to post url'],                value: newUrl },
-    { names: ['Dev.to Status',   'dev.to status'],                  value: result.status  },
-    { names: ['Dev.to Error',    'dev.to error'],                   value: result.error ?? '' },
-    { names: ['Devto Batch', 'devtoBatch', 'dev.to batch', 'Dev.to Batch'], value: result.batch ?? '' },
-    { names: ['lastPostedDevto', 'lastposteddevto'],                value: newLastPosted },
-  ], sheetConfig.name);
-
-  await batchWrite(sheets, data, sheetConfig.id);
-  console.log(`   📝 Dev.to updated for row ${row.rowIndex}: ${result.status}`);
+  await saveBlogSlotResult(row, result);
 }
 
 // ──── Write LinkedIn Pulse posting result to unified sheet ──────────────
@@ -891,53 +654,196 @@ export async function saveLinkedinPulseResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig('blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-
-  const today = nowStamp();
-  const newUrl = appendValue(row.linkedinPulsePostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(row.lastPostedLinkedinPulse, today)
-    : (row.lastPostedLinkedinPulse ?? '');
-
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['Linkedin Pulse URL', 'LinkedIn Pulse Post URL', 'linkedin pulse post url'], value: newUrl },
-    { names: ['Linkedin Pulse Status', 'LinkedIn Pulse Status', 'linkedin pulse status'], value: result.status  },
-    { names: ['Linkedin Pulse Error', 'LinkedIn Pulse Error', 'linkedin pulse error'],    value: result.error ?? '' },
-    { names: ['linkedinPulseBatch', 'linkedin pulse batch', 'LinkedIn Pulse Batch'],      value: result.batch ?? '' },
-    { names: ['lastPosted linkedin Pulse', 'lastPostedLinkedinPulse', 'lastpostedlinkedinpulse'], value: newLastPosted },
-  ], sheetConfig.name);
-
-  await batchWrite(sheets, data, sheetConfig.id);
-  console.log(`   📝 LinkedIn Pulse updated for row ${row.rowIndex}: ${result.status}`);
+  await saveBlogSlotResult(row, result);
 }
 
 export async function saveCalisthenicsResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
+  await saveBlogSlotResult(row, result);
+}
+
+// ──── Shared blog-posting slots (max 2 platforms/row) ────────────────────
+// Every blog platform shares these 2 slots per row instead of its own
+// dedicated columns, so a row's content promotes 2 distinct platforms, not
+// all 15. The per-platform get/save functions below are now thin wrappers
+// around these two.
+
+const BLOG_PLATFORM1_NAMES = ['Blog Platform 1', 'blog platform 1'];
+const BLOG_URL1_NAMES = ['Blog URL 1', 'blog url 1'];
+const BLOG_PLATFORM2_NAMES = ['Blog Platform 2', 'blog platform 2'];
+const BLOG_URL2_NAMES = ['Blog URL 2', 'blog url 2'];
+const BLOG_STATUS_NAMES = ['Blog Status', 'blog status'];
+const BLOG_ERROR_NAMES = ['Blog Error', 'blog error'];
+const BLOG_BATCH_NAMES = ['Blog Batch', 'blog batch'];
+const BLOG_LASTPOSTED_NAMES = ['Last Posted Blog', 'lastPostedBlog', 'lastpostedblog'];
+
+/** Parses "P1:<state>|P2:<state>" into { 1: state, 2: state }. */
+function parseSlotState(raw: string | undefined): Record<1 | 2, string> {
+  const out: Record<1 | 2, string> = { 1: '', 2: '' };
+  (raw ?? '').split('|').map(s => s.trim()).filter(Boolean).forEach(part => {
+    const m = part.match(/^P([12]):(.*)$/);
+    if (m) out[Number(m[1]) as 1 | 2] = m[2].trim();
+  });
+  return out;
+}
+
+function formatSlotState(state: Record<1 | 2, string>): string {
+  return `P1:${state[1]}|P2:${state[2]}`;
+}
+
+/**
+ * Claim the next open blog-posting slot for `platformKey` (max 2 platforms
+ * per row). Scans rows with generated content in order; skips a row this
+ * platform already claimed a slot on; writes the platform name into the
+ * first open slot immediately (before posting), so a concurrent claim for a
+ * different platform never lands on the same slot. Returns null when every
+ * generated row currently has both slots taken (caller just no-ops this run).
+ */
+export async function claimNextBlogSlot(platformKey: string): Promise<SheetRow | null> {
   const sheets = await getSheetsClient();
   const sheetConfig = getSheetConfig('blog');
   const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+  const res = await withRetry(() => sheets.spreadsheets.values.get({
+    spreadsheetId: sheetConfig.id, range: `${sheetConfig.name}!A:ZZ`,
+  }), `claimNextBlogSlot_${platformKey}`);
+  const rows: string[][] = res.data.values ?? [];
 
+  const p1Idx = col(colMap, ...BLOG_PLATFORM1_NAMES);
+  const p2Idx = col(colMap, ...BLOG_PLATFORM2_NAMES);
+  const titleIdx = col(colMap, 'Blog Title', 'blog title', 'Title', 'title', 'Main Title');
+  const targetUrlIdx = col(colMap, 'Report URL', 'Download Report URL', 'Target URL', 'target url', 'targetUrl', 'URL', 'url');
+  const contentIdx = col(colMap, 'Blog Content', 'blog content', 'Blog Content for all', 'blog content for all', 'blogcontent', 'Content', 'content');
+
+  if (p1Idx === undefined || p2Idx === undefined) {
+    console.warn(`   ⚠️ [${platformKey}] "Blog Platform 1"/"Blog Platform 2" columns not found — add them to the sheet first.`);
+    return null;
+  }
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const title = titleIdx !== undefined ? (row[titleIdx] ?? '').trim() : '';
+    const targetUrl = targetUrlIdx !== undefined ? (row[targetUrlIdx] ?? '').trim() : '';
+    const content = contentIdx !== undefined ? (row[contentIdx] ?? '').trim() : '';
+    if (!title || !targetUrl || !content) continue;
+
+    const p1 = (row[p1Idx] ?? '').trim();
+    const p2 = (row[p2Idx] ?? '').trim();
+    if (p1 === platformKey || p2 === platformKey) continue; // already claimed on this row
+
+    let slot: 1 | 2 | undefined;
+    if (!p1) slot = 1;
+    else if (!p2) slot = 2;
+    if (!slot) continue; // both slots taken, keep scanning
+
+    const rowIndex = i + 1;
+    const claimData = buildUpdates(colMap, rowIndex, [
+      { names: slot === 1 ? BLOG_PLATFORM1_NAMES : BLOG_PLATFORM2_NAMES, value: platformKey },
+    ], sheetConfig.name);
+    await batchWrite(sheets, claimData, sheetConfig.id);
+
+    const mapped = mapRow(row, colMap, rowIndex, 'blog');
+    mapped.blogSlot = slot;
+    console.log(`   🔗 [${platformKey}] claimed row ${rowIndex} slot ${slot}`);
+    return mapped;
+  }
+
+  console.log(`   📄 [${platformKey}] No open blog slot found`);
+  return null;
+}
+
+/** Loops claimNextBlogSlot up to `limit` times, stopping early once no slot is available. */
+async function claimNextBlogSlots(platformKey: string, limit: number): Promise<SheetRow[]> {
+  const results: SheetRow[] = [];
+  for (let i = 0; i < limit; i++) {
+    const claimed = await claimNextBlogSlot(platformKey);
+    if (!claimed) break;
+    results.push(claimed);
+  }
+  return results;
+}
+
+/** Admin/reset helper: rows where `platformKey` currently holds a slot (used by resetMediumPosts-style utilities). */
+export async function getRowsClaimedByPlatform(platformKey: string, limit: number = 999): Promise<SheetRow[]> {
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig('blog');
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+  const res = await withRetry(() => sheets.spreadsheets.values.get({
+    spreadsheetId: sheetConfig.id, range: `${sheetConfig.name}!A:ZZ`,
+  }), `getRowsClaimedByPlatform_${platformKey}`);
+  const rows: string[][] = res.data.values ?? [];
+  const p1Idx = col(colMap, ...BLOG_PLATFORM1_NAMES);
+  const p2Idx = col(colMap, ...BLOG_PLATFORM2_NAMES);
+  const results: SheetRow[] = [];
+  for (let i = 1; i < rows.length && results.length < limit; i++) {
+    const row = rows[i];
+    const p1 = p1Idx !== undefined ? (row[p1Idx] ?? '').trim() : '';
+    const p2 = p2Idx !== undefined ? (row[p2Idx] ?? '').trim() : '';
+    let slot: 1 | 2 | undefined;
+    if (p1 === platformKey) slot = 1;
+    else if (p2 === platformKey) slot = 2;
+    if (!slot) continue;
+    const mapped = mapRow(row, colMap, i + 1, 'blog');
+    mapped.blogSlot = slot;
+    results.push(mapped);
+  }
+  return results;
+}
+
+/**
+ * Write the result of posting into the slot `row.blogSlot` (set by
+ * claimNextBlogSlot) — live-re-reads Blog Status/Error first so a concurrent
+ * write to the other slot on the same row never gets clobbered.
+ */
+async function saveBlogSlotResult(
+  row: SheetRow,
+  result: { postUrl: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  const slot = row.blogSlot;
+  if (!slot) {
+    console.warn(`   ⚠️ saveBlogSlotResult: row ${row.rowIndex} has no claimed slot — skipping save`);
+    return;
+  }
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig('blog');
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
   const today = nowStamp();
-  const newUrl = appendValue(row.calisthenicsPostUrl, result.postUrl);
-  console.log(`   🔍 saveCalisthenicsResult: row=${row.rowIndex} postUrl="${result.postUrl}" existing="${row.calisthenicsPostUrl}" → newUrl="${newUrl}"`);
+
+  let liveStatus = '', liveError = '', liveLastPosted = '';
+  try {
+    const liveRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetConfig.id,
+      range: `${sheetConfig.name}!${row.rowIndex}:${row.rowIndex}`,
+    });
+    const liveRow: string[] = liveRes.data.values?.[0] ?? [];
+    const statusIdx = col(colMap, ...BLOG_STATUS_NAMES);
+    const errorIdx = col(colMap, ...BLOG_ERROR_NAMES);
+    const lastPostedIdx = col(colMap, ...BLOG_LASTPOSTED_NAMES);
+    if (statusIdx !== undefined) liveStatus = (liveRow[statusIdx] ?? '').trim();
+    if (errorIdx !== undefined) liveError = (liveRow[errorIdx] ?? '').trim();
+    if (lastPostedIdx !== undefined) liveLastPosted = (liveRow[lastPostedIdx] ?? '').trim();
+  } catch { /* non-critical */ }
+
+  const statusState = parseSlotState(liveStatus);
+  const errorState = parseSlotState(liveError);
+  statusState[slot] = result.status;
+  errorState[slot] = result.status?.toLowerCase() === 'posted' ? '' : (result.error ?? '');
+
   const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(row.lastPostedCalisthenics, today)
-    : (row.lastPostedCalisthenics ?? '');
+    ? appendValue(liveLastPosted, today)
+    : liveLastPosted;
 
   const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['Calisthenics Post URL', 'calisthenics post url'], value: newUrl },
-    { names: ['Calisthenics Status', 'calisthenics status'], value: result.status  },
-    { names: ['Calisthenics Error', 'calisthenics error'],    value: result.error ?? '' },
-    { names: ['calisthenicsNBatch', 'calisthenics batch', 'Calisthenics Batch'],      value: result.batch ?? '' },
-    { names: ['lastPosted Calisthenics', 'lastPostedCalisthenics', 'lastpostedcalisthenics'], value: newLastPosted },
+    { names: slot === 1 ? BLOG_URL1_NAMES : BLOG_URL2_NAMES, value: result.postUrl || '' },
+    { names: BLOG_STATUS_NAMES, value: formatSlotState(statusState) },
+    { names: BLOG_ERROR_NAMES, value: formatSlotState(errorState) },
+    { names: BLOG_BATCH_NAMES, value: result.batch ?? '' },
+    { names: BLOG_LASTPOSTED_NAMES, value: newLastPosted },
   ], sheetConfig.name);
 
   await batchWrite(sheets, data, sheetConfig.id);
-  console.log(`   📝 Calisthenics updated for row ${row.rowIndex}: ${result.status}`);
+  console.log(`   📝 [Blog slot ${slot}] updated row ${row.rowIndex}: ${result.status}`);
 }
 
 // ──── Save weekly SERP re-check results (Feature 2) ───────────────────────
@@ -1417,160 +1323,7 @@ export async function getRowsReadyForLi(limit: number = 15): Promise<SheetRow[]>
  * Get rows where mediumPostUrl is still empty. Used by Medium batch.
  */
 export async function getRowsReadyForMedium(limit: number = 15): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID,
-    range: `${BLOG_SHEET_NAME}!A:BZ`,
-  }), 'getRowsReadyForMedium');
-
-  const rows: string[][] = res.data.values ?? [];
-  const results: SheetRow[] = [];
-
-  for (let i = 1; i < rows.length && results.length < limit; i++) {
-    const row = rows[i];
-    const mediumPostUrl = (row[col(colMap, 'Medium Post URL', 'medium post url') ?? -1] ?? '').trim();
-    const targetUrl     = (row[col(colMap, 'Download Report URL', 'Report URL', 'Target URL', 'target url', 'targetUrl') ?? -1] ?? '').trim();
-    const title         = (row[col(colMap, 'Title', 'title') ?? -1] ?? '').trim();
-
-    // Must have URL + title, and no Medium post yet
-    if (!targetUrl || !title) continue;
-    if (mediumPostUrl) continue;
-
-    results.push(mapRow(row, colMap, i + 1, 'blog'));
-  }
-
-  console.log(`   📄 Medium: Found ${results.length} rows ready for posting`);
-  return results;
-}
-
-/**
- * Get rows where linkMatePostUrl is still empty. Used by Linkmate batch.
- */
-export async function getRowsReadyForLinkmate(limit: number = 15): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID,
-    range: `${BLOG_SHEET_NAME}!A:BZ`,
-  }), 'getRowsReadyForLinkmate');
-
-  const rows: string[][] = res.data.values ?? [];
-  const results: SheetRow[] = [];
-
-  for (let i = 1; i < rows.length && results.length < limit; i++) {
-    const row = rows[i];
-    const linkMatePostUrl = (row[col(colMap, 'Linkmate Post URL', 'linkmate post url') ?? -1] ?? '').trim();
-    const targetUrl       = (row[col(colMap, 'Download Report URL', 'Report URL', 'Target URL', 'target url', 'targetUrl') ?? -1] ?? '').trim();
-    const title           = (row[col(colMap, 'Title', 'title') ?? -1] ?? '').trim();
-
-    // Must have URL + title, and no Linkmate post yet
-    if (!targetUrl || !title) continue;
-    if (linkMatePostUrl) continue;
-
-    results.push(mapRow(row, colMap, i + 1, 'blog'));
-  }
-
-  console.log(`   📄 Linkmate: Found ${results.length} rows ready for posting`);
-  return results;
-}
-
-/**
- * Get rows where googleSitePostUrl is still empty. Used by Google Sites batch.
- */
-export async function getRowsReadyForGoogleSite(limit: number = 15): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID,
-    range: `${BLOG_SHEET_NAME}!A:BZ`,
-  }), 'getRowsReadyForGoogleSite');
-
-  const rows: string[][] = res.data.values ?? [];
-  const results: SheetRow[] = [];
-
-  for (let i = 1; i < rows.length && results.length < limit; i++) {
-    const row = rows[i];
-    const googleSitePostUrl = (row[col(colMap, 'Google Site Post URL', 'google site post url') ?? -1] ?? '').trim();
-    const targetUrl         = (row[col(colMap, 'Download Report URL', 'Report URL', 'Target URL', 'target url', 'targetUrl') ?? -1] ?? '').trim();
-    const title             = (row[col(colMap, 'Title', 'title') ?? -1] ?? '').trim();
-
-    // Must have URL + title, and no Google Sites post yet
-    if (!targetUrl || !title) continue;
-    if (googleSitePostUrl) continue;
-
-    results.push(mapRow(row, colMap, i + 1, 'blog'));
-  }
-
-  console.log(`   📄 Google Sites: Found ${results.length} rows ready for posting`);
-  return results;
-}
-
-/**
- * Get rows where devtoPostUrl is still empty. Used by Dev.to batch.
- */
-export async function getRowsReadyForDevto(limit: number = 15): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID,
-    range: `${BLOG_SHEET_NAME}!A:BZ`,
-  }), 'getRowsReadyForDevto');
-
-  const rows: string[][] = res.data.values ?? [];
-  const results: SheetRow[] = [];
-
-  for (let i = 1; i < rows.length && results.length < limit; i++) {
-    const row = rows[i];
-    const devtoPostUrl = (row[col(colMap, 'Dev.to Post URL', 'dev.to post url') ?? -1] ?? '').trim();
-    const targetUrl    = (row[col(colMap, 'Download Report URL', 'Report URL', 'Target URL', 'target url', 'targetUrl') ?? -1] ?? '').trim();
-    const title        = (row[col(colMap, 'Title', 'title') ?? -1] ?? '').trim();
-
-    // Must have URL + title, and no Dev.to post yet
-    if (!targetUrl || !title) continue;
-    if (devtoPostUrl) continue;
-
-    results.push(mapRow(row, colMap, i + 1, 'blog'));
-  }
-
-  console.log(`   📄 Dev.to: Found ${results.length} rows ready for posting`);
-  return results;
-}
-
-/**
- * Get rows where linkedinPulsePostUrl is still empty. Used by LinkedIn Pulse batch.
- */
-export async function getRowsReadyForLinkedinPulse(limit: number = 15): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID,
-    range: `${BLOG_SHEET_NAME}!A:BZ`,
-  }), 'getRowsReadyForLinkedinPulse');
-
-  const rows: string[][] = res.data.values ?? [];
-  const results: SheetRow[] = [];
-
-  for (let i = 1; i < rows.length && results.length < limit; i++) {
-    const row = rows[i];
-    const linkedinPulsePostUrl = (row[col(colMap, 'Linkedin Pulse URL', 'LinkedIn Pulse Post URL', 'linkedin pulse post url', 'linkedin pulse url') ?? -1] ?? '').trim();
-    const targetUrl            = (row[col(colMap, 'Download Report URL', 'Report URL', 'Target URL', 'target url', 'targetUrl') ?? -1] ?? '').trim();
-    const title                = (row[col(colMap, 'Title', 'title') ?? -1] ?? '').trim();
-
-    // Must have URL + title, and no LinkedIn Pulse post yet
-    if (!targetUrl || !title) continue;
-    if (linkedinPulsePostUrl) continue;
-
-    results.push(mapRow(row, colMap, i + 1, 'blog'));
-  }
-
-  console.log(`   📄 LinkedIn Pulse: Found ${results.length} rows ready for posting`);
-  return results;
+  return getRowsClaimedByPlatform('Medium', limit);
 }
 
 // ──── Continuous posting for blog platforms (sequential: next unposted rows) ──
@@ -1634,63 +1387,27 @@ function pickNextSequentialBlogRows(
 }
 
 export async function getRowsForContinuousMediumPosting(limit: number = 25): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID, range: `${BLOG_SHEET_NAME}!A:BZ`,
-  }), 'getRowsForContinuousMediumPosting');
-  const rows: string[][] = res.data.values ?? [];
-  return pickNextSequentialBlogRows(rows, colMap, ['Medium Post URL', 'medium post url', 'mediumPostUrl'], limit, 'Medium', 'blog', undefined, 0, true);
+  return claimNextBlogSlots('Medium', limit);
 }
 
 export async function getRowsForContinuousLinkmatePosting(limit: number = 15): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID, range: `${BLOG_SHEET_NAME}!A:BZ`,
-  }), 'getRowsForContinuousLinkmatePosting');
-  const rows: string[][] = res.data.values ?? [];
-  return pickNextSequentialBlogRows(rows, colMap, ['Linkmate Post URL', 'linkmate post url', 'linkMatePostUrl'], limit, 'Linkmate');
+  return claimNextBlogSlots('Linkmate', limit);
 }
 
 export async function getRowsForContinuousDevtoPosting(limit: number = 15): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID, range: `${BLOG_SHEET_NAME}!A:BZ`,
-  }), 'getRowsForContinuousDevtoPosting');
-  const rows: string[][] = res.data.values ?? [];
-  return pickNextSequentialBlogRows(rows, colMap, ['Dev.to Post URL', 'devto post url', 'devtoPostUrl'], limit, 'Dev.to');
+  return claimNextBlogSlots('Dev.to', limit);
 }
 
 export async function getRowsForContinuousGoogleSitePosting(limit: number = 25): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID, range: `${BLOG_SHEET_NAME}!A:BZ`,
-  }), 'getRowsForContinuousGoogleSitePosting');
-  const rows: string[][] = res.data.values ?? [];
-  return pickNextSequentialBlogRows(rows, colMap, ['Google Site Post URL', 'google site post url', 'googleSitePostUrl'], limit, 'Google Sites', 'blog', undefined, 0, true);
+  return claimNextBlogSlots('Google Sites', limit);
 }
 
 export async function getRowsForContinuousLinkedinPulsePosting(limit: number = 15): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID, range: `${BLOG_SHEET_NAME}!A:BZ`,
-  }), 'getRowsForContinuousLinkedinPulsePosting');
-  const rows: string[][] = res.data.values ?? [];
-  return pickNextSequentialBlogRows(rows, colMap, ['Linkedin Pulse URL', 'linkedin pulse url', 'linkedinPulsePostUrl'], limit, 'LinkedIn Pulse');
+  return claimNextBlogSlots('LinkedIn Pulse', limit);
 }
 
 export async function getRowsForContinuousCalisthenicsPosting(limit: number = 15): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID, range: `${BLOG_SHEET_NAME}!A:BZ`,
-  }), 'getRowsForContinuousCalisthenicsPosting');
-  const rows: string[][] = res.data.values ?? [];
-  return pickNextSequentialBlogRows(rows, colMap, ['Calisthenics Post URL', 'calisthenics post url', 'calisthenicsPostUrl'], limit, 'Calisthenics');
+  return claimNextBlogSlots('Calisthenics', limit);
 }
 
 // ──── Continuous row picking for FB/LI (legacy - kept for compatibility) ──
@@ -2049,460 +1766,135 @@ export async function examineSundayFailedPosts(): Promise<void> {
 // ──── Substack Blog Posting ─────────────────────────────────────────────────────
 
 export async function getRowsReadyForSubstack(limit: number = 15): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID,
-    range: `${BLOG_SHEET_NAME}!A:BZ`,
-  }), 'getRowsReadyForSubstack');
-
-  const rows: string[][] = res.data.values ?? [];
-  const results: SheetRow[] = [];
-
-  for (let i = 1; i < rows.length && results.length < limit; i++) {
-    const row = rows[i];
-    const substackPostUrl = (row[col(colMap, 'Substack Post URL', 'substack post url') ?? -1] ?? '').trim();
-    const targetUrl = (row[col(colMap, 'Download Report URL', 'Report URL', 'Target URL', 'target url', 'targetUrl', 'URL') ?? -1] ?? '').trim();
-    const title = (row[col(colMap, 'Blog Title', 'blog title', 'Title', 'title', 'Main Title') ?? -1] ?? '').trim();
-
-    if (!targetUrl || !title) continue;
-    if (substackPostUrl) continue;
-
-    results.push(mapRow(row, colMap, i + 1, 'blog'));
-  }
-
-  return results;
+  return getRowsClaimedByPlatform('Substack', limit);
 }
 
 export async function getRowsForContinuousSubstackPosting(limit: number = 15): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID, range: `${BLOG_SHEET_NAME}!A:BZ`,
-  }), 'getRowsForContinuousSubstackPosting');
-  const rows: string[][] = res.data.values ?? [];
-  return pickNextSequentialBlogRows(rows, colMap, ['Substack Post URL', 'substack post url', 'substackPostUrl'], limit, 'Substack');
+  return claimNextBlogSlots('Substack', limit);
 }
 
 export async function getRowsForContinuousWordpressPosting(limit: number = 15, _minRowIndex: number = 0): Promise<SheetRow[]> {
-  return pickRowsByEmptyStatus(['WordPress Status', 'wordpress status', 'WordpressStatus'], 'WordPress', limit);
-}
-
-// Shared helper: pick rows where the given status column is empty
-async function pickRowsByEmptyStatus(
-  statusColNames: string[],
-  label: string,
-  limit: number,
-): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID, range: `${BLOG_SHEET_NAME}!A:ZZ`,
-  }), `pickRowsByEmptyStatus_${label}`);
-  const rows: string[][] = res.data.values ?? [];
-
-  const statusIdx    = col(colMap, ...statusColNames) ?? -1;
-  const titleIdx     = col(colMap, 'Blog Title', 'blog title', 'Title', 'title', 'Main Title') ?? -1;
-  const targetUrlIdx = col(colMap, 'Report URL', 'Download Report URL', 'Target URL', 'target url', 'targetUrl', 'URL', 'url') ?? -1;
-
-  if (statusIdx < 0) {
-    console.warn(`   ⚠️ [${label}] Status column not found. Tried: [${statusColNames.join(', ')}]. Check sheet headers.`);
-    return [];
-  }
-
-  const results: SheetRow[] = [];
-  for (let i = 1; i < rows.length && results.length < limit; i++) {
-    const row = rows[i];
-    if ((row[statusIdx] ?? '').trim()) continue;  // Posted / Failed / Error → skip
-
-    const title     = titleIdx >= 0 ? (row[titleIdx] ?? '').trim() : '';
-    const targetUrl = targetUrlIdx >= 0 ? (row[targetUrlIdx] ?? '').trim() : '';
-    if (!title || !targetUrl) continue;
-
-    results.push(mapRow(row, colMap, i + 1, 'blog'));
-  }
-
-  console.log(`   📄 [${label}] Found ${results.length} rows with empty status (col idx ${statusIdx})`);
-  return results;
+  return claimNextBlogSlots('WordPress', limit);
 }
 
 export async function getRowsForContinuousBloggerPosting(limit: number = 15, _minRowIndex: number = 0): Promise<SheetRow[]> {
-  return pickRowsByEmptyStatus(['Blogger Status', 'blogger status', 'BloggerStatus'], 'Blogger', limit);
+  return claimNextBlogSlots('Blogger', limit);
 }
 
 export async function saveUnifiedSubstackResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig('blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = nowStamp();
-  const newUrl = appendValue(row.substackPostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(row.lastPostedSubstack, today)
-    : (row.lastPostedSubstack ?? '');
-
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['Substack Post URL', 'substack post url'], value: newUrl },
-    { names: ['Substack Status', 'substack status'], value: result.status },
-    { names: ['Substack  Error', 'Substack Error', 'substack  error', 'substack error'], value: result.error ?? '' },
-    { names: ['substackBatch', 'substack batch', 'Substack Batch'], value: result.batch ?? '' },
-    { names: ['lastPostedSubstack', 'lastpostedsubstack'], value: newLastPosted },
-  ], sheetConfig.name);
-
-  await batchWrite(sheets, data, sheetConfig.id);
+  await saveBlogSlotResult(row, result);
 }
 
 // ──── HackMD Blog Posting ─────────────────────────────────────────────────────
 
 export async function getRowsReadyForHackmd(limit: number = 15): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID,
-    range: `${BLOG_SHEET_NAME}!A:ZZ`,
-  }), 'getRowsReadyForHackmd');
-
-  const rows: string[][] = res.data.values ?? [];
-  const results: SheetRow[] = [];
-
-  for (let i = 1; i < rows.length && results.length < limit; i++) {
-    const row = rows[i];
-    const hackmdStatus  = (row[col(colMap, 'HackMD Status',   'Hackmd Status',   'hackmd status')   ?? -1] ?? '').trim();
-    const hackmdPostUrl = (row[col(colMap, 'HackMD Post URL', 'Hackmd Post URL', 'hackmd post url') ?? -1] ?? '').trim();
-    const targetUrl = (row[col(colMap, 'Download Report URL', 'Report URL', 'Target URL', 'target url', 'targetUrl', 'URL') ?? -1] ?? '').trim();
-    const title = (row[col(colMap, 'Blog Title', 'blog title', 'Title', 'title', 'Main Title') ?? -1] ?? '').trim();
-
-    if (!targetUrl || !title) continue;
-    if (hackmdStatus || hackmdPostUrl) continue;
-
-    results.push(mapRow(row, colMap, i + 1, 'blog'));
-  }
-
-  return results;
+  return getRowsClaimedByPlatform('HackMD', limit);
 }
 
 export async function getRowsForContinuousHackmdPosting(limit: number = 15): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID, range: `${BLOG_SHEET_NAME}!A:ZZ`,
-  }), 'getRowsForContinuousHackmdPosting');
-  const rows: string[][] = res.data.values ?? [];
-  return pickNextSequentialBlogRows(rows, colMap, ['Hackmd Post URL', 'hackmd post url', 'HackMD Post URL', 'hackmdPostUrl'], limit, 'HackMD');
+  return claimNextBlogSlots('HackMD', limit);
 }
 
 export async function saveUnifiedWordpressResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig('blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = nowStamp();
-
-  let liveWordpressPostUrl = row.wordpressPostUrl ?? '';
-  let liveLastPostedWordpress = row.lastPostedWordpress ?? '';
-  try {
-    const liveRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetConfig.id,
-      range: `${sheetConfig.name}!${row.rowIndex}:${row.rowIndex}`,
-    });
-    const liveRow: string[] = liveRes.data.values?.[0] ?? [];
-    const urlIdx = col(colMap, 'WordPress Post URL', 'wordpress post url');
-    const dateIdx = col(colMap, 'lastPostedWordpress', 'lastpostedwordpress');
-    if (urlIdx !== undefined) liveWordpressPostUrl = (liveRow[urlIdx] ?? '').trim();
-    if (dateIdx !== undefined) liveLastPostedWordpress = (liveRow[dateIdx] ?? '').trim();
-  } catch { /* non-critical */ }
-
-  const newUrl = appendValue(liveWordpressPostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(liveLastPostedWordpress, today)
-    : liveLastPostedWordpress;
-
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['WordPress Post URL', 'wordpress post url'], value: newUrl },
-    { names: ['WordPress Status', 'wordpress status'], value: result.status },
-    { names: ['WordPress Error', 'wordpress error'], value: result.error ?? '' },
-    { names: ['wordpressBatch', 'wordpress batch', 'WordPress Batch'], value: result.batch ?? '' },
-    { names: ['lastPostedWordpress', 'lastpostedwordpress'], value: newLastPosted },
-  ], sheetConfig.name);
-
-  await batchWrite(sheets, data, sheetConfig.id);
+  await saveBlogSlotResult(row, result);
 }
 
 export async function saveUnifiedBloggerResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig('blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = nowStamp();
-
-  let liveBloggerPostUrl = row.bloggerPostUrl ?? '';
-  let liveLastPostedBlogger = row.lastPostedBlogger ?? '';
-  try {
-    const liveRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetConfig.id,
-      range: `${sheetConfig.name}!${row.rowIndex}:${row.rowIndex}`,
-    });
-    const liveRow: string[] = liveRes.data.values?.[0] ?? [];
-    const urlIdx = col(colMap, 'Blogger Post URL', 'blogger post url');
-    const dateIdx = col(colMap, 'Last Posted Blogger', 'lastPostedBlogger', 'lastpostedblogger');
-    if (urlIdx !== undefined) liveBloggerPostUrl = (liveRow[urlIdx] ?? '').trim();
-    if (dateIdx !== undefined) liveLastPostedBlogger = (liveRow[dateIdx] ?? '').trim();
-  } catch { /* non-critical */ }
-
-  const newUrl = appendValue(liveBloggerPostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(liveLastPostedBlogger, today)
-    : liveLastPostedBlogger;
-
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['Blogger Post URL', 'blogger post url'], value: newUrl },
-    { names: ['Blogger Status', 'blogger status'], value: result.status },
-    { names: ['Blogger Error', 'blogger error'], value: result.error ?? '' },
-    { names: ['bloggerBatch', 'blogger batch', 'Blogger Batch'], value: result.batch ?? '' },
-    { names: ['Last Posted Blogger', 'lastPostedBlogger', 'lastpostedblogger'], value: newLastPosted },
-  ], sheetConfig.name);
-
-  await batchWrite(sheets, data, sheetConfig.id);
+  await saveBlogSlotResult(row, result);
 }
 
 // ──── Coda Blog Posting ───────────────────────────────────────────────────
 
 export async function getRowsForContinuousCodaPosting(limit: number = 15, _minRowIndex: number = 0): Promise<SheetRow[]> {
-  return pickRowsByEmptyStatus(['Coda Status', 'coda status', 'CodaStatus'], 'Coda', limit);
+  return claimNextBlogSlots('Coda', limit);
 }
 
 export async function saveUnifiedCodaResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig('blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = nowStamp();
-
-  let liveCodaPostUrl = row.codaPostUrl ?? '';
-  let liveLastPostedCoda = row.lastPostedCoda ?? '';
-  try {
-    const liveRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetConfig.id,
-      range: `${sheetConfig.name}!${row.rowIndex}:${row.rowIndex}`,
-    });
-    const liveRow: string[] = liveRes.data.values?.[0] ?? [];
-    const urlIdx = col(colMap, 'Coda Post URL', 'coda post url');
-    const dateIdx = col(colMap, 'Last Posted Coda', 'lastPostedCoda', 'lastpostedcoda');
-    if (urlIdx !== undefined) liveCodaPostUrl = (liveRow[urlIdx] ?? '').trim();
-    if (dateIdx !== undefined) liveLastPostedCoda = (liveRow[dateIdx] ?? '').trim();
-  } catch { /* non-critical */ }
-
-  const newUrl = appendValue(liveCodaPostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(liveLastPostedCoda, today)
-    : liveLastPostedCoda;
-
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['Coda Post URL', 'coda post url'], value: newUrl },
-    { names: ['Coda Status', 'coda status'], value: result.status },
-    { names: ['Coda Error', 'coda error'], value: result.error ?? '' },
-    { names: ['codaBatch', 'coda batch', 'Coda Batch'], value: result.batch ?? '' },
-    { names: ['Last Posted Coda', 'lastPostedCoda', 'lastpostedcoda'], value: newLastPosted },
-  ], sheetConfig.name);
-
-  await batchWrite(sheets, data, sheetConfig.id);
+  await saveBlogSlotResult(row, result);
 }
 
 export async function saveUnifiedHackmdResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig('blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = nowStamp();
-
-  // Re-read live cell values so we always append to the current sheet data,
-  // not the stale row object fetched at batch-start.
-  let liveHackmdPostUrl = row.hackmdPostUrl ?? '';
-  let liveLastPostedHackmd = row.lastPostedHackmd ?? '';
-  try {
-    const liveRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetConfig.id,
-      range: `${sheetConfig.name}!${row.rowIndex}:${row.rowIndex}`,
-    });
-    const liveRow: string[] = liveRes.data.values?.[0] ?? [];
-    const urlIdx = col(colMap, 'HackMD Post URL', 'Hackmd Post URL', 'hackmd post url');
-    const dateIdx = col(colMap, 'lastPostedHackmd', 'lastPostedHackMD', 'lastpostedhackmd');
-    if (urlIdx !== undefined) liveHackmdPostUrl = (liveRow[urlIdx] ?? '').trim();
-    if (dateIdx !== undefined) liveLastPostedHackmd = (liveRow[dateIdx] ?? '').trim();
-  } catch { /* non-critical — fall back to row object */ }
-
-  console.log(`   [HackMD save] row ${row.rowIndex} | existing URL: "${liveHackmdPostUrl}" | new URL: "${result.postUrl}"`);
-  const newUrl = appendValue(liveHackmdPostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(liveLastPostedHackmd, today)
-    : liveLastPostedHackmd;
-  console.log(`   [HackMD save] → writing URL: "${newUrl}" | date: "${newLastPosted}"`);
-
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['HackMD Post URL', 'Hackmd Post URL', 'hackmd post url'], value: newUrl },
-    { names: ['HackMD Status',   'Hackmd Status',   'hackmd status'],   value: result.status },
-    { names: ['HackMD Error',    'Hackmd Error',    'hackmd error'],    value: result.error ?? '' },
-    { names: ['hackmdBatch', 'hackmd batch', 'HackMD Batch'],           value: result.batch ?? '' },
-    { names: ['lastPostedHackmd', 'lastPostedHackMD', 'lastpostedhackmd'], value: newLastPosted },
-  ], sheetConfig.name);
-
-  await batchWrite(sheets, data, sheetConfig.id);
+  await saveBlogSlotResult(row, result);
 }
 
 // ──── Patreon Blog Posting ─────────────────────────────────────────────────────
 
 export async function getRowsForContinuousPatreonPosting(limit: number = 15): Promise<SheetRow[]> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID, range: `${BLOG_SHEET_NAME}!A:ZZ`,
-  }), 'getRowsForContinuousPatreonPosting');
-  const rows: string[][] = res.data.values ?? [];
-  return pickNextSequentialBlogRows(rows, colMap, ['Patreon Post URL', 'patreon post url', 'patreonPostUrl'], limit, 'Patreon');
+  return claimNextBlogSlots('Patreon', limit);
 }
 
 export async function saveUnifiedPatreonResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig('blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = nowStamp();
-  const newUrl = appendValue(row.patreonPostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(row.lastPostedPatreon, today)
-    : (row.lastPostedPatreon ?? '');
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['Patreon Post URL', 'patreon post url'], value: newUrl },
-    { names: ['Patreon Status', 'patreon status'], value: result.status },
-    { names: ['Patreon Error', 'patreon error'], value: result.error ?? '' },
-    { names: ['patreonBatch', 'patreon batch', 'Patreon Batch'], value: result.batch ?? '' },
-    { names: ['Last Posted Patreon', 'lastPostedPatreon', 'lastpostedpatreon'], value: newLastPosted },
-  ], sheetConfig.name);
-  await batchWrite(sheets, data, sheetConfig.id);
+  await saveBlogSlotResult(row, result);
 }
 
 // ──── Notion Blog Posting ─────────────────────────────────────────────────────
 
 export async function getRowsForContinuousNotionPosting(limit: number = 15): Promise<SheetRow[]> {
-  return pickRowsByEmptyStatus(['Notion Status', 'notion status', 'NotionStatus'], 'Notion', limit);
+  return claimNextBlogSlots('Notion', limit);
 }
 
 export async function saveUnifiedNotionResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig('blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = nowStamp();
-  const newUrl = appendValue(row.notionPostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(row.lastPostedNotion, today)
-    : (row.lastPostedNotion ?? '');
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['Notion Post URL', 'notion post url'], value: newUrl },
-    { names: ['Notion Status', 'notion status'], value: result.status },
-    { names: ['Notion Error', 'notion error'], value: result.error ?? '' },
-    { names: ['notionBatch', 'notion batch', 'Notion Batch'], value: result.batch ?? '' },
-    { names: ['Last Posted Notion', 'lastPostedNotion', 'lastpostednotion'], value: newLastPosted },
-  ], sheetConfig.name);
-  await batchWrite(sheets, data, sheetConfig.id);
+  await saveBlogSlotResult(row, result);
 }
 
 // ──── Note Blog Posting ────────────────────────────────────────────────────────
 
 export async function getRowsForContinuousNotePosting(limit: number = 15): Promise<SheetRow[]> {
-  return pickRowsByEmptyStatus(['Note Status', 'note status', 'NoteStatus'], 'Note', limit);
+  return claimNextBlogSlots('Note', limit);
 }
 
 export async function saveUnifiedNoteResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig('blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = nowStamp();
-  const newUrl = appendValue(row.notePostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(row.lastPostedNote, today)
-    : (row.lastPostedNote ?? '');
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['Note Post URL', 'note post url'], value: newUrl },
-    { names: ['Note Status', 'note status'], value: result.status },
-    { names: ['Note Error', 'note error'], value: result.error ?? '' },
-    { names: ['noteBatch', 'note batch', 'Note Batch'], value: result.batch ?? '' },
-    { names: ['Last Posted Note', 'lastPostedNote', 'lastpostednote'], value: newLastPosted },
-  ], sheetConfig.name);
-  await batchWrite(sheets, data, sheetConfig.id);
+  await saveBlogSlotResult(row, result);
 }
 
 // ── Ameba ─────────────────────────────────────────────────────────────────────
 
 export async function getRowsForContinuousAmebaPosting(limit: number = 15): Promise<SheetRow[]> {
-  return pickRowsByEmptyStatus(['Ameba Status', 'ameba status', 'AmebaStatus'], 'Ameba', limit);
+  return claimNextBlogSlots('Ameba', limit);
 }
 
 export async function saveUnifiedAmebaResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig('blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = nowStamp();
-  const newUrl = appendValue((row as any).amebaPostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue((row as any).lastPostedAmeba, today)
-    : ((row as any).lastPostedAmeba ?? '');
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['Ameba Post URL', 'ameba post url'], value: newUrl },
-    { names: ['Ameba Status', 'ameba status'], value: result.status },
-    { names: ['Ameba Error', 'ameba error'], value: result.error ?? '' },
-    { names: ['Ameba Batch', 'ameba batch'], value: result.batch ?? '' },
-    { names: ['Last Posted Ameba', 'lastPostedAmeba', 'lastpostedameba'], value: newLastPosted },
-  ], sheetConfig.name);
-  await batchWrite(sheets, data, sheetConfig.id);
+  await saveBlogSlotResult(row, result);
 }
 
 // ── Paragraph ─────────────────────────────────────────────────────────────────
 
 export async function getRowsForContinuousParagraphPosting(limit: number = 15): Promise<SheetRow[]> {
-  return pickRowsByEmptyStatus(['Paragraph Status', 'paragraph status'], 'Paragraph', limit);
+  return claimNextBlogSlots('Paragraph', limit);
 }
 
 export async function saveUnifiedParagraphResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig('blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = nowStamp();
-  const newUrl = appendValue(row.paragraphPostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(row.lastPostedParagraph, today)
-    : (row.lastPostedParagraph ?? '');
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['Paragraph Post URL', 'paragraph post url'], value: newUrl },
-    { names: ['Paragraph Status', 'paragraph status'],    value: result.status },
-    { names: ['Paragraph Error', 'paragraph error'],      value: result.error ?? '' },
-    { names: ['Paragraph Batch', 'paragraph batch', 'paragraphBatch'], value: result.batch ?? '' },
-    { names: ['Last Posted Paragraph', 'lastPostedParagraph', 'lastpostedparagraph'], value: newLastPosted },
-  ], sheetConfig.name);
-  await batchWrite(sheets, data, sheetConfig.id);
+  await saveBlogSlotResult(row, result);
 }
 
 // ── Fleet name rebalancing ────────────────────────────────────────────────────

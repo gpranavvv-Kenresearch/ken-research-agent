@@ -31,36 +31,11 @@ SOCIAL_HEADERS = [
 BLOG_HEADERS = [
     "targetUrl", "Blog Title", "Name", "Format", "Custom Prompt", "Submitted At",
     "Blog Description", "Blog Caption", "Cover Image URL", "Blog Content", "Rating", "Platforms",
-    # Medium
-    "Medium Post URL", "Medium Status", "Medium Batch", "Medium Error",
-    # Dev.to
-    "Dev.to Post URL", "Dev.to Status", "Dev.to Batch", "Dev.to Error",
-    # Substack
-    "Substack Post URL", "Substack Status", "Substack Batch", "Substack Error",
-    # HackMD
-    "HackMD Post URL", "HackMD Status", "HackMD Batch", "HackMD Error",
-    # LinkedIn Pulse
-    "LinkedIn Pulse URL", "LinkedIn Pulse Status", "LinkedIn Pulse Batch", "LinkedIn Pulse Error",
-    # WordPress
-    "WordPress Post URL", "WordPress Status", "WordPress Batch", "WordPress Error",
-    # Blogger
-    "Blogger Post URL", "Blogger Status", "Blogger Batch", "Blogger Error",
-    # Notion
-    "Notion Post URL", "Notion Status", "Notion Batch", "Notion Error",
-    # Google Sites
-    "Google Site Post URL", "Google Site Status", "Google Site Batch", "Google Site Error",
-    # Note
-    "Note Post URL", "Note Status", "Note Batch", "Note Error",
-    # Paragraph
-    "Paragraph Post URL", "Paragraph Status", "Paragraph Batch", "Paragraph Error",
-    # Patreon
-    "Patreon Post URL", "Patreon Status", "Patreon Batch", "Patreon Error",
-    # Calisthenics
-    "Calisthenics Post URL", "Calisthenics Status", "Calisthenics Batch", "Calisthenics Error",
-    # Linkmate
-    "Linkmate Post URL", "Linkmate Status", "Linkmate Batch", "Linkmate Error",
-    # Coda
-    "Coda Post URL", "Coda Status", "Coda Batch", "Coda Error",
+    # Shared blog-posting slots — every blog platform posts through these same
+    # 2 slots per row (max 2 platforms/row), instead of a dedicated column set
+    # per platform, so one row promotes 2 distinct platforms, not all of them.
+    "Blog Platform 1", "Blog URL 1", "Blog Platform 2", "Blog URL 2",
+    "Blog Status", "Blog Batch", "Blog Error", "Last Posted Blog",
 ]
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
