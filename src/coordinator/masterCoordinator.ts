@@ -2554,7 +2554,8 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
       case 'googlesite': {
         let content = await generateGoogleSitePost(row);
         content = ensureTargetUrl(content, row.targetUrl);
-        const gsNick = (row.newName || '').trim();
+        const gsFallback = (row.newName || '').trim();
+        const gsNick = selectAccountForPlatform(process.env.WORKER_NAME || gsFallback, 'googlesite', gsFallback);
         if (!gsNick) throw new Error(`Row ${row.rowIndex}: "New Name" column empty — cannot post to Google Sites`);
         const r = await postToGoogleSiteAccount(gsNick, title, content, row.seedKeyword);
         await saveGoogleSiteBatchResult(row, { googleSitePost: content, googleSitePostUrl: r.postUrl || '', googleSiteStatus: r.success ? 'Posted' : 'Failed', googleSiteBatch: label, googleSiteError: r.error });
@@ -2564,7 +2565,8 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
       case 'hackmd': {
         let content = await generateHackmdPost(row);
         content = ensureTargetUrl(content, row.targetUrl);
-        const r = await postToHackmdAccount(title, content, row.name, row.description || '');
+        const hackmdAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'hackmd', row.name);
+        const r = await postToHackmdAccount(title, content, hackmdAccount, row.description || '');
         await saveHackmdBatchResult(row, { hackmdPostUrl: r.postUrl || '', hackmdStatus: r.success ? 'Posted' : 'Failed', hackmdBatch: label, hackmdError: r.error });
         console.log(r.success ? `✅ Posted → ${r.postUrl}` : `❌ Failed: ${r.error}`);
         break;
@@ -2572,13 +2574,15 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
       case 'devto': {
         let content = await generateDevtoPost(row);
         content = ensureTargetUrl(content, row.targetUrl);
-        const r = await postToDevtoAccount(row.name, title, content);
+        const devtoAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'devto', row.name);
+        const r = await postToDevtoAccount(devtoAccount, title, content);
         await saveDevtoBatchResult(row, { devtoPostUrl: r.postUrl || '', devtoStatus: r.success ? 'Posted' : 'Failed', devtoBatch: label, devtoError: r.error });
         console.log(r.success ? `✅ Posted → ${r.postUrl}` : `❌ Failed: ${r.error}`);
         break;
       }
       case 'medium': {
-        const mediumNick = (row.newName || '').trim();
+        const mediumFallback = (row.newName || '').trim();
+        const mediumNick = selectAccountForPlatform(process.env.WORKER_NAME || mediumFallback, 'medium', mediumFallback);
         if (!mediumNick) throw new Error(`Row ${row.rowIndex}: "New Name" column empty — cannot post to Medium`);
         let content = await generateMediumPost(row);
         content = ensureTargetUrl(content, row.targetUrl);
@@ -2590,7 +2594,8 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
       case 'linkmate': {
         let content = await generateLinkmatePost(row);
         content = ensureTargetUrl(content, row.targetUrl);
-        const r = await postToLinkmateAccount(row.name, title, content, row.seedKeyword);
+        const linkmateAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'linkmate', row.name);
+        const r = await postToLinkmateAccount(linkmateAccount, title, content, row.seedKeyword);
         await saveLinkmateBatchResult(row, { linkMateContent: content, linkMatePostUrl: r.postUrl || '', linkMateStatus: r.success ? 'Posted' : 'Failed', linkmateBatch: label, linkMateError: r.error });
         console.log(r.success ? `✅ Posted → ${r.postUrl}` : `❌ Failed: ${r.error}`);
         break;
@@ -2600,7 +2605,8 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
         pulseContent.html = ensureTargetUrl(pulseContent.html, row.targetUrl);
         const retryPulseTitle = (row.title || '').trim() || pulseContent.title;
         const retryPulseCaption = (row.blogCaption || '').trim() || pulseContent.seoDescription;
-        const r = await postToPulseAccount(row.name, retryPulseTitle, pulseContent.html, retryPulseTitle, pulseContent.seoDescription, retryPulseCaption);
+        const pulseAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'li', row.name);
+        const r = await postToPulseAccount(pulseAccount, retryPulseTitle, pulseContent.html, retryPulseTitle, pulseContent.seoDescription, retryPulseCaption);
         await saveLinkedinPulseBatchResult(row, { linkedinPulsePostUrl: r.postUrl || '', linkedinPulseStatus: r.success ? 'Posted' : 'Failed', linkedinPulseBatch: label, linkedinPulseError: r.error });
         console.log(r.success ? `✅ Posted → ${r.postUrl}` : `❌ Failed: ${r.error}`);
         break;
@@ -2608,7 +2614,8 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
       case 'calisthenics': {
         let content = await generateCalisthenicsPost(row);
         content = ensureTargetUrl(content, row.targetUrl);
-        const r = await postToCalisthenicsAccount(row.name, title, content);
+        const calisthenicsAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'calisthenics', row.name);
+        const r = await postToCalisthenicsAccount(calisthenicsAccount, title, content);
         await saveCalisthenicsResultBatch(row, { calisthenicsPostUrl: r.postUrl || '', calisthenicsStatus: r.success ? 'Posted' : 'Failed', calisthenicssBatch: label, calisthenicsError: r.error });
         console.log(r.success ? `✅ Posted → ${r.postUrl}` : `❌ Failed: ${r.error}`);
         break;
@@ -2616,7 +2623,8 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
       case 'substack': {
         let content = await generateSubstackPost(row);
         content = ensureTargetUrl(content, row.targetUrl);
-        const r = await postToSubstackAccount(row.name, title, content);
+        const substackAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'substack', row.name);
+        const r = await postToSubstackAccount(substackAccount, title, content);
         await saveSubstackBatchResult(row, { substackPostUrl: r.postUrl || '', substackStatus: r.success ? 'Posted' : 'Failed', substackBatch: label, substackError: r.error });
         console.log(r.success ? `✅ Posted → ${r.postUrl}` : `❌ Failed: ${r.error}`);
         break;
@@ -2624,14 +2632,16 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
       case 'blogger': {
         let content = row.blogContent || await generateHackmdPost(row);
         content = ensureTargetUrl(content, row.targetUrl);
-        const r = await postToBloggerAccount(row.name, title, content);
+        const bloggerAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'blogger', row.name);
+        const r = await postToBloggerAccount(bloggerAccount, title, content);
         await saveBloggerBatchResult(row, { bloggerPostUrl: r.postUrl || '', bloggerStatus: r.success ? 'Posted' : 'Failed', bloggerBatch: label, bloggerError: r.error });
         console.log(r.success ? `✅ Posted → ${r.postUrl}` : `❌ Failed: ${r.error}`);
         break;
       }
       case 'wordpress': {
         const content = row.blogContent || await generateHackmdPost(row);
-        const r = await postToWordpressAccount(row.name, title, content);
+        const wordpressAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'wordpress', row.name);
+        const r = await postToWordpressAccount(wordpressAccount, title, content);
         await saveWordpressBatchResult(row, { wordpressPostUrl: r.postUrl || '', wordpressStatus: r.success ? 'Posted' : 'Failed', wordpressBatch: label, wordpressError: r.error });
         console.log(r.success ? `✅ Posted → ${r.postUrl}` : `❌ Failed: ${r.error}`);
         break;
@@ -2640,7 +2650,8 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
         const content = row.blogContent || '';
         if (!content) { console.log('⏭ Skipping — no blog content'); break; }
         const notionTitle = row.title || row.descriptionTitle || title;
-        const loginResult = await executeBrowserTool('login_notion', { nickname: row.name });
+        const notionAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'notion', row.name);
+        const loginResult = await executeBrowserTool('login_notion', { nickname: notionAccount });
         if (!loginResult.success) throw new Error(loginResult.error || 'Notion login failed');
         const r = await executeBrowserTool('post_notion', { title: notionTitle, htmlContent: ensureTargetUrl(content, row.targetUrl) });
         await saveUnifiedNotionResult(row, { postUrl: r.postUrl || '', status: r.success ? 'Posted' : 'Failed', batch: label, error: r.error });
@@ -2651,7 +2662,8 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
         let tweet = row.xPost?.trim() || '';
         if (!tweet) tweet = await generateTweet({ url: row.targetUrl, title: row.title, seoRanking: 999, priority: row.priority ?? 'P3', marketValue: row.marketValue });
         if (!tweet?.trim()) { console.log('⏭ Skipping — no content'); break; }
-        const r = await runXAgent({ tweetText: tweet, accountHandle: row.name });
+        const xAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'x', row.name);
+        const r = await runXAgent({ tweetText: tweet, accountHandle: xAccount });
         await savePostingResult(row, { xPost: tweet, xPostUrl: r.tweetUrl || '', xStatus: r.success ? 'Posted' : 'Failed', xError: r.error || '', xBatch: label });
         console.log(r.success ? `✅ Posted → ${r.tweetUrl}` : `❌ Failed: ${r.error}`);
         break;
@@ -2660,7 +2672,8 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
         let fbPost = row.fbPost?.trim() || '';
         if (!fbPost) fbPost = await generateFbPost({ url: row.targetUrl, title: row.title, seoRanking: 1, priority: 'P1' });
         if (!fbPost?.trim()) { console.log('⏭ Skipping — no content'); break; }
-        const r = await postToFbAccount(row.name, fbPost);
+        const fbAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'fb', row.name);
+        const r = await postToFbAccount(fbAccount, fbPost);
         fbPost = r.postText || fbPost;
         await saveFbBatchResult(row, { fbPost, fbPostUrl: r.postUrl || '', fbStatus: r.success ? 'Posted' : 'Failed', fbBatch: label, fbError: r.error });
         console.log(r.success ? `✅ Posted → ${r.postUrl}` : `❌ Failed: ${r.error}`);
@@ -2670,7 +2683,8 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
         let liPost = row.linkedinPost?.trim() || '';
         if (!liPost) liPost = await generateLiPost({ url: row.targetUrl, title: row.title, seoRanking: 1, priority: 'P1' });
         if (!liPost?.trim()) { console.log('⏭ Skipping — no content'); break; }
-        const r = await postToLiAccount(row.name, liPost);
+        const liAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'li', row.name);
+        const r = await postToLiAccount(liAccount, liPost);
         liPost = r.postText || liPost;
         await saveLiBatchResult(row, { liPost, liPostUrl: r.postUrl || '', liStatus: r.success ? 'Posted' : 'Failed', liBatch: label, liError: r.error });
         console.log(r.success ? `✅ Posted → ${r.postUrl}` : `❌ Failed: ${r.error}`);
@@ -2681,7 +2695,8 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
         if (!content) { console.log('⏭ Skipping — no blog content'); break; }
         content = ensureTargetUrl(content, row.targetUrl);
         const paraTitle = row.title || row.descriptionTitle || title;
-        const loginResult = await executeBrowserTool('login_paragraph', { nickname: row.name });
+        const paragraphAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'paragraph', row.name);
+        const loginResult = await executeBrowserTool('login_paragraph', { nickname: paragraphAccount });
         if (!loginResult.success) throw new Error(loginResult.error || 'Paragraph login failed');
         const r = await executeBrowserTool('post_paragraph', { title: paraTitle, htmlContent: content });
         await saveUnifiedParagraphResult(row, { postUrl: r.postUrl || '', status: r.success ? 'Posted' : 'Failed', batch: label, error: r.error });
