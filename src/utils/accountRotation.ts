@@ -56,14 +56,21 @@ export function setAccountCount(agent: string, platformKey: string, count: numbe
 
 /**
  * Pick which account to post from for `agent` on `platformKey`.
- * - count <= 1 (default, nothing declared) → `fallbackNickname` unchanged.
+ * - count <= 1 (default, nothing declared) → the clean `agent` identity
+ *   (WORKER_NAME-preferred at every call site in masterCoordinator.ts), NOT
+ *   `fallbackNickname` — that's always the sheet's raw Name cell, which can
+ *   be stale (e.g. leftover "agent 2" from before a fleet was flattened to
+ *   one account) and was silently trusted here instead of the known-good
+ *   agent identity that was already resolved before this function was even
+ *   called. The sheet's Name column should never need to be right for this
+ *   to work — only WORKER_NAME does.
  * - count >= 2 → strict round-robin across "{agent} 1".."{agent} {count}",
  *   persisted across process restarts so consecutive posting cycles keep
  *   advancing instead of always starting over at account 1.
  */
 export function selectAccountForPlatform(agent: string, platformKey: string, fallbackNickname: string): string {
   const count = getAccountCount(agent, platformKey);
-  if (count <= 1) return fallbackNickname;
+  if (count <= 1) return agent || fallbackNickname;
 
   const key = `${agent.toLowerCase()}:${platformKey}`;
   const state = loadJson<Record<string, number>>(ROTATION_FILE, {});
