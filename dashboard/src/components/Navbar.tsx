@@ -72,6 +72,10 @@ export default function Navbar() {
             <NavLink href="/track"  active={path.startsWith('/track')}>📊 Track</NavLink>
             <NavLink href="/submit" active={path.startsWith('/submit')}>➕ Submit URL</NavLink>
             <NavLink href={`/agent/${user.id}`} active={path.startsWith('/agent')}>🔑 Logins</NavLink>
+            <NavLink href="/feedback" active={path.startsWith('/feedback')}>💬 Feedback</NavLink>
+            {user.id === 'pranav' && (
+              <NavLink href="/admin" active={path.startsWith('/admin')}>🛡 Admin</NavLink>
+            )}
             <UpdatesBell />
           </div>
         )}
