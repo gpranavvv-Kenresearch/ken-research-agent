@@ -1,17 +1,20 @@
 /**
- * nightly-blog-rotation.ts — continuous, sequential blog-generation rotation
- * across the 5 personal-sheet agents: Sanya → Meenakshi → Vansh → Sameeksha →
+ * nightly-blog-rotation.ts — daily, sequential blog-generation rotation across
+ * the 5 personal-sheet agents: Sanya → Meenakshi → Vansh → Sameeksha →
  * Hritika, 5 blogs each. One agent's run-blog-generator.ts fully exits before
- * the next agent starts (never concurrent). After a full 5-agent cycle
- * finishes, waits 1 hour, then runs the same cycle again — forever.
+ * the next agent starts (never concurrent).
+ *
+ * 2 cycles/day, matching nightly-post-rotation.ts's shape exactly: Cycle 1
+ * (all 5 agents) → wait 1 hour → Cycle 2 (all 5 agents) → wait until next
+ * 12:00 AM IST, then repeat. No longer loops continuously all day/night.
  *
  * First cycle starts at the next 12:00 AM IST after this process boots.
  * Runs as its own long-lived pm2 process (not the old scheduler-new.ts
  * daemon, which is unrelated and currently stopped).
  *
  * Usage:
- *   npx tsx scripts/nightly-blog-rotation.ts             # waits for next midnight IST, then loops
- *   npx tsx scripts/nightly-blog-rotation.ts --now        # skip the wait, start immediately (testing)
+ *   npx tsx scripts/nightly-blog-rotation.ts             # waits for next midnight IST, then runs both cycles
+ *   npx tsx scripts/nightly-blog-rotation.ts --now        # skip the wait, run both cycles now, then exit (testing)
  *   npx tsx scripts/nightly-blog-rotation.ts --now --limit 1   # small test run
  */
 import { spawn, spawnSync } from 'child_process';
@@ -20,6 +23,7 @@ import path from 'path';
 
 const AGENTS = ['sanya', 'meenakshi', 'vansh', 'sameeksha', 'hritika'];
 const CYCLE_GAP_MS = 60 * 60 * 1000; // 1 hour between cycles
+const CYCLES_PER_DAY = 2; // matches nightly-post-rotation.ts's 2 rounds/day
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -99,12 +103,21 @@ async function runCycle(): Promise<void> {
 }
 
 async function main() {
-  log(`Nightly blog rotation starting. Order: ${AGENTS.join(' → ')}, ${BLOGS_PER_AGENT} blogs each.`);
-  if (!SKIP_WAIT) await waitUntilNextMidnightIst();
+  log(`Nightly blog rotation starting. Order: ${AGENTS.join(' → ')}, ${BLOGS_PER_AGENT} blogs each, ${CYCLES_PER_DAY} cycles/day.`);
   for (;;) {
-    await runCycle();
-    log(`Cycle complete — waiting 1h before the next one.`);
-    await new Promise((r) => setTimeout(r, CYCLE_GAP_MS));
+    if (!SKIP_WAIT) await waitUntilNextMidnightIst();
+    for (let cycle = 1; cycle <= CYCLES_PER_DAY; cycle++) {
+      log(`--- Cycle ${cycle} starting ---`);
+      await runCycle();
+      log(`--- Cycle ${cycle} complete ---`);
+      if (cycle < CYCLES_PER_DAY) {
+        log(`Waiting 1h before cycle ${cycle + 1}.`);
+        await new Promise((r) => setTimeout(r, CYCLE_GAP_MS));
+      }
+    }
+    log(`Both cycles done for today — waiting for tomorrow's 12:00 AM IST.`);
+    // --now is a one-shot manual test; don't loop forever waiting for a "tomorrow" that isn't real.
+    if (SKIP_WAIT) break;
   }
 }
 

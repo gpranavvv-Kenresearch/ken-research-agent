@@ -330,6 +330,33 @@ app.get('/api/agent/:agent/queue-status/:category', requireAgentToken, (req: Req
   res.json({ ...status, etaMs });
 });
 
+// GET /api/agent/:agent/admin-status — every team member's live process status
+// in one call, for the admin dashboard. `:agent` here must be the "admin"
+// pseudo-agent (same requireAgentToken/PIN system every real agent already
+// uses — see agentAuth.ts — "admin" is just one more key in that same PIN
+// store, no new auth code). Reads each real agent's own status via the exact
+// same functions their individual pages already call (postCycleStatus,
+// cycleStatus) — those already read that agent's own PID/status/log files
+// directly, so this needs no changes to either.
+// Keep ADMIN_STATUS_AGENTS in sync with the dashboard's USERS list
+// (dashboard/src/lib/userConfig.ts) — no shared import between the two apps.
+const ADMIN_STATUS_AGENTS = [
+  'krishi', 'sameeksha', 'aniket', 'vansh', 'abhinav', 'hritika', 'meenakshi',
+  'sanya', 'shivani', 'vijay', 'shrey', 'pranav', 'vishal', 'avdhesh', 'kamakshi',
+];
+app.get('/api/agent/:agent/admin-status', requireAgentToken, (req: Request, res: Response) => {
+  if (req.params.agent.toLowerCase() !== 'admin') {
+    res.status(403).json({ error: 'admin-status requires the admin token' });
+    return;
+  }
+  const agents = ADMIN_STATUS_AGENTS.map((id) => ({
+    id,
+    postCycle: postCycleStatus(id),
+    blogCycle: cycleStatus(id),
+  }));
+  res.json({ agents });
+});
+
 // POST /api/agent/:agent/blog-cycle/start — begin the continuous loop: generate
 // up to 5 blogs, sleep 30 min, repeat, until stopped. Locking is per-agent —
 // each agent has its own ChatGPT profile, so different agents' cycles don't
