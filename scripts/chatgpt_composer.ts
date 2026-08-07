@@ -39,21 +39,36 @@ export async function dismissBlockingModals(page: Page): Promise<boolean> {
 }
 
 /**
- * Same rate-limit modal, dismissed by pressing Enter (its default button)
- * instead of ripping it out of the DOM — for the completion-poll loop, where
- * DOM removal alone hasn't reliably cleared the underlying blocked state.
- * Only use this where focus isn't in the composer (Enter there would submit
- * the prompt) — use dismissBlockingModals() instead in that context.
+ * Any ChatGPT popup/dialog — the known rate-limit modal, but also any other
+ * overlay (session nudge, "stay logged in", upsell, etc.) that can appear
+ * mid-generation — dismissed by pressing Enter (its default button) instead
+ * of ripping it out of the DOM. For the completion-poll loop, where DOM
+ * removal alone hasn't reliably cleared the underlying blocked state, and
+ * where new popup variants keep showing up that a single hardcoded selector
+ * won't catch. Only use this where focus isn't in the composer (Enter there
+ * would submit the prompt) — use dismissBlockingModals() instead there.
  */
+const POPUP_SELECTOR = [
+  '#modal-conversation-history-rate-limit',
+  '[data-testid="modal-conversation-history-rate-limit"]',
+  '[role="dialog"]',
+  '[role="alertdialog"]',
+  'div[data-state="open"]',
+].join(', ');
+
 export async function dismissRateLimitModalByEnter(page: Page): Promise<boolean> {
-  const present = await page.locator(
-    '#modal-conversation-history-rate-limit, [data-testid="modal-conversation-history-rate-limit"]'
-  ).first().isVisible({ timeout: 1000 }).catch(() => false);
-  if (!present) return false;
-  console.log('[composer] Rate-limit popup detected — dismissing with Enter');
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(500);
-  return true;
+  let dismissedAny = false;
+  // Popups can re-render right after being dismissed, so keep pressing Enter
+  // until the page is actually clear instead of returning after one press.
+  for (let i = 0; i < 5; i++) {
+    const present = await page.locator(POPUP_SELECTOR).first().isVisible({ timeout: 1000 }).catch(() => false);
+    if (!present) break;
+    console.log('[composer] Popup detected — dismissing with Enter');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(500);
+    dismissedAny = true;
+  }
+  return dismissedAny;
 }
 
 export async function pasteIntoChatGPTComposer(
