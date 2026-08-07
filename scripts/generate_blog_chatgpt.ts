@@ -24,7 +24,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { injectUTM, UTM_PARAMS } from '../src/utils/utm.js';
-import { dismissBlockingModals } from './chatgpt_composer.js';
+import { dismissBlockingModals, dismissRateLimitModalByEnter } from './chatgpt_composer.js';
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -517,6 +517,12 @@ async function waitForCompletion(page: Page): Promise<void> {
   let unchangedChecks = 0;
   await page.waitForTimeout(60000); // let generation get underway (~1 min) before first check
   while (Date.now() - start < RESPONSE_TIMEOUT_MS) {
+    // Always check for the rate-limit popup first — it silently stalls
+    // generation, so clear it (via Enter, its default button) before reading
+    // any completion signal below.
+    if (await dismissRateLimitModalByEnter(page)) {
+      progress('  …cleared a rate-limit popup, continuing to wait.');
+    }
     // Check every ~3.5 min: ChatGPT shows a Stop button while streaming. When the
     // Stop button has been gone for two checks in a row (with a real reply present),
     // the blog is finished. Robust to tiny page changes (Sources panel, etc.).

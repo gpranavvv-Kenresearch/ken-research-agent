@@ -38,6 +38,24 @@ export async function dismissBlockingModals(page: Page): Promise<boolean> {
   return removed;
 }
 
+/**
+ * Same rate-limit modal, dismissed by pressing Enter (its default button)
+ * instead of ripping it out of the DOM — for the completion-poll loop, where
+ * DOM removal alone hasn't reliably cleared the underlying blocked state.
+ * Only use this where focus isn't in the composer (Enter there would submit
+ * the prompt) — use dismissBlockingModals() instead in that context.
+ */
+export async function dismissRateLimitModalByEnter(page: Page): Promise<boolean> {
+  const present = await page.locator(
+    '#modal-conversation-history-rate-limit, [data-testid="modal-conversation-history-rate-limit"]'
+  ).first().isVisible({ timeout: 1000 }).catch(() => false);
+  if (!present) return false;
+  console.log('[composer] Rate-limit popup detected — dismissing with Enter');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(500);
+  return true;
+}
+
 export async function pasteIntoChatGPTComposer(
   page: Page,
   text: string,
