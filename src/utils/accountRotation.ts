@@ -98,9 +98,18 @@ export function setAccountCount(agent: string, platformKey: string, count: numbe
  *   called. The sheet's Name column should never need to be right for this
  *   to work — only WORKER_NAME does.
  *   Some platform registries (Blogger, LinkedIn) were built numbered from
- *   the start and never got a bare-name entry, even for agents with just
- *   one account — so if bare `agent` isn't actually registered but
- *   `"{agent} 1"` is, use that instead of guessing wrong.
+ *   the start and never got a bare-name entry at all. Others have BOTH a
+ *   legacy bare entry (often stored with real, possibly stale/dead
+ *   credentials — e.g. Sanya's X account is registered as bare "sanya" but
+ *   hasn't been logged in) AND a numbered "{agent} 1" entry created through
+ *   the dashboard's session-only manual-login flow (no stored credentials,
+ *   just a live browser session — see sessionResolver.ts's
+ *   registerFleetAccount). The numbered form is the current, intended path
+ *   for single-account agents too — so whenever "{agent} 1" is registered,
+ *   use it, regardless of whether a bare entry also exists. Only fall back
+ *   to bare when no numbered entry exists for this platform at all (e.g.
+ *   HackMD, which some agents only ever registered under a bare API-key
+ *   entry).
  * - count >= 2 → strict round-robin across "{agent} 1".."{agent} {count}",
  *   persisted across process restarts so consecutive posting cycles keep
  *   advancing instead of always starting over at account 1.
@@ -110,7 +119,7 @@ export function selectAccountForPlatform(agent: string, platformKey: string, fal
   if (count <= 1) {
     const bare = agent || fallbackNickname;
     const registered = registeredNicknames(platformKey);
-    if (registered.size > 0 && !registered.has(bare.toLowerCase()) && registered.has(`${bare.toLowerCase()} 1`)) {
+    if (registered.has(`${bare.toLowerCase()} 1`)) {
       return `${bare} 1`;
     }
     return bare;
