@@ -66,6 +66,7 @@ const PERSONAL_SHEET_ID: Record<string, string> = {
   hritika: '1NjOCYlYPV1W-8FYNoLI7m_lqxx5pr5H9xTWu6OvWmcY',
   vansh: '1N_hPhtCA9qIVBpeftgxqRc0farsjAKTcZWMgbhJZQHM',
   sameeksha: '1MA5duGvHHDe-cnnf4Ibj5-d9mW6JpYcziPkKGbMZZIo',
+  vijay: '1EDmz1HA6mPzGu-Q-XDuOJZ3A0k0RgGDwBWkPNqcyS1s',
 };
 const RESOLVED_SHEET_ID = PERSONAL_SHEET_ID[(process.env.WORKER_NAME || '').toLowerCase()] || COMBINED_SHEET_ID;
 
@@ -1780,115 +1781,6 @@ function colToLetter(col: number): string {
     n = Math.floor((n - 1) / 26);
   }
   return letter;
-}
-
-// ──── Sunday Examination: Move Failed Posts to End of Sheet ──────────────────
-
-export async function examineSundayFailedPosts(): Promise<void> {
-  const sheets = await getSheetsClient();
-  const colMap = await getColumnMap(sheets, BLOG_SHEET_ID, BLOG_SHEET_NAME);
-
-  const res = await withRetry(() => sheets.spreadsheets.values.get({
-    spreadsheetId: BLOG_SHEET_ID, range: `${BLOG_SHEET_NAME}!A:BZ`,
-  }), 'examineSundayFailedPosts');
-
-  const rows: string[][] = res.data.values ?? [];
-  const failedRows: { rowIndex: number; data: string[]; platform: string }[] = [];
-  let lastDataRowIndex = 1; // Start from header
-
-  // Column indexes for relevant fields
-  const descTitleCol = col(colMap, 'descriptionTitle', 'Report Title', 'description title', 'report title');
-  const targetUrlCol = col(colMap, 'targetUrl', 'Target URL', 'Download Report URL', 'target url', 'url');
-
-  // Platform status columns
-  const mediumStatusCol = col(colMap, 'mediumStatus', 'Medium Status', 'medium status');
-  const mediumUrlCol = col(colMap, 'mediumPostUrl', 'Medium Post URL', 'medium post url');
-  const linkmateStatusCol = col(colMap, 'linkMateStatus', 'Linkmate Status', 'linkmate status');
-  const linkmateUrlCol = col(colMap, 'linkMatePostUrl', 'Linkmate Post URL', 'linkmate post url');
-  const googleSiteStatusCol = col(colMap, 'googleSiteStatus', 'Google Site Status', 'google site status');
-  const googleSiteUrlCol = col(colMap, 'googleSitePostUrl', 'Google Site Post URL', 'google site post url');
-  const devtoStatusCol = col(colMap, 'devtoStatus', 'Dev.to Status', 'dev.to status');
-  const devtoUrlCol = col(colMap, 'devtoPostUrl', 'Dev.to Post URL', 'dev.to post url');
-  const liPulseStatusCol = col(colMap, 'linkedinPulseStatus', 'LinkedIn Pulse Status', 'linkedin pulse status');
-  const liPulseUrlCol = col(colMap, 'linkedinPulsePostUrl', 'LinkedIn Pulse Post URL', 'linkedin pulse post url');
-  const calisthenicsStatusCol = col(colMap, 'calisthenicsStatus', 'Calisthenics Status', 'calisthenics status');
-  const calisthenicsUrlCol = col(colMap, 'calisthenicsPostUrl', 'Calisthenics Post URL', 'calisthenics post url');
-
-  // Scan for failed rows and last data row
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    const descTitle = (row[descTitleCol ?? -1] ?? '').trim();
-    const targetUrl = (row[targetUrlCol ?? -1] ?? '').trim();
-
-    // Track last row with data
-    if (descTitle || targetUrl) {
-      lastDataRowIndex = i + 1; // Convert to 1-based for sheet operations
-    }
-
-    // Check for failed posts
-    const checks = [
-      { status: mediumStatusCol, url: mediumUrlCol, platform: 'Medium' },
-      { status: linkmateStatusCol, url: linkmateUrlCol, platform: 'Linkmate' },
-      { status: googleSiteStatusCol, url: googleSiteUrlCol, platform: 'Google Sites' },
-      { status: devtoStatusCol, url: devtoUrlCol, platform: 'Dev.to' },
-      { status: liPulseStatusCol, url: liPulseUrlCol, platform: 'LinkedIn Pulse' },
-      { status: calisthenicsStatusCol, url: calisthenicsUrlCol, platform: 'Calisthenics' },
-    ];
-
-    for (const check of checks) {
-      if (check.status === undefined || check.url === undefined) continue;
-
-      const status = (row[check.status] ?? '').trim();
-      const postUrl = (row[check.url] ?? '').trim();
-
-      if (status.toLowerCase() === 'failed' && !postUrl) {
-        failedRows.push({
-          rowIndex: i + 1,
-          data: [...row],
-          platform: check.platform,
-        });
-        break; // Don't count same row twice for multiple platforms
-      }
-    }
-  }
-
-  if (failedRows.length === 0) {
-    console.log(`   ✅ Sunday Examination: No failed posts to move`);
-    return;
-  }
-
-  console.log(`   🔍 Sunday Examination: Found ${failedRows.length} failed posts`);
-
-  // Insert failed rows at the end (after lastDataRowIndex)
-  const insertStartRow = lastDataRowIndex + 1;
-  const updates: any[] = [];
-
-  for (let i = 0; i < failedRows.length; i++) {
-    const failedRow = failedRows[i];
-    const sheetRowIndex = insertStartRow + i;
-
-    // Build update for this row
-    const rowData: any[] = [];
-    for (let colIndex = 0; colIndex < failedRow.data.length; colIndex++) {
-      rowData.push({ userEnteredValue: { stringValue: failedRow.data[colIndex] ?? '' } });
-    }
-
-    // Append rows to sheet
-    updates.push({
-      range: `${BLOG_SHEET_NAME}!A${sheetRowIndex}`,
-      values: [failedRow.data],
-    });
-  }
-
-  // Write all updates
-  await batchWrite(sheets, updates, BLOG_SHEET_ID);
-
-  console.log(`   📋 Moved ${failedRows.length} failed posts to rows ${insertStartRow}-${insertStartRow + failedRows.length - 1}`);
-  console.log(`      Failed posts:`);
-  for (const fp of failedRows) {
-    const title = (fp.data[col(colMap, 'Blog Title', 'blog title', 'Title', 'title', 'Main Title') ?? -1] ?? 'N/A').slice(0, 50);
-    console.log(`        • ${title}... (${fp.platform})`);
-  }
 }
 
 // ──── Substack Blog Posting ─────────────────────────────────────────────────────

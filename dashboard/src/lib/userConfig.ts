@@ -10,6 +10,7 @@ const PERSONAL_SHEET_ID: Record<string, string> = {
   hritika: '1NjOCYlYPV1W-8FYNoLI7m_lqxx5pr5H9xTWu6OvWmcY',
   vansh: '1N_hPhtCA9qIVBpeftgxqRc0farsjAKTcZWMgbhJZQHM',
   sameeksha: '1MA5duGvHHDe-cnnf4Ibj5-d9mW6JpYcziPkKGbMZZIo',
+  vijay: '1EDmz1HA6mPzGu-Q-XDuOJZ3A0k0RgGDwBWkPNqcyS1s',
 };
 
 export interface UserConfig {
@@ -32,7 +33,7 @@ export const USERS: UserConfig[] = [
   { id: 'meenakshi', displayName: 'Meenakshi', socialTab: 'Meenakshi Social', blogTab: 'Meenakshi Blog', color: 'teal',    initials: 'ME', spreadsheetId: PERSONAL_SHEET_ID.meenakshi },
   { id: 'sanya',     displayName: 'Sanya',     socialTab: 'Sanya Social',     blogTab: 'Sanya Blog',     color: 'yellow',  initials: 'SA', spreadsheetId: PERSONAL_SHEET_ID.sanya },
   { id: 'shivani',   displayName: 'Shivani',   socialTab: 'Shivani Social',   blogTab: 'Shivani Blog',   color: 'indigo',  initials: 'SH' },
-  { id: 'vijay',     displayName: 'Vijay',     socialTab: 'Vijay Social',     blogTab: 'Vijay Blog',     color: 'cyan',    initials: 'VI' },
+  { id: 'vijay',     displayName: 'Vijay',     socialTab: 'Vijay Social',     blogTab: 'Vijay Blog',     color: 'cyan',    initials: 'VI', spreadsheetId: PERSONAL_SHEET_ID.vijay },
   { id: 'shrey',     displayName: 'Shrey',     socialTab: 'Shrey Social',     blogTab: 'Shrey Blog',     color: 'emerald', initials: 'SR' },
   { id: 'pranav',   displayName: 'Pranav',    socialTab: 'Pranav Social',    blogTab: 'Pranav Blog',    color: 'violet',  initials: 'PR' },
   { id: 'vishal',   displayName: 'Vishal',    socialTab: 'Vishal Social',    blogTab: 'Vishal Blog',    color: 'sky',     initials: 'VS' },

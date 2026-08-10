@@ -74,6 +74,7 @@ PERSONAL_SHEET_ID = {
     "hritika": "1NjOCYlYPV1W-8FYNoLI7m_lqxx5pr5H9xTWu6OvWmcY",
     "vansh": "1N_hPhtCA9qIVBpeftgxqRc0farsjAKTcZWMgbhJZQHM",
     "sameeksha": "1MA5duGvHHDe-cnnf4Ibj5-d9mW6JpYcziPkKGbMZZIo",
+    "vijay": "1EDmz1HA6mPzGu-Q-XDuOJZ3A0k0RgGDwBWkPNqcyS1s",
 }
 
 def _find_service_account() -> str:
