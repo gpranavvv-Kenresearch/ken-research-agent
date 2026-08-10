@@ -115,6 +115,14 @@ export function setAccountCount(agent: string, platformKey: string, count: numbe
  *   advancing instead of always starting over at account 1.
  */
 export function selectAccountForPlatform(agent: string, platformKey: string, fallbackNickname: string): string {
+  // Local per-row-name mode: callers pass (WORKER_NAME || rowName, platform, rowName),
+  // so the WORKER normally wins and every row posts as the same worker account. When
+  // PREFER_ROW_NAME=true (local fleet: one sheet, a different Name per row), use the
+  // row's Name instead so each row logs into its own .sessions/x/{name} account. The
+  // VPS never sets this flag, so its per-worker rotation is unchanged.
+  if (process.env.PREFER_ROW_NAME === 'true' && fallbackNickname) {
+    agent = fallbackNickname;
+  }
   const count = getAccountCount(agent, platformKey);
   if (count <= 1) {
     const bare = agent || fallbackNickname;
