@@ -12,7 +12,7 @@ A daily rotation that runs **6 separate agents one after another** (each as its 
 | | **VPS** | Local (Vishal) |
 |---|---|---|
 | Machine | Hostinger `srv1828409` (`root@200.97.170.123`) | the Windows laptop |
-| Started by | **PM2**: `post-rotation` + `blog-rotation` (persistent) | `npm run schedule` (a window) |
+| Started by | **system cron** (one-shot `--now` runs) — posting `02:30 UTC`, blog `18:30 UTC` | `npm run schedule` (a window) |
 | Orchestrator | `nightly-post-rotation.ts` / `nightly-blog-rotation.ts` — **per-agent rotation** | `scheduler-new.ts` — 5-stage narrowing |
 | Schedule | Post **08:00 IST** (2 rounds, 1 h gap); Blog **00:00 IST** (2 cycles, 5 blogs each) | 11:00 & 23:00 IST |
 | Worker(s) | **6**: sanya → meenakshi → vansh → sameeksha → hritika → vijay (sequential, never concurrent) | 1 (`vishal`) |
@@ -25,14 +25,20 @@ A daily rotation that runs **6 separate agents one after another** (each as its 
 ## Deprecated: the old `scheduler`
 The PM2 app **`scheduler`** (`scheduler-new.ts`, the 5-stage cycle) is **stopped/deprecated on the VPS**. It is *not* how the VPS posts. (It **is** what the laptop uses.) Don't read its logs to reason about VPS behavior.
 
-## How it runs (PM2, under the `deploy` user)
-```bash
-sudo -u deploy pm2 list                 # post-rotation, blog-rotation, login-api, xvfb/vnc/fluxbox
-sudo -u deploy pm2 restart post-rotation
+## How it runs (system cron, under the `deploy` user)
+Posting and generation are **cron-triggered one-shot runs** — NOT persistent PM2 apps.
+The old always-on apps were retired 2026-08-10 because a killed process silently stopped
+all posting for a day+ with no re-trigger. Cron fires every day regardless of prior state.
 ```
-- `post-rotation` → `scripts/nightly-post-rotation.ts` (long-lived, waits for 08:00 IST, then runs).
-- `blog-rotation` → `scripts/nightly-blog-rotation.ts` (waits for 00:00 IST).
-- Headed browsers run on the **Xvfb `:99`** virtual display (with `fluxbox`/`x11vnc`), so Cloudflare-protected platforms work without a real screen.
+# deploy crontab (UTC):
+30 2  * * *  ... flock -n /tmp/post-rotation.lock -c "... timeout 50400 node --import=tsx scripts/nightly-post-rotation.ts --now"   # 08:00 IST
+30 18 * * *  ... flock -n /tmp/blog-rotation.lock -c "... timeout 50400 node --import=tsx scripts/nightly-blog-rotation.ts --now"   # 00:00 IST
+```
+- `--now` = run the day's 2 rounds/cycles once, then **exit** (cron re-fires tomorrow).
+- **`flock`** = never two runs at once; **`timeout 50400` (14h)** = kills a hung run so the lock always releases and the next day still fires.
+- Each run first clears stale `.sessions/slots/*.lock` (a leftover lock would otherwise hang `acquireBrowserSlot`).
+- Headed browsers run on the **Xvfb `:99`** virtual display (still PM2: `xvfb`/`fluxbox`/`x11vnc`), so Cloudflare-protected platforms work without a real screen. `login-api` is also still PM2.
+- **Manual single-agent run:** `DISPLAY=:99 WORKER_NAME=<agent> POST_CYCLE_COUNTS='{...}' node --import=tsx scripts/run-post-cycle-once.ts` (posting) or `... scripts/run-blog-generator.ts --name <agent> --limit 5 --image-prompt 1` (blog).
 
 ## Posting flow, step by step
 1. `nightly-post-rotation.ts` holds `AGENTS = [sanya, meenakshi, vansh, sameeksha, hritika, vijay]`.

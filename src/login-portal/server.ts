@@ -354,7 +354,40 @@ app.get('/api/agent/:agent/admin-status', requireAgentToken, (req: Request, res:
     postCycle: postCycleStatus(id),
     blogCycle: cycleStatus(id),
   }));
-  res.json({ agents });
+  // Health of the cron-driven scheduled runs (written by scripts/rotation-health-check.ts).
+  let scheduledHealth: unknown = null;
+  try { scheduledHealth = JSON.parse(fs.readFileSync('/home/deploy/full-team-agent/.sessions/rotation-health.json', 'utf8')); } catch { /* not yet written */ }
+  res.json({ agents, scheduledHealth });
+});
+
+// POST /api/agent/:agent/admin-cycle — ADMIN (pranav) starts/stops ANY team
+// member's posting or blog cycle from the admin panel. :agent must be "admin".
+// body: { target, kind: 'post'|'blog', action?: 'start'|'stop', counts? }
+app.post('/api/agent/:agent/admin-cycle', requireAgentToken, (req: Request, res: Response) => {
+  if (req.params.agent.toLowerCase() !== 'admin') {
+    res.status(403).json({ error: 'admin token required' });
+    return;
+  }
+  const target = String(req.body?.target || '').toLowerCase();
+  const kind = String(req.body?.kind || '');
+  const action = String(req.body?.action || 'start');
+  if (!ADMIN_STATUS_AGENTS.includes(target)) {
+    res.status(400).json({ error: `unknown agent "${target}"` });
+    return;
+  }
+  try {
+    if (kind === 'post') {
+      action === 'stop' ? stopPostCycle(target) : startPostCycle(target, req.body?.counts);
+    } else if (kind === 'blog') {
+      action === 'stop' ? stopCycle(target) : startCycle(target);
+    } else {
+      res.status(400).json({ error: 'kind must be "post" or "blog"' });
+      return;
+    }
+    res.json({ ok: true, target, kind, action });
+  } catch (err: any) {
+    res.status(409).json({ error: err?.message || 'failed' });
+  }
 });
 
 // POST /api/agent/:agent/blog-cycle/start — begin the continuous loop: generate
