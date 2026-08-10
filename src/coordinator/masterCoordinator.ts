@@ -171,7 +171,6 @@ import {
   saveUnifiedBloggerResult,
   getRowsForContinuousWordpressPosting,
   getRowsForContinuousBloggerPosting,
-  examineSundayFailedPosts,
   getSheetRowByIndex,
   SheetRow,
   getRowsForContinuousParagraphPosting,
@@ -259,18 +258,6 @@ function saveCounters(c: BatchCounters): void {
 export function resetBatchCounters(): void {
   saveCounters({ ...ZERO_COUNTERS });
   console.log('✅ Batch counters reset');
-}
-
-// ── Sunday Examination: Move Failed Posts to End ──────────────────────────────
-
-export async function runSundayExamination(): Promise<void> {
-  console.log(`\n[SUNDAY EXAMINATION] Checking for failed posts...`);
-  try {
-    await examineSundayFailedPosts();
-    console.log(`[SUNDAY EXAMINATION] Complete`);
-  } catch (err: any) {
-    console.error(`[SUNDAY EXAMINATION] Error: ${err.message}`);
-  }
 }
 
 // ── Reset posting data for retesting ──────────────────────────────────────────

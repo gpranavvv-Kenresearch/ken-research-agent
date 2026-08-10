@@ -44,7 +44,7 @@ import {
   runDevtoBatch, runLinkedinPulseBatch, runCalisthenicsNBatch,
   runWordpressBatch, runBloggerBatch, runHackmdBatch,
   runNotionBatch, runNoteBatch, runCodaBatch,
-  runWeeklySerpRecheck, runSundayExamination, resetBatchCounters,
+  runWeeklySerpRecheck, resetBatchCounters,
   runRetryRow,
 } from './coordinator/masterCoordinator.js';
 import { startCycle, stopCycle } from './login-portal/blogCycle.js';
@@ -380,12 +380,6 @@ export async function startCoordinatorDaemon(immediate: boolean = false): Promis
   cron.schedule('0 22 * * 6', async () => {
     console.log(`\n[${nowIst()}] ▶ Weekly SERP Recheck`);
     try { await runWeeklySerpRecheck(); } catch (err: any) { console.error(`[Weekly SERP Recheck] Error: ${err.message}`); }
-  }, { timezone: tz });
-
-  // ── Sunday Examination: Move failed posts to end of sheet ─────────────────
-  cron.schedule('0 10 * * 0', async () => {
-    console.log(`\n[${nowIst()}] ▶ Sunday Failed Posts Examination`);
-    try { await runSundayExamination(); } catch (err: any) { console.error(`[Sunday Failed Posts Examination] Error: ${err.message}`); }
   }, { timezone: tz });
 
   // ── Posting: fresh Stage 1 start TWICE a day — 11:00 and 23:00 IST (12h
