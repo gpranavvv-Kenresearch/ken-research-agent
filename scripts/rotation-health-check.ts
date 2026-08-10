@@ -46,8 +46,8 @@ function status(logFile: string, doneMarker: RegExp, startMarker: RegExp) {
 const health = {
   checkedAt: new Date().toISOString(),
   istDay: istDay(),
-  posting: status(POST_LOG, /Both rounds done|all manual runs finished/i, /rotation starting|Round 1 starting/i),
-  blog: status(BLOG_LOG, /Both cycles done/i, /rotation starting|Cycle 1 starting/i),
+  posting: status(POST_LOG, /Both rounds done/i, /Round \d+ starting/i),
+  blog: status(BLOG_LOG, /Both cycles done/i, /Cycle \d+ starting/i),
 };
 
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
