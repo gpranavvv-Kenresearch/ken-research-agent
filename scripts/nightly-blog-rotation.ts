@@ -1,7 +1,7 @@
 /**
  * nightly-blog-rotation.ts — daily, sequential blog-generation rotation across
- * the 5 personal-sheet agents: Sanya → Meenakshi → Vansh → Sameeksha →
- * Hritika, 5 blogs each. One agent's run-blog-generator.ts fully exits before
+ * the 6 personal-sheet agents: Sanya → Meenakshi → Vansh → Sameeksha →
+ * Hritika → Vijay, 5 blogs each. One agent's run-blog-generator.ts fully exits before
  * the next agent starts (never concurrent).
  *
  * 2 cycles/day, matching nightly-post-rotation.ts's shape exactly: Cycle 1
@@ -21,7 +21,7 @@ import { spawn, spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-const AGENTS = ['sanya', 'meenakshi', 'vansh', 'sameeksha', 'hritika'];
+const AGENTS = ['sanya', 'meenakshi', 'vansh', 'sameeksha', 'hritika', 'vijay'];
 const CYCLE_GAP_MS = 60 * 60 * 1000; // 1 hour between cycles
 const CYCLES_PER_DAY = 2; // matches nightly-post-rotation.ts's 2 rounds/day
 

@@ -1,6 +1,6 @@
 /**
  * nightly-post-rotation.ts — daily, sequential posting rotation across the 5
- * personal-sheet agents: Sanya → Meenakshi → Vansh → Sameeksha → Hritika.
+ * personal-sheet agents: Sanya → Meenakshi → Vansh → Sameeksha → Hritika → Vijay.
  *
  * Triggers at 8:00 AM IST every day. For each agent, runs the existing
  * counted post cycle (postCycle.ts's startPostCycle, same mechanism as the
@@ -26,7 +26,7 @@
 import fs from 'fs';
 import { startPostCycle, postCycleStatus } from '../src/login-portal/postCycle.js';
 
-const AGENTS = ['sanya', 'meenakshi', 'vansh', 'sameeksha', 'hritika'];
+const AGENTS = ['sanya', 'meenakshi', 'vansh', 'sameeksha', 'hritika', 'vijay'];
 const ROUNDS_PER_DAY = 2;
 const ROUND_GAP_MS = 60 * 60 * 1000; // 1 hour between round 1 and round 2
 const POLL_MS = 15000; // how often to check whether an agent's cycle has finished
