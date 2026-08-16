@@ -13,7 +13,7 @@ export const UTM_PARAMS = {
   Calisthenics: '?utm_source=Calisthenics&utm_medium=Referral&utm_campaign=Automation',
   Substack: '?utm_source=Substack&utm_medium=Referral&utm_campaign=Automation',
   HackMD: '?utm_source=HackMD&utm_medium=Referral&utm_campaign=Automation',
-  LinkedinPulse: '?utm_source=LinkedinPulse&utm_medium=Referral&utm_campaign=Automation',
+  LinkedinPulse: '?utm_source=linkedin-pulse&utm_medium=Referral&utm_campaign=Automation',
   WordPress: '?utm_source=WordPress&utm_medium=Referral&utm_campaign=Automation',
   Blogger: '?utm_source=Blogger&utm_medium=Referral&utm_campaign=Automation',
   Patreon: '?utm_source=Patreon&utm_medium=Referral&utm_campaign=Automation',

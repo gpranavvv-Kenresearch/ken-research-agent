@@ -34,29 +34,17 @@ export async function postToFacebook(
     'span:has-text("What\'s on your mind")',
   ];
 
-  async function tryOpenComposer(): Promise<boolean> {
-    for (const sel of composerSelectors) {
-      try {
-        await page.waitForSelector(sel, { timeout: 5000 });
-        await page.click(sel);
-        console.log(`   Composer opened with: ${sel}`);
-        return true;
-      } catch {
-        // try next selector
-      }
+  let opened = false;
+  for (const sel of composerSelectors) {
+    try {
+      await page.waitForSelector(sel, { timeout: 5000 });
+      await page.click(sel);
+      opened = true;
+      console.log(`   Composer opened with: ${sel}`);
+      break;
+    } catch {
+      // try next selector
     }
-    return false;
-  }
-
-  let opened = await tryOpenComposer();
-  if (!opened) {
-    // One full reload before giving up — cheap, and recovers exactly the "page
-    // never finished loading" class of failure instead of burning the attempt.
-    console.warn('   ⚠️  Composer not found — reloading Facebook home once...');
-    await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' }).catch(() => {});
-    await page.waitForSelector('div[role="feed"], div[role="main"]', { timeout: 15000 }).catch(() => {});
-    await humanDelay(1500, 2000);
-    opened = await tryOpenComposer();
   }
   if (!opened) throw new Error('Could not find Facebook post composer. Page may have changed.');
   await humanDelay(1500, 2500);
@@ -70,6 +58,9 @@ export async function postToFacebook(
   console.log('   Pasting post...');
   await page.keyboard.insertText(cleanPostText);
   await humanDelay(1500, 2500);
+
+  await page.keyboard.press('Enter');
+  await humanDelay(800, 1200);
 
   // Click the Post button inside the dialog — try multiple selectors
   console.log('   Clicking Post...');

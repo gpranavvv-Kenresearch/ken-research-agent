@@ -117,11 +117,12 @@ Never use a competing market-research firm as a source or hyperlink destination.
 Do not present an estimate or forecast as a completed fact.
 Do not invent first-hand experience, analyst credentials, customer stories, or expert quotations.
 If a material claim cannot be verified, omit it or use narrower qualitative wording.
-If the primary report cannot be accessed or its core market identity cannot be verified, return only: RESEARCH BLOCKED: Primary report could not be verified.
+Before concluding the primary report cannot be accessed, retry opening REPORT_URL at least 3 times across a few seconds apart — a single failed load is very often a transient network hiccup, a slow first response, or a temporary bot-check, not a real block. Also try opening the bare domain (kenresearch.com) and re-navigating from there if the direct URL fails. Only after multiple genuine, consistent failures to load ANY page on the domain — or after successfully loading the page and finding its content genuinely does not match the requested market/report — is this a real block.
+If, after exhausting those retries, the primary report truly cannot be accessed or its core market identity cannot be verified, return only: RESEARCH BLOCKED: Primary report could not be verified.
 RESEARCH CONTRACT
 Complete the following silently before drafting.
 1. Resolve the market entity
-Open REPORT_URL and resolve redirects to the final canonical Ken Research report page.
+Open REPORT_URL and resolve redirects to the final canonical Ken Research report page. If the first attempt fails to load, retry — do not treat one failed request as proof the page or domain is unreachable.
 Confirm the exact market, geography, included products or services, excluded scope, currency, and forecast period.
 Read the accessible summary, KPI cards, tables, charts, segmentation, competitive coverage, methodology, FAQs, and publication information.
 2. Lock the DATA_SPINE
@@ -317,21 +318,21 @@ Do not put two links in one sentence.
 Prefer one link per paragraph.
 Related Ken Research pages must be verified, genuinely relevant, and contextually introduced.
 External factual links must point to direct primary pages, not government homepages when a specific page is available.
-Mandatory UTM rules
-Every Ken Research hyperlink must contain these exact parameters using the values in <INPUTS>:
-utm_source=linkedin
-utm_medium=referral
-utm_campaign=automation
+Mandatory UTM rule — EXACT, byte-for-byte, no exceptions
+Every Ken Research hyperlink must end with this EXACT UTM string, character for character, with absolutely nothing changed, added, removed, re-encoded, or reordered:
+?utm_source=linkedin-pulse&utm_medium=Referral&utm_campaign=Automation
+Example — for the report https://www.kenresearch.com/saudi-arabia-outdoor-play-structures-market, the final href must be exactly:
+https://www.kenresearch.com/saudi-arabia-outdoor-play-structures-market?utm_source=linkedin-pulse&utm_medium=Referral&utm_campaign=Automation
 Rules:
-Resolve and verify the clean canonical destination first, then append the UTMs.
-Use ? before the first parameter when the URL has no query string.
-Use &amp; between parameters in HTML source.
-If the canonical URL already has a query string, append the first UTM with &amp;.
-Use lowercase values exactly as supplied.
-Apply UTMs to all 10-12 Ken Research placements, including homepage, primary report, related pages, and Talk to Us.
-Do not add UTMs to official external sources.
-Reopen the tracked URL and verify that it reaches the intended page.
-Reject any Ken Research <a> tag missing one or more required UTM parameters.
+Only the base URL (the domain + path, e.g. https://www.kenresearch.com/saudi-arabia-outdoor-play-structures-market) may vary from link to link. The UTM string itself — ?utm_source=linkedin-pulse&utm_medium=Referral&utm_campaign=Automation — must be pasted identically on every single Ken Research link, with zero variation.
+Use a literal "?" to join the base URL and the UTM string — never "&", never "&amp;", never a second "?".
+Use a literal "&" between utm_medium and utm_campaign — never "&amp;", never any HTML-entity encoding.
+Do not change letter casing anywhere in the UTM string. Do not add, drop, duplicate, or reorder any of the three parameters.
+If the base URL already ends with a "/", still join with a single "?" — never leave a stray "/" or "&" before the UTM string.
+Apply this to all 10-12 Ken Research placements, including homepage, primary report, related pages, and Talk to Us.
+Do not add any query parameters to official external sources.
+Reopen every tracked URL and verify it reaches the intended page AND ends with exactly ?utm_source=linkedin-pulse&utm_medium=Referral&utm_campaign=Automation.
+Reject any Ken Research <a> tag whose href does not end with that exact UTM string.
 Link markup
 For LINK_STYLE_MODE: CMS, use clean crawlable anchors:
 <a href='FINAL_URL'><strong>DESCRIPTIVE ANCHOR</strong></a>
@@ -428,7 +429,7 @@ The article contains exactly 10-12 Ken Research link placements and at least eig
 The primary report appears exactly three times; homepage and Talk to Us appear exactly once each.
 Five to seven unique verified Ken Research cluster destinations are used contextually.
 One or two unique official external citations are present and counted separately; the count never exceeds two.
-Every Ken Research href contains utm_source=linkedin, utm_medium=referral, and utm_campaign=automation using &amp; in HTML.
+Every Ken Research href ends with exactly ?utm_source=linkedin-pulse&utm_medium=Referral&utm_campaign=Automation — no &amp; entities, no extra "?" or "&", no casing changes.
 Official external links contain no UTM parameters.
 Image mode and image validation rules are satisfied.
 Technical package
@@ -460,9 +461,6 @@ UPDATED_DATE:
 CANONICAL_BLOG_URL:
 BREADCRUMB_PARENT_URL:
 CMS_GENERATES_SCHEMA: YES
-UTM_SOURCE: linkedin
-UTM_MEDIUM: referral
-UTM_CAMPAIGN: automation
 </INPUTS>`;
 }
 

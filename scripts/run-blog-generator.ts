@@ -19,6 +19,7 @@ import os from 'os';
 import path from 'path';
 import { acquireBrowserSlot } from '../src/utils/browserSlots.js';
 import { acquireJobSlot, estimateWaitMs } from '../src/utils/jobQueue.js';
+import { runBlogSanityChecks } from '../src/agents/blogSanityAgent.js';
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -332,7 +333,11 @@ async function pass() {
 
       if (res && res.html) {
         const html = injectCoverImage(res.html, coverImageUrl, marketName);
-        writeRow(row._dataRow, { ...res, html }, coverImageUrl);
+        const sanity = runBlogSanityChecks(html, { title: marketName });
+        if (sanity.changes.length > 0) {
+          console.log(`   [BLOG SANITY] Applied: ${sanity.changes.join(', ')}`);
+        }
+        writeRow(row._dataRow, { ...res, html: sanity.html }, coverImageUrl);
         done++;
       }
     }
