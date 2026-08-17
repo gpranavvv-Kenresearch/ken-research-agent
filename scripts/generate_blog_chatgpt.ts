@@ -356,7 +356,7 @@ Snapshot markup:
 <img src='SNAPSHOT_IMAGE_URL' alt='VERIFIED DESCRIPTIVE ALT' loading='lazy'/>
 OUTPUT MODES
 ARTICLE_HTML
-Return only one clean HTML fragment.
+Precede the fragment with the single "Description:" line defined in FINAL RESPONSE, then return one clean HTML fragment.
 Put each block element on a new real line.
 Never output the literal character sequences \\n, \\r, or \\t.
 Do not JSON-escape the HTML.
@@ -445,9 +445,12 @@ Cannibalization alerts and post-publish technical checks are present in CMS_PACK
 Schema is absent when CMS-generated or when required inputs are missing.
 Schema and FAQs match visible content exactly.
 FINAL RESPONSE
-For OUTPUT_MODE: ARTICLE_HTML, return only the validated HTML fragment.
+For OUTPUT_MODE: ARTICLE_HTML, output EXACTLY ONE line beginning "Description: " (the meta description, built per the DESCRIPTION LINE rule below), then a line break, then the validated HTML fragment — and nothing else.
 For OUTPUT_MODE: CMS_PACKAGE, return only the validated JSON object.
 Do not add explanations, research notes, validation results, or Markdown fences.
+DESCRIPTION LINE (ARTICLE_HTML only) — build it from the locked DATA_SPINE, in EXACTLY this shape and word order:
+Description: The {full descriptive market name} worth USD {base or current value} {unit} in {base year} is growing at a CAGR of {published CAGR}% to reach USD {forecast value} {unit} by {forecast year}. {three to five verified market participants from the DATA_SPINE, comma-separated}
+Rules for this line: use the FULL descriptive market name (not the short label); pull every number from the DATA_SPINE and never invent one; if the report does not provide a given value, omit only that clause and keep the sentence grammatical (e.g. drop "worth USD ... in {year}" when there is no base value); one line only, plain text, no HTML tags, no markdown.
 <INPUTS> REPORT_TITLE: ${reportTitle} REPORT_URL: ${reportUrl}
 OUTPUT_MODE: ARTICLE_HTML
 LINK_STYLE_MODE: CMS
@@ -602,6 +605,11 @@ async function extract(page: Page): Promise<{ title: string; description: string
     if (lastTag >= 0) html = html.slice(0, lastTag + 1);
     html = html.trim();
   }
+
+  // Safety: if the model nested the "Description:" line inside the HTML block
+  // (e.g. everything in one code fence), drop it from the article body — the
+  // descMatch below still reads it from the full message text for the meta desc.
+  html = html.replace(/^\s*Description:[^\n]*\r?\n+/i, '').trim();
 
   // The master prompt (ARTICLE_HTML mode) returns ONLY the HTML fragment —
   // no "Title:"/"Description:" lines. Fall back to pulling those straight out
