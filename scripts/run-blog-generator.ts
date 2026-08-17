@@ -143,7 +143,7 @@ function generate(row: BlogRow): Promise<{ title: string; description: string; h
   return new Promise((resolve) => {
     const child = spawnTsx(args, process.env);
     let stdout = '';
-    const to = setTimeout(() => { try { child.kill(); } catch { /* noop */ } }, 35 * 60 * 1000);
+    const to = setTimeout(() => { try { child.kill(); } catch { /* noop */ } }, 20 * 60 * 1000); // per-blog watchdog: drop a stuck blog after 20 min, move on
     child.stdout?.on('data', (d) => { stdout += d.toString(); });
     child.stderr?.on('data', (d) => { process.stdout.write(d.toString()); }); // live progress → status banner
     child.on('close', () => {
