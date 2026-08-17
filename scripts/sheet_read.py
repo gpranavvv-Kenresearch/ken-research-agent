@@ -215,33 +215,41 @@ def action_row(sheet_name, data_row):
 
 def action_blog_unprocessed(sheet_name, limit=15):
     """
-    Returns rows where targetUrl is set but Blog Content is empty (< 50 chars).
-    These are ready for blog generation.
+    Returns only FRESH rows for blog generation: targetUrl set AND every
+    generation-output column empty. Those are columns F,H,I,J,K,L in the blog
+    sheet (blogBatch + the five generated fields). If ANY of them is already
+    filled the row was previously processed (or partially processed) — skip it
+    and pick a genuinely untouched row instead, so generation never re-hits a
+    half-written row. (Column G, Submitted At, is intentionally NOT guarded.)
     """
     headers, data_rows = get_all_rows(sheet_name)
 
     url_col = "targetUrl"
-    content_col = "Blog Content"
-
     if url_col not in headers:
         return {"ok": False, "error": f"Column '{url_col}' not found in sheet"}
+
+    # Matched by header NAME (robust across sheets whose exact column letters differ).
+    FRESH_GUARD_COLS = ["blogBatch", "Blog Title", "Blog Description",
+                        "Blog Caption", "Cover Image URL", "Blog Content"]
 
     result = []
     for i, row in enumerate(data_rows):
         d = row_to_dict(headers, row, i + 1)
         target_url = d.get("targetUrl", "").strip()
-        blog_content = d.get("Blog Content", "").strip()
-
-        if target_url and len(blog_content) < 50:
-            result.append(d)
-            if len(result) >= limit:
-                break
+        if not target_url:
+            continue
+        # Any generation-output column non-empty => not fresh => skip.
+        if any((d.get(c, "") or "").strip() for c in FRESH_GUARD_COLS):
+            continue
+        result.append(d)
+        if len(result) >= limit:
+            break
 
     return {
         "ok": True,
         "count": len(result),
         "rows": result,
-        "_note": f"Rows with targetUrl set and Blog Content empty (limit {limit})"
+        "_note": f"Fresh rows: targetUrl set and blogBatch/Blog Title/Description/Caption/Cover Image URL/Blog Content all empty (limit {limit})"
     }
 
 

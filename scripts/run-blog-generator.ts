@@ -251,7 +251,10 @@ function writeRow(dataRow: number, res: { title: string; description: string; ht
     'blogBatch': `BLOG-${istTimestamp()}-CG`,
   };
   if (res.title) updates['Blog Title'] = res.title;
-  if (res.description) updates['Blog Description'] = res.description;
+  if (res.description) {
+    updates['Blog Description'] = res.description;
+    updates['Blog Caption'] = res.description; // same Ken Research-style description into the Caption column too
+  }
   if (coverImageUrl) updates['Cover Image URL'] = coverImageUrl;
 
   const tmp = path.join(os.tmpdir(), `blog_updates_${dataRow}_${Date.now()}.json`);
