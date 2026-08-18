@@ -1,51 +1,44 @@
 /**
- * nightly-blog-rotation.ts — CONTINUOUS, TIME-SLOTTED blog-generation loop.
+ * nightly-blog-rotation.ts — CONTINUOUS blog-generation loop, N blogs per person.
  *
  * Round-robin across the 6 personal-sheet agents (each with their OWN ChatGPT
- * account: .sessions-cookies/chatgpt-profile-{agent}). Every person gets a fixed
- * time SLOT to generate blogs; when their slot is up, generation is stopped, a
- * short break follows, and the next person's slot begins. Loops forever.
+ * account: .sessions-cookies/chatgpt-profile-{agent}). Each person generates up
+ * to BLOGS_PER_PERSON blogs, then a BREAK_MIN break, then the next person. Loops
+ * forever, day and night — no schedule window.
  *
  *   for each agent, forever:
- *     - skip instantly if the agent has no fresh URLs
- *     - else generate blogs for up to SLOT_MIN minutes (each blog capped by
- *       run-blog-generator's own 20-min per-blog watchdog)
- *     - at slot end, KILL the run (even mid-blog) so nobody overruns their slot
- *     - BREAK_MIN break, then the next agent's slot
+ *     - sweep any leftover generation/Chrome FIRST (NO OVERLAP — the previous
+ *       person is fully killed before this one starts)
+ *     - skip instantly if the agent has no fresh URLs (Blog Content empty)
+ *     - else generate up to BLOGS_PER_PERSON blogs (each blog capped by
+ *       run-blog-generator's own 20-min per-blog watchdog; whole run capped by
+ *       PERSON_MAX_MIN as a safety net against a hang)
+ *     - BREAK_MIN break, then the next person
  *   if a whole pass finds no fresh URLs anywhere, sleep DRY_SLEEP_MIN and recheck.
  *
- * Giving each account its own slot (with the others idle) is what keeps ChatGPT
- * from rate-limiting: only one account is ever active at a time, and each rests
- * while the other five cycle through.
- *
- * NO 14h `timeout` wrapper. Kept alive / self-healed by a watchdog cron: every
- * 15 min a `flock -n` starts it ONLY if not already running.
+ * NO 14h timeout, NO overnight pause. Kept alive / self-healed by a watchdog
+ * cron: every 15 min a `flock -n` starts it only if not already running.
  *
  * Config (env):
- *   BLOG_SLOT_MIN   minutes each person generates before being stopped (default 180 = 3h)
- *   BLOG_BREAK_MIN  break between people (default 10)
- *   BLOG_SLOT_LIMIT max blogs attempted per slot; exits early if the person runs out (default 100)
+ *   BLOG_LIMIT          blogs per person before the break (default 5)
+ *   BLOG_BREAK_MIN      break between people (default 30)
+ *   BLOG_PERSON_MAX_MIN safety cap: kill a person's run if it hangs beyond this (default 150)
  *
  * Usage:
- *   node --import=tsx scripts/nightly-blog-rotation.ts             # continuous loop (production)
- *   node --import=tsx scripts/nightly-blog-rotation.ts --now       # run ONE agent slot then exit (testing)
- *   BLOG_SLOT_MIN=2 node --import=tsx scripts/nightly-blog-rotation.ts --now   # 2-min slot smoke test
+ *   node --import=tsx scripts/nightly-blog-rotation.ts          # continuous loop (production)
+ *   node --import=tsx scripts/nightly-blog-rotation.ts --now    # one person then exit (testing)
  */
 import { spawn, spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
 const AGENTS = ['sanya', 'meenakshi', 'vansh', 'sameeksha', 'hritika', 'vijay'];
-const SLOT_MIN = Number(process.env.BLOG_SLOT_MIN || 180);     // minutes per person's generation slot
-const BREAK_MIN = Number(process.env.BLOG_BREAK_MIN || 30);     // break between people
-const SLOT_LIMIT = Number(process.env.BLOG_SLOT_LIMIT || 100);  // max blogs per slot (exits early if URLs run out)
-const DRY_SLEEP_MIN = 30;                                       // whole pass found no work → wait this long, recheck
+const BLOGS_PER_PERSON = Number(process.env.BLOG_LIMIT || 5);           // blogs each person generates before the break
+const BREAK_MIN = Number(process.env.BLOG_BREAK_MIN || 30);             // break between people
+const PERSON_MAX_MIN = Number(process.env.BLOG_PERSON_MAX_MIN || 150);  // safety cap per person (hang guard)
+const DRY_SLEEP_MIN = 30;                                               // whole pass found no work → wait, recheck
 
-function arg(flag: string): string | undefined {
-  const i = process.argv.indexOf(flag);
-  return i !== -1 ? process.argv[i + 1] : undefined;
-}
-const SKIP_WAIT = process.argv.includes('--now'); // one agent slot then exit (testing)
+const SKIP_WAIT = process.argv.includes('--now'); // one person then exit (testing)
 
 const PY = process.env.PYTHON
   || (fs.existsSync(path.resolve('venv/bin/python3')) ? path.resolve('venv/bin/python3')
@@ -60,16 +53,16 @@ function log(msg: string): void {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Hard-kill EVERY blog-generation subprocess + its ChatGPT Chrome (all agents).
- * child.kill() only reaps run-blog-generator itself; the generate_blog_chatgpt /
+ * child.kill() only reaps run-blog-generator; the generate_blog_chatgpt /
  * generate_image it spawned, and the Chrome THOSE launched, are separate PIDs and
- * would otherwise keep running into the next person's slot. Matches ONLY blog-gen
+ * would otherwise keep running into the next person's turn. Matches ONLY blog-gen
  * ChatGPT profiles — never the posting sessions (.sessions-{agent}/{platform}). */
 function sweepBlogGeneration(): void {
   const patterns = [
     'run-blog-generator.ts',
     'generate_blog_chatgpt.ts',
     'generate_image.ts',
-    'chatgpt-profile-',        // any agent's blog-text Chrome (--user-data-dir …/chatgpt-profile-<agent>)
+    'chatgpt-profile-',        // any agent's blog-text Chrome
     'chatgpt-image-profile-',  // any agent's cover-image Chrome
   ];
   for (const p of patterns) {
@@ -77,14 +70,14 @@ function sweepBlogGeneration(): void {
   }
 }
 
-/** Generate blogs for one agent for up to `slotMs`, then stop cleanly. Returns
- * early if the agent runs out of fresh URLs first. On exit it sweeps every
- * leftover generation/Chrome PID so the next slot starts with a clean slate. */
-function generateForSlot(agent: string, slotMs: number): Promise<void> {
+/** Generate up to BLOGS_PER_PERSON blogs for one agent; exits when done (5 blogs
+ * or out of URLs) or when the safety cap trips. Sweeps every leftover
+ * generation/Chrome PID on exit so the next person starts clean. */
+function generateForPerson(agent: string, maxMs: number): Promise<void> {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [
       '--import=tsx', 'scripts/run-blog-generator.ts',
-      '--name', agent, '--limit', String(SLOT_LIMIT), '--image-prompt', '1',
+      '--name', agent, '--limit', String(BLOGS_PER_PERSON), '--image-prompt', '1',
     ], {
       env: { ...process.env, WORKER_NAME: agent, DISPLAY: process.env.DISPLAY || ':99' },
       stdio: 'ignore',
@@ -93,15 +86,15 @@ function generateForSlot(agent: string, slotMs: number): Promise<void> {
     const finish = () => {
       if (done) return;
       done = true;
-      clearTimeout(slotTimer);
-      sweepBlogGeneration(); // reap orphaned generate_blog_chatgpt / generate_image / Chrome
+      clearTimeout(safety);
+      sweepBlogGeneration();
       resolve();
     };
-    const slotTimer = setTimeout(() => {
-      log(`⏱ ${agent}: slot time up (${Math.round(slotMs / 60000)} min) — stopping generation.`);
+    const safety = setTimeout(() => {
+      log(`⏱ ${agent}: run exceeded ${Math.round(maxMs / 60000)} min (hung?) — killing, moving on.`);
       try { child.kill('SIGKILL'); } catch { /* noop */ }
       setTimeout(finish, 3000); // let the tree die, then hard-sweep + resolve
-    }, slotMs);
+    }, maxMs);
     child.on('close', finish);
     child.on('error', (err) => { log(`✗ ${agent}: failed to start — ${err.message}`); finish(); });
   });
@@ -109,14 +102,15 @@ function generateForSlot(agent: string, slotMs: number): Promise<void> {
 
 interface BlogRow { blogBatch?: string; 'Blog Content'?: string; 'Cover Image URL'?: string; [k: string]: unknown; }
 
-/** Fresh (generation-ready) row count for an agent. -1 = read failed (treat as "maybe has work"). */
+/** Does this agent have any fresh (Blog-Content-empty) rows right now? -1 = read
+ * failed (treated as "maybe has work" so a transient error never wrongly skips). */
 function freshCount(agent: string): number {
-  const r = spawnSync(PY, ['scripts/sheet_read.py', '--sheet', 'blog', '--name', agent, '--action', 'blog-unprocessed'], { encoding: 'utf-8' });
+  const r = spawnSync(PY, ['scripts/sheet_read.py', '--sheet', 'blog', '--name', agent, '--action', 'blog-unprocessed', '--limit', String(BLOGS_PER_PERSON)], { encoding: 'utf-8' });
   if (r.status !== 0) return -1;
   try { return Number(JSON.parse(r.stdout).count ?? 0); } catch { return -1; }
 }
 
-/** Re-read the sheet and report how many of this slot's rows got content. */
+/** Re-read the sheet and report how many of this turn's rows got content. */
 function verifyAndReport(agent: string, sinceBatchStamp: string): void {
   const r = spawnSync(PY, ['scripts/sheet_read.py', '--sheet', 'blog', '--name', agent, '--action', 'all'], { encoding: 'utf-8' });
   if (r.status !== 0) { log(`⚠ ${agent}: could not re-read sheet to verify (exit ${r.status})`); return; }
@@ -126,7 +120,7 @@ function verifyAndReport(agent: string, sinceBatchStamp: string): void {
   const withContent = thisRun.filter((row) => (row['Blog Content'] || '').trim());
   const withImage = withContent.filter((row) => (row['Cover Image URL'] || '').trim());
   const missing = withContent.length - withImage.length;
-  log(`${agent}: ${withContent.length} generated this slot, ${withImage.length}/${withContent.length} with cover image${missing ? ` (${missing} missing an image)` : ''}`);
+  log(`${agent}: ${withContent.length} generated this turn, ${withImage.length}/${withContent.length} with cover image${missing ? ` (${missing} missing an image)` : ''}`);
 }
 
 function istTimestamp(): string {
@@ -135,48 +129,26 @@ function istTimestamp(): string {
   return `${iso.slice(0, 10)}-${iso.slice(11, 19)}`;
 }
 
-function istMinutesOfDay(): number {
-  const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
-  return ist.getUTCHours() * 60 + ist.getUTCMinutes();
-}
-
-const START_HOUR_MIN = 8 * 60; // generation window opens at 08:00 IST
-
-/** Generation runs from 08:00 IST onward; between 00:00 and 08:00 IST it sleeps
- * until 8 AM. So a slot never starts in the small hours, it always (re)starts at
- * 8 AM, and a crash/restart after 8 AM just resumes immediately. */
-async function waitForStartWindow(): Promise<void> {
-  if (SKIP_WAIT) return;
-  const now = istMinutesOfDay();
-  if (now < START_HOUR_MIN) {
-    const waitMin = START_HOUR_MIN - now;
-    log(`Before 08:00 IST — sleeping ${waitMin} min until the generation window opens.`);
-    await sleep(waitMin * 60 * 1000);
-  }
-}
-
 async function main() {
-  log(`Blog slot loop starting. Order: ${AGENTS.join(' → ')} | slot ${SLOT_MIN} min/person | ${BREAK_MIN} min break | ${SKIP_WAIT ? '[--now: one slot then exit]' : '[continuous]'}`);
+  log(`Blog loop starting. Order: ${AGENTS.join(' → ')} | ${BLOGS_PER_PERSON} blogs/person | ${BREAK_MIN} min break | ${SKIP_WAIT ? '[--now: one person]' : '[continuous]'}`);
   for (;;) {
     let anyWork = false;
     for (const agent of AGENTS) {
-      await waitForStartWindow(); // hold before each slot until 08:00 IST if we're in the overnight pause
-      // NO OVERLAP: before this person starts, guarantee the previous person's
-      // generation + Chrome is completely gone (sweep, then a short settle).
+      // NO OVERLAP: before this person starts, kill any leftover generation + Chrome.
       sweepBlogGeneration();
       await sleep(3000);
       const fresh = freshCount(agent);
-      if (fresh === 0) { log(`${agent}: no fresh URLs — skipping slot.`); continue; }
+      if (fresh === 0) { log(`${agent}: no fresh URLs — skipping.`); continue; }
       anyWork = true;
       const startStamp = istTimestamp();
-      log(`=== ${agent}'s slot starting — up to ${SLOT_MIN} min${fresh > 0 ? `, ${fresh} fresh URLs` : ''} ===`);
-      await generateForSlot(agent, SLOT_MIN * 60 * 1000);
+      log(`=== ${agent}: generating up to ${BLOGS_PER_PERSON} blogs${fresh > 0 ? `, ${fresh} fresh` : ''} ===`);
+      await generateForPerson(agent, PERSON_MAX_MIN * 60 * 1000);
       verifyAndReport(agent, startStamp);
-      if (SKIP_WAIT) { log('--now: one slot done, exiting.'); return; }
-      log(`--- ${agent}'s slot ended — ${BREAK_MIN} min break before next person ---`);
+      if (SKIP_WAIT) { log('--now: one person done, exiting.'); return; }
+      log(`--- ${agent} done — ${BREAK_MIN} min break before next person ---`);
       await sleep(BREAK_MIN * 60 * 1000);
     }
-    if (SKIP_WAIT) return; // (all agents were dry in a --now run)
+    if (SKIP_WAIT) return;
     if (!anyWork) {
       log(`No fresh URLs for anyone — sleeping ${DRY_SLEEP_MIN} min before rechecking.`);
       await sleep(DRY_SLEEP_MIN * 60 * 1000);
