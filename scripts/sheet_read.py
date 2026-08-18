@@ -215,12 +215,12 @@ def action_row(sheet_name, data_row):
 
 def action_blog_unprocessed(sheet_name, limit=15):
     """
-    Returns only FRESH rows for blog generation: targetUrl set AND every
-    generation-output column empty. Those are columns F,H,I,J,K,L in the blog
-    sheet (blogBatch + the five generated fields). If ANY of them is already
-    filled the row was previously processed (or partially processed) — skip it
-    and pick a genuinely untouched row instead, so generation never re-hits a
-    half-written row. (Column G, Submitted At, is intentionally NOT guarded.)
+    Returns FRESH rows for blog generation: targetUrl set AND Blog Content empty.
+    An empty Blog Content cell is the ONLY signal that the article was never
+    generated. Other columns (Blog Title, blogBatch, Cover Image URL, Blog
+    Description/Caption) can be pre-filled by the submit form or left behind by a
+    partial run WITHOUT a real article existing, so they must NOT be used to skip
+    a row — doing so hid rows that genuinely still need generating.
     """
     headers, data_rows = get_all_rows(sheet_name)
 
@@ -228,18 +228,15 @@ def action_blog_unprocessed(sheet_name, limit=15):
     if url_col not in headers:
         return {"ok": False, "error": f"Column '{url_col}' not found in sheet"}
 
-    # Matched by header NAME (robust across sheets whose exact column letters differ).
-    FRESH_GUARD_COLS = ["blogBatch", "Blog Title", "Blog Description",
-                        "Blog Caption", "Cover Image URL", "Blog Content"]
-
     result = []
     for i, row in enumerate(data_rows):
         d = row_to_dict(headers, row, i + 1)
         target_url = d.get("targetUrl", "").strip()
         if not target_url:
             continue
-        # Any generation-output column non-empty => not fresh => skip.
-        if any((d.get(c, "") or "").strip() for c in FRESH_GUARD_COLS):
+        # Blog Content empty => article not generated => FRESH. A real Ken
+        # Research article is ~1500+ words, so <50 chars means "not generated".
+        if len((d.get("Blog Content", "") or "").strip()) >= 50:
             continue
         result.append(d)
         if len(result) >= limit:
@@ -249,7 +246,7 @@ def action_blog_unprocessed(sheet_name, limit=15):
         "ok": True,
         "count": len(result),
         "rows": result,
-        "_note": f"Fresh rows: targetUrl set and blogBatch/Blog Title/Description/Caption/Cover Image URL/Blog Content all empty (limit {limit})"
+        "_note": f"Fresh rows: targetUrl set and Blog Content empty (limit {limit})"
     }
 
 
