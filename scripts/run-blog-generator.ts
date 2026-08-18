@@ -100,7 +100,7 @@ function wordCount(html: string): number {
 }
 
 function readUnprocessed(): BlogRow[] {
-  const r = spawnSync(PY, ['scripts/sheet_read.py', '--sheet', 'blog', '--name', NAME, '--action', 'blog-unprocessed'], { encoding: 'utf-8' });
+  const r = spawnSync(PY, ['scripts/sheet_read.py', '--sheet', 'blog', '--name', NAME, '--action', 'blog-unprocessed', '--limit', String(LIMIT)], { encoding: 'utf-8' });
   if (r.status !== 0) {
     console.log('⚠ Could not read your Google Sheet. (Check the server / credentials.)');
     return [];
@@ -160,6 +160,32 @@ function generate(row: BlogRow): Promise<{ title: string; description: string; h
       resolve(null);
     });
   });
+}
+
+// A real Ken Research article ALWAYS has an <h1> and at least one <h2>. When
+// ChatGPT refuses ("RESEARCH BLOCKED: Primary report could not be verified", a
+// transient bot-check, an apology, etc.) the response has neither — so that's
+// our signal it isn't a valid blog and must be regenerated, not saved.
+function isValidBlog(html: string | undefined): boolean {
+  if (!html) return false;
+  if (/RESEARCH BLOCKED/i.test(html)) return false;
+  return /<h1[\s>]/i.test(html) && /<h2[\s>]/i.test(html);
+}
+
+const MAX_GEN_ATTEMPTS = 3;
+
+/** Generate the article, retrying if ChatGPT returns a non-blog (no H1/H2 /
+ * RESEARCH BLOCKED) — each attempt is a fresh ChatGPT chat. Returns null only if
+ * every attempt failed, so the row stays fresh and is retried on a later run
+ * (never saving a refusal as the blog). */
+async function generateWithRetry(row: BlogRow): Promise<{ title: string; description: string; html: string } | null> {
+  for (let attempt = 1; attempt <= MAX_GEN_ATTEMPTS; attempt++) {
+    const res = await generate(row);
+    if (res && isValidBlog(res.html)) return res;
+    console.log(`⚠ Attempt ${attempt}/${MAX_GEN_ATTEMPTS}: ChatGPT returned no valid blog (missing H1/H2 or RESEARCH BLOCKED) — retrying…`);
+  }
+  console.log('✗ No valid blog after retries — leaving this row for a later run.');
+  return null;
 }
 
 /**
@@ -320,7 +346,7 @@ async function pass() {
         console.log(`\n🖼️  Generating cover image + article in parallel for: "${marketName}"`);
         [coverImageUrl, res] = await Promise.all([
           withCoverLog(generateImageWithRetry(marketName, String(row.targetUrl || ''), imagePromptChoice)),
-          generate(row),
+          generateWithRetry(row),
         ]);
       } else {
         // Sharing one ChatGPT profile (no dedicated image login for this agent) — a
@@ -331,7 +357,7 @@ async function pass() {
         // another instead.
         console.log(`\n🖼️  Generating cover image for: "${marketName}"`);
         coverImageUrl = await withCoverLog(generateImageWithRetry(marketName, String(row.targetUrl || ''), imagePromptChoice));
-        res = await generate(row);
+        res = await generateWithRetry(row);
       }
 
       if (res && res.html) {
