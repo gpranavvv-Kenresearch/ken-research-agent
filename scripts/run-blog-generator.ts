@@ -172,17 +172,33 @@ function isValidBlog(html: string | undefined): boolean {
   return /<h1[\s>]/i.test(html) && /<h2[\s>]/i.test(html);
 }
 
-const MAX_GEN_ATTEMPTS = 3;
+/** Mark a row as blocked so it's never re-picked: writes blogBatch="BLOCKED-<ist>".
+ * The blog-unprocessed filter skips BLOCKED rows, and posting ignores it (Blog
+ * Content stays empty). Frees the loop to move on to reports ChatGPT CAN verify. */
+function markBlocked(dataRow: number): void {
+  const tmp = path.join(os.tmpdir(), `blk_${dataRow}_${Date.now()}.json`);
+  fs.writeFileSync(tmp, JSON.stringify({ blogBatch: `BLOCKED-${istTimestamp()}` }), 'utf-8');
+  spawnSync(PY, ['scripts/sheet_write.py', '--sheet', 'blog', '--name', NAME, '--row', String(dataRow), '--updates-file', tmp], { encoding: 'utf-8' });
+  try { fs.rmSync(tmp, { force: true }); } catch { /* noop */ }
+}
 
-/** Generate the article, retrying if ChatGPT returns a non-blog (no H1/H2 /
- * RESEARCH BLOCKED) — each attempt is a fresh ChatGPT chat. Returns null only if
- * every attempt failed, so the row stays fresh and is retried on a later run
- * (never saving a refusal as the blog). */
+const MAX_GEN_ATTEMPTS = 2;
+
+/** Generate the article. If ChatGPT refuses with RESEARCH BLOCKED (it can't
+ * verify this report), that's deterministic — don't retry: mark the row blocked
+ * so it's never re-picked, and skip to the next row. Only a non-refusal invalid
+ * (cut-off / transient) is retried. Never saves a refusal as the blog. */
 async function generateWithRetry(row: BlogRow): Promise<{ title: string; description: string; html: string } | null> {
   for (let attempt = 1; attempt <= MAX_GEN_ATTEMPTS; attempt++) {
     const res = await generate(row);
     if (res && isValidBlog(res.html)) return res;
-    console.log(`⚠ Attempt ${attempt}/${MAX_GEN_ATTEMPTS}: ChatGPT returned no valid blog (missing H1/H2 or RESEARCH BLOCKED) — retrying…`);
+    if (res && /RESEARCH\s*BLOCKED/i.test(res.html || '')) {
+      console.log('⏭ RESEARCH BLOCKED — ChatGPT can\'t verify this report; marking blocked + skipping to the next row.');
+      const dr = Number((row as { _dataRow?: number })._dataRow);
+      if (dr > 0) markBlocked(dr);
+      return null;
+    }
+    console.log(`⚠ Attempt ${attempt}/${MAX_GEN_ATTEMPTS}: no valid blog — retrying…`);
   }
   console.log('✗ No valid blog after retries — leaving this row for a later run.');
   return null;

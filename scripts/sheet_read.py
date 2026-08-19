@@ -238,6 +238,10 @@ def action_blog_unprocessed(sheet_name, limit=15):
         # Research article is ~1500+ words, so <50 chars means "not generated".
         if len((d.get("Blog Content", "") or "").strip()) >= 50:
             continue
+        # Rows marked BLOCKED (ChatGPT couldn't verify that report) are NOT fresh —
+        # skip them so generation never re-hits a report it can't write.
+        if (d.get("blogBatch", "") or "").strip().upper().startswith("BLOCKED"):
+            continue
         result.append(d)
         if len(result) >= limit:
             break
