@@ -45,6 +45,31 @@ import { loginToTumblr, closeTumblrBrowser } from '../browser/tumblr/login.js';
 import { postToTumblr } from '../browser/tumblr/poster.js';
 import { loginToMastodon, closeMastodonBrowser } from '../browser/mastodon/login.js';
 import { postToMastodon } from '../browser/mastodon/poster.js';
+// ══ SBM + PPT/PDF platform browser tools (grafted) ══
+import { loginToInstapaper, closeInstapaperBrowser } from '../browser/instapaper/login.js';
+import { postToInstapaper } from '../browser/instapaper/poster.js';
+import { loginToRaindrop, closeRaindropBrowser } from '../browser/raindrop/login.js';
+import { postToRaindrop } from '../browser/raindrop/poster.js';
+import { loginToPearltrees, closePearltreesBrowser } from '../browser/pearltrees/login.js';
+import { postToPearltrees } from '../browser/pearltrees/poster.js';
+import { loginToHatena, closeHatenaBrowser } from '../browser/hatena/login.js';
+import { postToHatena } from '../browser/hatena/poster.js';
+import { loginToPdfHost, closePdfHostBrowser } from '../browser/pdfhost/login.js';
+import { postToPdfHost } from '../browser/pdfhost/poster.js';
+import { loginToFlipHtml5, closeFlipHtml5Browser } from '../browser/fliphtml5/login.js';
+import { postToFlipHtml5 } from '../browser/fliphtml5/poster.js';
+import { loginToScribd, closeScribdBrowser } from '../browser/scribd/login.js';
+import { postToScribd } from '../browser/scribd/poster.js';
+import { loginToFourShared, closeFourSharedBrowser } from '../browser/fourshared/login.js';
+import { postToFourShared } from '../browser/fourshared/poster.js';
+import { loginToYumpu, closeYumpuBrowser } from '../browser/yumpu/login.js';
+import { postToYumpu } from '../browser/yumpu/poster.js';
+import { loginToIssuu, closeIssuuBrowser } from '../browser/issuu/login.js';
+import { postToIssuu } from '../browser/issuu/poster.js';
+import { loginToSlideShare, closeSlideShareBrowser } from '../browser/slideshare/login.js';
+import { postToSlideShare } from '../browser/slideshare/poster.js';
+import { loginToSpeakerDeck, closeSpeakerDeckBrowser } from '../browser/speakerdeck/login.js';
+import { postToSpeakerDeck } from '../browser/speakerdeck/poster.js';
 import { getAccountByHandle } from '../config/accounts.js';
 export interface Tool {
   name: string;
@@ -74,6 +99,19 @@ let patreonPage: Page | null = null;
 let notionPage: Page | null = null;
 let notePage: Page | null = null;
 let paragraphPage: Page | null = null;
+// ══ SBM + PPT/PDF platform browser tools (grafted) ══
+let instapaperPage: Page | null = null;
+let raindropPage: Page | null = null;
+let pearltreesPage: Page | null = null;
+let hatenaPage: Page | null = null;
+let pdfhostPage: Page | null = null;
+let fliphtml5Page: Page | null = null;
+let scribdPage: Page | null = null;
+let foursharedPage: Page | null = null;
+let yumpuPage: Page | null = null;
+let issuuPage: Page | null = null;
+let slidesharePage: Page | null = null;
+let speakerdeckPage: Page | null = null;
 
 export const BROWSER_TOOLS: Tool[] = [
   {
@@ -482,6 +520,127 @@ export const BROWSER_TOOLS: Tool[] = [
       required: ['title', 'htmlContent'],
     },
   },
+  // ══ SBM + PPT/PDF platform browser tools (grafted) ══
+  {
+    name: 'login_instapaper',
+    description: 'Login to Instapaper with account credentials',
+    input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: 'Instapaper account nickname' } }, required: ['nickname'] },
+  },
+  {
+    name: 'post_instapaper',
+    description: 'Save a bookmark to Instapaper. Must call login_instapaper first.',
+    input_schema: { type: 'object' as const, properties: { title: { type: 'string', description: 'Bookmark title' }, targetUrl: { type: 'string', description: 'URL to bookmark' }, note: { type: 'string', description: 'Optional note' } }, required: ['title', 'targetUrl'] },
+  },
+  {
+    name: 'login_raindrop',
+    description: 'Login to Raindrop.io with account credentials',
+    input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: 'Raindrop account nickname' } }, required: ['nickname'] },
+  },
+  {
+    name: 'post_raindrop',
+    description: 'Save a bookmark to Raindrop.io. Must call login_raindrop first.',
+    input_schema: { type: 'object' as const, properties: { title: { type: 'string', description: 'Bookmark title' }, targetUrl: { type: 'string', description: 'URL to bookmark' }, note: { type: 'string', description: 'Optional description' }, tags: { type: 'array', items: { type: 'string' }, description: 'Optional tags' } }, required: ['title', 'targetUrl'] },
+  },
+  {
+    name: 'login_pearltrees',
+    description: 'Login to Pearltrees with account credentials',
+    input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: 'Pearltrees account nickname' } }, required: ['nickname'] },
+  },
+  {
+    name: 'post_pearltrees',
+    description: 'Save a pearl (bookmark) to Pearltrees. Must call login_pearltrees first.',
+    input_schema: { type: 'object' as const, properties: { title: { type: 'string', description: 'Page title' }, targetUrl: { type: 'string', description: 'URL to bookmark' } }, required: ['title', 'targetUrl'] },
+  },
+  {
+    name: 'login_hatena',
+    description: 'Login to Hatena Bookmark with account credentials',
+    input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: 'Hatena account nickname' } }, required: ['nickname'] },
+  },
+  {
+    name: 'post_hatena',
+    description: 'Save a bookmark to Hatena. Must call login_hatena first.',
+    input_schema: { type: 'object' as const, properties: { title: { type: 'string', description: 'Bookmark title' }, targetUrl: { type: 'string', description: 'URL to bookmark' }, comment: { type: 'string', description: 'Optional comment' } }, required: ['title', 'targetUrl'] },
+  },
+  {
+    name: 'login_pdfhost',
+    description: 'Login to PDFHost with account credentials',
+    input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: 'PDFHost account nickname' } }, required: ['nickname'] },
+  },
+  {
+    name: 'post_pdfhost',
+    description: 'Upload a PDF to PDFHost. Must call login_pdfhost first.',
+    input_schema: { type: 'object' as const, properties: { filePath: { type: 'string', description: 'Local path to the PDF file' }, title: { type: 'string', description: 'Optional title' }, description: { type: 'string', description: 'Optional description' } }, required: ['filePath'] },
+  },
+  {
+    name: 'login_fliphtml5',
+    description: 'Login to FlipHTML5 with account credentials',
+    input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: 'FlipHTML5 account nickname' } }, required: ['nickname'] },
+  },
+  {
+    name: 'post_fliphtml5',
+    description: 'Upload a PDF to FlipHTML5. Must call login_fliphtml5 first.',
+    input_schema: { type: 'object' as const, properties: { filePath: { type: 'string', description: 'Local path to the PDF file' }, title: { type: 'string', description: 'Publication title' }, targetUrl: { type: 'string', description: 'Report URL' } }, required: ['filePath', 'title', 'targetUrl'] },
+  },
+  {
+    name: 'login_scribd',
+    description: 'Login to Scribd with account credentials',
+    input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: 'Scribd account nickname' } }, required: ['nickname'] },
+  },
+  {
+    name: 'post_scribd',
+    description: 'Upload a document to Scribd. Must call login_scribd first.',
+    input_schema: { type: 'object' as const, properties: { filePath: { type: 'string', description: 'Local path to the document' }, title: { type: 'string', description: 'Document title' }, targetUrl: { type: 'string', description: 'Report URL' } }, required: ['filePath', 'title', 'targetUrl'] },
+  },
+  {
+    name: 'login_fourshared',
+    description: 'Login to 4shared with account credentials',
+    input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: '4shared account nickname' } }, required: ['nickname'] },
+  },
+  {
+    name: 'post_fourshared',
+    description: 'Upload a file to 4shared. Must call login_fourshared first.',
+    input_schema: { type: 'object' as const, properties: { filePath: { type: 'string', description: 'Local path to the file' }, targetUrl: { type: 'string', description: 'Report URL' } }, required: ['filePath', 'targetUrl'] },
+  },
+  {
+    name: 'login_yumpu',
+    description: 'Login to Yumpu with account credentials',
+    input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: 'Yumpu account nickname' } }, required: ['nickname'] },
+  },
+  {
+    name: 'post_yumpu',
+    description: 'Upload a PDF to Yumpu. Must call login_yumpu first.',
+    input_schema: { type: 'object' as const, properties: { filePath: { type: 'string', description: 'Local path to the PDF file' }, title: { type: 'string', description: 'Publication title' }, description: { type: 'string', description: 'Publication description' }, targetUrl: { type: 'string', description: 'Report URL' } }, required: ['filePath', 'title', 'description', 'targetUrl'] },
+  },
+  {
+    name: 'login_issuu',
+    description: 'Login to Issuu with account credentials',
+    input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: 'Issuu account nickname' } }, required: ['nickname'] },
+  },
+  {
+    name: 'post_issuu',
+    description: 'Upload a PDF to Issuu. Must call login_issuu first.',
+    input_schema: { type: 'object' as const, properties: { filePath: { type: 'string', description: 'Local path to the PDF file' }, title: { type: 'string', description: 'Publication title' }, description: { type: 'string', description: 'Publication description' }, targetUrl: { type: 'string', description: 'Report URL' } }, required: ['filePath', 'title', 'description', 'targetUrl'] },
+  },
+  {
+    name: 'login_slideshare',
+    description: 'Login to SlideShare with account credentials',
+    input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: 'SlideShare account nickname' } }, required: ['nickname'] },
+  },
+  {
+    name: 'post_slideshare',
+    description: 'Upload a slide deck (PPTX) to SlideShare. Must call login_slideshare first.',
+    input_schema: { type: 'object' as const, properties: { filePath: { type: 'string', description: 'Local path to the PPTX file' }, title: { type: 'string', description: 'Deck title' }, description: { type: 'string', description: 'Deck description' }, tags: { type: 'array', items: { type: 'string' }, description: 'Tags' } }, required: ['filePath', 'title', 'description'] },
+  },
+  {
+    name: 'login_speakerdeck',
+    description: 'Login to Speaker Deck with account credentials',
+    input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: 'Speaker Deck account nickname' } }, required: ['nickname'] },
+  },
+  {
+    name: 'post_speakerdeck',
+    description: 'Upload a PDF to Speaker Deck. Must call login_speakerdeck first.',
+    input_schema: { type: 'object' as const, properties: { filePath: { type: 'string', description: 'Local path to the PDF file' }, title: { type: 'string', description: 'Deck title' }, description: { type: 'string', description: 'Deck description' }, targetUrl: { type: 'string', description: 'Report URL' } }, required: ['filePath', 'title', 'description', 'targetUrl'] },
+  },
 ];
 
 /**
@@ -618,6 +777,79 @@ export async function executeBrowserTool(toolName: string, input: Record<string,
     }
     if (toolName === 'post_paragraph') {
       return await postParagraphTool(input.title, input.htmlContent);
+    }
+    // ══ SBM + PPT/PDF platform browser tools (grafted) ══
+    if (toolName === 'login_instapaper') {
+      return await loginInstapaperTool(input.nickname);
+    }
+    if (toolName === 'post_instapaper') {
+      return await postInstapaperTool(input.title, input.targetUrl, input.note);
+    }
+    if (toolName === 'login_raindrop') {
+      return await loginRaindropTool(input.nickname);
+    }
+    if (toolName === 'post_raindrop') {
+      return await postRaindropTool(input.title, input.targetUrl, input.note, input.tags);
+    }
+    if (toolName === 'login_pearltrees') {
+      return await loginPearltreesTool(input.nickname);
+    }
+    if (toolName === 'post_pearltrees') {
+      return await postPearltreesTool(input.title, input.targetUrl);
+    }
+    if (toolName === 'login_hatena') {
+      return await loginHatenaTool(input.nickname);
+    }
+    if (toolName === 'post_hatena') {
+      return await postHatenaTool(input.title, input.targetUrl, input.comment);
+    }
+    if (toolName === 'login_pdfhost') {
+      return await loginPdfHostTool(input.nickname);
+    }
+    if (toolName === 'post_pdfhost') {
+      return await postPdfHostTool(input.filePath, input.title, input.description);
+    }
+    if (toolName === 'login_fliphtml5') {
+      return await loginFlipHtml5Tool(input.nickname);
+    }
+    if (toolName === 'post_fliphtml5') {
+      return await postFlipHtml5Tool(input.filePath, input.title, input.targetUrl);
+    }
+    if (toolName === 'login_scribd') {
+      return await loginScribdTool(input.nickname);
+    }
+    if (toolName === 'post_scribd') {
+      return await postScribdTool(input.filePath, input.title, input.targetUrl);
+    }
+    if (toolName === 'login_fourshared') {
+      return await loginFourSharedTool(input.nickname);
+    }
+    if (toolName === 'post_fourshared') {
+      return await postFourSharedTool(input.filePath, input.targetUrl);
+    }
+    if (toolName === 'login_yumpu') {
+      return await loginYumpuTool(input.nickname);
+    }
+    if (toolName === 'post_yumpu') {
+      return await postYumpuTool(input.filePath, input.title, input.description, input.targetUrl);
+    }
+    if (toolName === 'login_issuu') {
+      return await loginIssuuTool(input.nickname);
+    }
+    if (toolName === 'post_issuu') {
+      return await postIssuuTool(input.filePath, input.title, input.description, input.targetUrl);
+    }
+    if (toolName === 'login_slideshare') {
+      return await loginSlideShareTool(input.nickname);
+    }
+    if (toolName === 'post_slideshare') {
+      return await postSlideShareTool(input.filePath, input.title, input.description, input.tags);
+    }
+    if (toolName === 'login_speakerdeck') {
+      return await loginSpeakerDeckTool(input.nickname);
+    }
+    if (toolName === 'post_speakerdeck') {
+      return await postSpeakerDeckTool(input.filePath, input.title, input.description, input.targetUrl);
     }
     return { error: `Unknown tool: ${toolName}`, success: false };
   } catch (err: any) {
@@ -1527,6 +1759,322 @@ async function postParagraphTool(title: string, htmlContent: string): Promise<an
       await closeParagraphBrowser().catch(() => {});
       paragraphPage = null;
       paragraphNickname = null;
+    }
+  }
+}
+
+// ══ SBM + PPT/PDF platform browser tools (grafted) ══
+// Simple singleton-page pattern mirroring the Tumblr/Mastodon/Pearltrees tools:
+// login sets the module page, post closes it in finally.
+
+/** Instapaper */
+async function loginInstapaperTool(nickname: string): Promise<any> {
+  try {
+    instapaperPage = await loginToInstapaper({ nickname });
+    return { success: true, message: `Logged in to Instapaper (${nickname})` };
+  } catch (err: any) {
+    instapaperPage = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postInstapaperTool(title: string, targetUrl: string, note?: string): Promise<any> {
+  try {
+    if (!instapaperPage) return { error: 'Not logged in. Call login_instapaper first.', success: false };
+    const result = await postToInstapaper(instapaperPage, title, targetUrl, note);
+    return { success: result.success, postUrl: result.postUrl };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (instapaperPage) {
+      await closeInstapaperBrowser().catch(() => {});
+      instapaperPage = null;
+    }
+  }
+}
+
+/** Raindrop */
+async function loginRaindropTool(nickname: string): Promise<any> {
+  try {
+    raindropPage = await loginToRaindrop({ nickname });
+    return { success: true, message: `Logged in to Raindrop (${nickname})` };
+  } catch (err: any) {
+    raindropPage = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postRaindropTool(title: string, targetUrl: string, note?: string, tags?: string[]): Promise<any> {
+  try {
+    if (!raindropPage) return { error: 'Not logged in. Call login_raindrop first.', success: false };
+    const result = await postToRaindrop(raindropPage, title, targetUrl, note, tags);
+    return { success: result.success, postUrl: result.postUrl };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (raindropPage) {
+      await closeRaindropBrowser().catch(() => {});
+      raindropPage = null;
+    }
+  }
+}
+
+/** Pearltrees */
+async function loginPearltreesTool(nickname: string): Promise<any> {
+  try {
+    pearltreesPage = await loginToPearltrees({ nickname });
+    return { success: true, message: `Logged in to Pearltrees (${nickname})` };
+  } catch (err: any) {
+    pearltreesPage = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postPearltreesTool(title: string, targetUrl: string): Promise<any> {
+  try {
+    if (!pearltreesPage) return { error: 'Not logged in. Call login_pearltrees first.', success: false };
+    const result = await postToPearltrees(pearltreesPage, title, targetUrl);
+    return { success: result.success, postUrl: result.postUrl };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (pearltreesPage) {
+      await closePearltreesBrowser().catch(() => {});
+      pearltreesPage = null;
+    }
+  }
+}
+
+/** Hatena */
+async function loginHatenaTool(nickname: string): Promise<any> {
+  try {
+    hatenaPage = await loginToHatena({ nickname });
+    return { success: true, message: `Logged in to Hatena (${nickname})` };
+  } catch (err: any) {
+    hatenaPage = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postHatenaTool(title: string, targetUrl: string, comment?: string): Promise<any> {
+  try {
+    if (!hatenaPage) return { error: 'Not logged in. Call login_hatena first.', success: false };
+    const result = await postToHatena(hatenaPage, title, targetUrl, comment);
+    return { success: result.success, postUrl: result.postUrl };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (hatenaPage) {
+      await closeHatenaBrowser().catch(() => {});
+      hatenaPage = null;
+    }
+  }
+}
+
+/** PDFHost */
+async function loginPdfHostTool(nickname: string): Promise<any> {
+  try {
+    pdfhostPage = await loginToPdfHost({ nickname });
+    return { success: true, message: `Logged in to PDFHost (${nickname})` };
+  } catch (err: any) {
+    pdfhostPage = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postPdfHostTool(filePath: string, title?: string, description?: string): Promise<any> {
+  try {
+    if (!pdfhostPage) return { error: 'Not logged in. Call login_pdfhost first.', success: false };
+    const result = await postToPdfHost(pdfhostPage, filePath, title, description);
+    return { success: result.success, postUrl: result.postUrl };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (pdfhostPage) {
+      await closePdfHostBrowser().catch(() => {});
+      pdfhostPage = null;
+    }
+  }
+}
+
+/** FlipHTML5 */
+async function loginFlipHtml5Tool(nickname: string): Promise<any> {
+  try {
+    fliphtml5Page = await loginToFlipHtml5({ nickname });
+    return { success: true, message: `Logged in to FlipHTML5 (${nickname})` };
+  } catch (err: any) {
+    fliphtml5Page = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postFlipHtml5Tool(filePath: string, title: string, targetUrl: string): Promise<any> {
+  try {
+    if (!fliphtml5Page) return { error: 'Not logged in. Call login_fliphtml5 first.', success: false };
+    const result = await postToFlipHtml5(fliphtml5Page, filePath, title, targetUrl);
+    return { success: result.success, postUrl: result.postUrl };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (fliphtml5Page) {
+      await closeFlipHtml5Browser().catch(() => {});
+      fliphtml5Page = null;
+    }
+  }
+}
+
+/** Scribd */
+async function loginScribdTool(nickname: string): Promise<any> {
+  try {
+    scribdPage = await loginToScribd({ nickname });
+    return { success: true, message: `Logged in to Scribd (${nickname})` };
+  } catch (err: any) {
+    scribdPage = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postScribdTool(filePath: string, title: string, targetUrl: string): Promise<any> {
+  try {
+    if (!scribdPage) return { error: 'Not logged in. Call login_scribd first.', success: false };
+    const result = await postToScribd(scribdPage, filePath, title, targetUrl);
+    return { success: result.success, postUrl: result.postUrl };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (scribdPage) {
+      await closeScribdBrowser().catch(() => {});
+      scribdPage = null;
+    }
+  }
+}
+
+/** 4shared */
+async function loginFourSharedTool(nickname: string): Promise<any> {
+  try {
+    foursharedPage = await loginToFourShared({ nickname });
+    return { success: true, message: `Logged in to 4shared (${nickname})` };
+  } catch (err: any) {
+    foursharedPage = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postFourSharedTool(filePath: string, targetUrl: string): Promise<any> {
+  try {
+    if (!foursharedPage) return { error: 'Not logged in. Call login_fourshared first.', success: false };
+    const result = await postToFourShared(foursharedPage, filePath, targetUrl);
+    return { success: result.success, postUrl: result.postUrl };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (foursharedPage) {
+      await closeFourSharedBrowser().catch(() => {});
+      foursharedPage = null;
+    }
+  }
+}
+
+/** Yumpu */
+async function loginYumpuTool(nickname: string): Promise<any> {
+  try {
+    yumpuPage = await loginToYumpu({ nickname });
+    return { success: true, message: `Logged in to Yumpu (${nickname})` };
+  } catch (err: any) {
+    yumpuPage = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postYumpuTool(filePath: string, title: string, description: string, targetUrl: string): Promise<any> {
+  try {
+    if (!yumpuPage) return { error: 'Not logged in. Call login_yumpu first.', success: false };
+    const result = await postToYumpu(yumpuPage, filePath, title, description, targetUrl);
+    return { success: result.success, postUrl: result.postUrl };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (yumpuPage) {
+      await closeYumpuBrowser().catch(() => {});
+      yumpuPage = null;
+    }
+  }
+}
+
+/** Issuu */
+async function loginIssuuTool(nickname: string): Promise<any> {
+  try {
+    issuuPage = await loginToIssuu({ nickname });
+    return { success: true, message: `Logged in to Issuu (${nickname})` };
+  } catch (err: any) {
+    issuuPage = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postIssuuTool(filePath: string, title: string, description: string, targetUrl: string): Promise<any> {
+  try {
+    if (!issuuPage) return { error: 'Not logged in. Call login_issuu first.', success: false };
+    const result = await postToIssuu(issuuPage, filePath, title, description, targetUrl);
+    return { success: result.success, postUrl: result.postUrl };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (issuuPage) {
+      await closeIssuuBrowser().catch(() => {});
+      issuuPage = null;
+    }
+  }
+}
+
+/** SlideShare */
+async function loginSlideShareTool(nickname: string): Promise<any> {
+  try {
+    slidesharePage = (await loginToSlideShare({ nickname })).page;
+    return { success: true, message: `Logged in to SlideShare (${nickname})` };
+  } catch (err: any) {
+    slidesharePage = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postSlideShareTool(filePath: string, title: string, description: string, tags?: string[]): Promise<any> {
+  try {
+    if (!slidesharePage) return { error: 'Not logged in. Call login_slideshare first.', success: false };
+    const result = await postToSlideShare(slidesharePage, filePath, title, description, tags ?? []);
+    return { success: result.success, postUrl: result.postUrl };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (slidesharePage) {
+      await closeSlideShareBrowser().catch(() => {});
+      slidesharePage = null;
+    }
+  }
+}
+
+/** Speaker Deck */
+async function loginSpeakerDeckTool(nickname: string): Promise<any> {
+  try {
+    speakerdeckPage = await loginToSpeakerDeck({ nickname });
+    return { success: true, message: `Logged in to Speaker Deck (${nickname})` };
+  } catch (err: any) {
+    speakerdeckPage = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postSpeakerDeckTool(filePath: string, title: string, description: string, targetUrl: string): Promise<any> {
+  try {
+    if (!speakerdeckPage) return { error: 'Not logged in. Call login_speakerdeck first.', success: false };
+    const result = await postToSpeakerDeck(speakerdeckPage, filePath, title, description, targetUrl);
+    return { success: result.success, postUrl: result.postUrl };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (speakerdeckPage) {
+      await closeSpeakerDeckBrowser().catch(() => {});
+      speakerdeckPage = null;
     }
   }
 }

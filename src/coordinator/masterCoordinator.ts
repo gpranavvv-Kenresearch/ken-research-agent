@@ -126,7 +126,7 @@ import { addFailure, printDiagnostics, type FailureEntry } from '../utils/diagno
 import { recordError } from '../errorInterceptor.js';
 import { applyFix } from '../autoFix.js';
 import { runSeoAnalysis } from '../agents/seoAgentNew.js';
-import { generateTweet, generateXThread, generateFbPost, generateLiPost, generateTumblrPost, generateMastodonPost, generateMediumPost, generateGoogleSitePost, generateDevtoPost, generateLinkedinPulsePost, generateCalisthenicsPost, generateSubstackPost, generateHackmdPost, generateLinkmatePost } from '../agents/contentAgentNew.js';
+import { generateTweet, generateXThread, generateFbPost, generateLiPost, generateTumblrPost, generateMastodonPost, generateMediumPost, generateGoogleSitePost, generateDevtoPost, generateLinkedinPulsePost, generateCalisthenicsPost, generateSubstackPost, generateHackmdPost, generateLinkmatePost, generateBookmarkNote } from '../agents/contentAgentNew.js';
 import { runXAgent, runXThreadAgent } from '../agents/xAgentNew.js';
 import { executeBrowserTool } from '../tools/browserTools.js';
 import {
@@ -177,7 +177,43 @@ import {
   saveUnifiedParagraphResult,
   getRowsForContinuousCodaPosting,
   saveUnifiedCodaResult,
+  getRowsForContinuousInstapaperPosting,
+  saveUnifiedInstapaperResult,
+  getRowsForContinuousRaindropPosting,
+  saveUnifiedRaindropResult,
+  getRowsForContinuousPearltreesPosting,
+  saveUnifiedPearltreesResult,
+  getRowsForContinuousPdfhostPosting,
+  saveUnifiedPdfhostResult,
+  getRowsForContinuousFliphtml5Posting,
+  saveUnifiedFliphtml5Result,
+  getRowsForContinuousScribdPosting,
+  saveUnifiedScribdResult,
+  getRowsForContinuousFourSharedPosting,
+  saveUnifiedFourSharedResult,
+  getRowsForContinuousHatenaPosting,
+  saveUnifiedHatenaResult,
+  getRowsForContinuousYumpuPosting,
+  saveUnifiedYumpuResult,
+  getRowsForContinuousIssuuPosting,
+  saveUnifiedIssuuResult,
+  savePdfPath,
 } from '../sheets/sheets.js';
+import { htmlToPdf, makeSlug } from '../utils/contentConverter.js';
+import { loginToPdfHost, closePdfHostBrowser } from '../browser/pdfhost/login.js';
+import { postToPdfHost } from '../browser/pdfhost/poster.js';
+import { loginToFlipHtml5, closeFlipHtml5Browser } from '../browser/fliphtml5/login.js';
+import { postToFlipHtml5 } from '../browser/fliphtml5/poster.js';
+import { loginToScribd, closeScribdBrowser } from '../browser/scribd/login.js';
+import { postToScribd } from '../browser/scribd/poster.js';
+import { loginToFourShared, closeFourSharedBrowser } from '../browser/fourshared/login.js';
+import { postToFourShared } from '../browser/fourshared/poster.js';
+import { loginToHatena, closeHatenaBrowser } from '../browser/hatena/login.js';
+import { postToHatena } from '../browser/hatena/poster.js';
+import { loginToYumpu, closeYumpuBrowser } from '../browser/yumpu/login.js';
+import { postToYumpu } from '../browser/yumpu/poster.js';
+import { loginToIssuu, closeIssuuBrowser } from '../browser/issuu/login.js';
+import { postToIssuu } from '../browser/issuu/poster.js';
 import fs from 'fs';
 import path from 'path';
 import 'dotenv/config';
@@ -2941,4 +2977,452 @@ export async function saveHackmdSession(nickname: string): Promise<void> {
   } catch (err: any) {
     console.error(`❌ Error saving HackMD session: ${err.message}\n`);
   }
+}
+
+// ══ SBM + PPT/PDF platform batches (grafted) ══
+
+// ── Instapaper Batch ─────────────────────────────────────────────────────────
+
+async function postToInstapaperAccount(accountName: string, title: string, targetUrl: string, note: string): Promise<{
+  success: boolean;
+  postUrl?: string;
+  error?: string;
+}> {
+  try {
+    const loginResult = await executeBrowserTool('login_instapaper', { nickname: accountName });
+    if (!loginResult.success) {
+      return { success: false, error: loginResult.error || 'Instapaper login failed' };
+    }
+    const postResult = await executeBrowserTool('post_instapaper', { title, targetUrl, note });
+    return { success: postResult.success ?? false, postUrl: postResult.postUrl, error: postResult.error };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function runInstapaperBatch(batchNum: number = 1): Promise<void> {
+  const rows = await getRowsForContinuousInstapaperPosting(15);
+  if (rows.length === 0) { console.log('[INSTAPAPER BATCH] No rows available'); return; }
+
+  const batchLabel = `Batch ${batchNum}`;
+  console.log(`\n[INSTAPAPER BATCH] Starting ${batchLabel}... Found ${rows.length} rows`);
+
+  let posted = 0, failed = 0;
+  for (const row of rows) {
+    try {
+      console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
+      let note = row.instapaperNote?.trim() || '';
+      if (!note) {
+        try {
+          note = await generateBookmarkNote({ url: row.targetUrl, title: row.title, marketValue: row.marketValue });
+        } catch (genErr: any) {
+          console.log(`    ⏭ Skipping — generation failed: ${genErr.message}`);
+          continue;
+        }
+      }
+      row.instapaperNote = note;
+
+      const postResult = await postToInstapaperAccount(row.name, row.title, row.targetUrl, note);
+      if (postResult.success) {
+        await saveUnifiedInstapaperResult(row, { postUrl: postResult.postUrl || '', note, status: 'Posted', batch: batchLabel });
+        console.log(`    ✅ Posted → ${postResult.postUrl}`);
+        posted++;
+      } else {
+        await saveUnifiedInstapaperResult(row, { postUrl: '', note, status: 'Failed', batch: batchLabel, error: postResult.error });
+        console.log(`    ❌ Failed: ${postResult.error}`);
+        failed++;
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    } catch (err: any) {
+      const kbEntry = recordError({ rawError: err.message, platform: 'instapaper', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
+      await applyFix(kbEntry, { platform: 'instapaper', accountName: row.name, rowIndex: row.rowIndex });
+      console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      failed++;
+    }
+  }
+  console.log(`\n[INSTAPAPER BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
+}
+
+// ── Raindrop Batch ───────────────────────────────────────────────────────────
+
+async function postToRaindropAccount(accountName: string, title: string, targetUrl: string, note: string): Promise<{
+  success: boolean;
+  postUrl?: string;
+  error?: string;
+}> {
+  try {
+    const loginResult = await executeBrowserTool('login_raindrop', { nickname: accountName });
+    if (!loginResult.success) {
+      return { success: false, error: loginResult.error || 'Raindrop login failed' };
+    }
+    const postResult = await executeBrowserTool('post_raindrop', { title, targetUrl, note });
+    return { success: postResult.success ?? false, postUrl: postResult.postUrl, error: postResult.error };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function runRaindropBatch(batchNum: number = 1): Promise<void> {
+  const rows = await getRowsForContinuousRaindropPosting(15);
+  if (rows.length === 0) { console.log('[RAINDROP BATCH] No rows available'); return; }
+
+  const batchLabel = `Batch ${batchNum}`;
+  console.log(`\n[RAINDROP BATCH] Starting ${batchLabel}... Found ${rows.length} rows`);
+
+  let posted = 0, failed = 0;
+  for (const row of rows) {
+    try {
+      console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
+      let note = row.raindropNote?.trim() || '';
+      if (!note) {
+        try {
+          note = await generateBookmarkNote({ url: row.targetUrl, title: row.title, marketValue: row.marketValue });
+        } catch (genErr: any) {
+          console.log(`    ⏭ Skipping — generation failed: ${genErr.message}`);
+          continue;
+        }
+      }
+      row.raindropNote = note;
+
+      const postResult = await postToRaindropAccount(row.name, row.title, row.targetUrl, note);
+      if (postResult.success) {
+        await saveUnifiedRaindropResult(row, { postUrl: postResult.postUrl || '', note, status: 'Posted', batch: batchLabel });
+        console.log(`    ✅ Posted → ${postResult.postUrl}`);
+        posted++;
+      } else {
+        await saveUnifiedRaindropResult(row, { postUrl: '', note, status: 'Failed', batch: batchLabel, error: postResult.error });
+        console.log(`    ❌ Failed: ${postResult.error}`);
+        failed++;
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    } catch (err: any) {
+      const kbEntry = recordError({ rawError: err.message, platform: 'raindrop', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
+      await applyFix(kbEntry, { platform: 'raindrop', accountName: row.name, rowIndex: row.rowIndex });
+      console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      failed++;
+    }
+  }
+  console.log(`\n[RAINDROP BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
+}
+
+// ── Pearltrees Batch ─────────────────────────────────────────────────────────
+
+async function postToPearltreesAccount(accountName: string, title: string, targetUrl: string): Promise<{
+  success: boolean;
+  postUrl?: string;
+  error?: string;
+}> {
+  try {
+    const loginResult = await executeBrowserTool('login_pearltrees', { nickname: accountName });
+    if (!loginResult.success) {
+      return { success: false, error: loginResult.error || 'Pearltrees login failed' };
+    }
+    const postResult = await executeBrowserTool('post_pearltrees', { title, targetUrl });
+    return { success: postResult.success ?? false, postUrl: postResult.postUrl, error: postResult.error };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function runPearltreesBatch(batchNum: number = 1): Promise<void> {
+  const rows = await getRowsForContinuousPearltreesPosting(15);
+  if (rows.length === 0) { console.log('[PEARLTREES BATCH] No rows available'); return; }
+
+  const batchLabel = `Batch ${batchNum}`;
+  console.log(`\n[PEARLTREES BATCH] Starting ${batchLabel}... Found ${rows.length} rows`);
+
+  let posted = 0, failed = 0;
+  for (const row of rows) {
+    try {
+      console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
+      const postResult = await postToPearltreesAccount(row.name, row.title, row.targetUrl);
+      if (postResult.success) {
+        await saveUnifiedPearltreesResult(row, { postUrl: postResult.postUrl || '', status: 'Posted', batch: batchLabel });
+        console.log(`    ✅ Posted → ${postResult.postUrl}`);
+        posted++;
+      } else {
+        await saveUnifiedPearltreesResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: postResult.error });
+        console.log(`    ❌ Failed: ${postResult.error}`);
+        failed++;
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    } catch (err: any) {
+      const kbEntry = recordError({ rawError: err.message, platform: 'pearltrees', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
+      await applyFix(kbEntry, { platform: 'pearltrees', accountName: row.name, rowIndex: row.rowIndex });
+      console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      failed++;
+    }
+  }
+  console.log(`\n[PEARLTREES BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
+}
+
+// ── PdfHost Batch ─────────────────────────────────────────────────────────────
+
+export async function runPdfhostBatch(batchNum: number = 1): Promise<void> {
+  const rows = await getRowsForContinuousPdfhostPosting(15);
+  if (rows.length === 0) { console.log('[PDFHOST BATCH] No rows available'); return; }
+
+  const batchLabel = `Batch ${batchNum}`;
+  console.log(`\n[PDFHOST BATCH] Starting ${batchLabel}... Found ${rows.length} rows`);
+
+  let posted = 0, failed = 0;
+  for (const row of rows) {
+    const pdfTitle = row.title || row.descriptionTitle || '';
+    const content = row.blogContent || '';
+    if (!content) { console.log(`  ⏭ Skipping row ${row.rowIndex} — no blog content`); continue; }
+
+    try {
+      let pdfPath = row.pdfPath?.trim();
+      if (!pdfPath) {
+        pdfPath = await htmlToPdf(content, makeSlug(pdfTitle), row.rowIndex);
+        await savePdfPath(row, pdfPath, undefined, 'newLogic').catch(() => {});
+      }
+      const page = await loginToPdfHost({ nickname: row.name });
+      const r = await postToPdfHost(page, pdfPath, pdfTitle, pdfTitle);
+      await saveUnifiedPdfhostResult(row, { postUrl: r.postUrl, status: 'Posted', batch: batchLabel });
+      console.log(`  ✅ Posted → ${r.postUrl}`);
+      posted++;
+    } catch (err: any) {
+      const kbEntry = recordError({ rawError: err.message, platform: 'pdfhost', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
+      await applyFix(kbEntry, { platform: 'pdfhost', accountName: row.name, rowIndex: row.rowIndex });
+      await saveUnifiedPdfhostResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: err.message });
+      console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      failed++;
+    } finally {
+      await closePdfHostBrowser();
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  console.log(`\n[PDFHOST BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
+}
+
+// ── FlipHTML5 Batch ───────────────────────────────────────────────────────────
+
+export async function runFliphtml5Batch(batchNum: number = 1): Promise<void> {
+  const rows = await getRowsForContinuousFliphtml5Posting(15);
+  if (rows.length === 0) { console.log('[FLIPHTML5 BATCH] No rows available'); return; }
+
+  const batchLabel = `Batch ${batchNum}`;
+  console.log(`\n[FLIPHTML5 BATCH] Starting ${batchLabel}... Found ${rows.length} rows`);
+
+  let posted = 0, failed = 0;
+  for (const row of rows) {
+    const pdfTitle = row.title || row.descriptionTitle || '';
+    const content = row.blogContent || '';
+    if (!content) { console.log(`  ⏭ Skipping row ${row.rowIndex} — no blog content`); continue; }
+
+    try {
+      let pdfPath = row.pdfPath?.trim();
+      if (!pdfPath) {
+        pdfPath = await htmlToPdf(content, makeSlug(pdfTitle), row.rowIndex);
+        await savePdfPath(row, pdfPath, undefined, 'newLogic').catch(() => {});
+      }
+      const page = await loginToFlipHtml5({ nickname: row.name });
+      const r = await postToFlipHtml5(page, pdfPath, pdfTitle, row.targetUrl);
+      await saveUnifiedFliphtml5Result(row, { postUrl: r.postUrl, status: 'Posted', batch: batchLabel });
+      console.log(`  ✅ Posted → ${r.postUrl}`);
+      posted++;
+    } catch (err: any) {
+      const kbEntry = recordError({ rawError: err.message, platform: 'fliphtml5', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
+      await applyFix(kbEntry, { platform: 'fliphtml5', accountName: row.name, rowIndex: row.rowIndex });
+      await saveUnifiedFliphtml5Result(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: err.message });
+      console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      failed++;
+    } finally {
+      await closeFlipHtml5Browser();
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  console.log(`\n[FLIPHTML5 BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
+}
+
+// ── Scribd Batch ──────────────────────────────────────────────────────────────
+
+export async function runScribdBatch(batchNum: number = 1): Promise<void> {
+  const rows = await getRowsForContinuousScribdPosting(15);
+  if (rows.length === 0) { console.log('[SCRIBD BATCH] No rows available'); return; }
+
+  const batchLabel = `Batch ${batchNum}`;
+  console.log(`\n[SCRIBD BATCH] Starting ${batchLabel}... Found ${rows.length} rows`);
+
+  let posted = 0, failed = 0;
+  for (const row of rows) {
+    const pdfTitle = row.title || row.descriptionTitle || '';
+    const content = row.blogContent || '';
+    if (!content) { console.log(`  ⏭ Skipping row ${row.rowIndex} — no blog content`); continue; }
+
+    try {
+      let pdfPath = row.pdfPath?.trim();
+      if (!pdfPath) {
+        pdfPath = await htmlToPdf(content, makeSlug(pdfTitle), row.rowIndex);
+        await savePdfPath(row, pdfPath, undefined, 'newLogic').catch(() => {});
+      }
+      const page = await loginToScribd({ nickname: row.name });
+      const r = await postToScribd(page, pdfPath, pdfTitle, row.targetUrl);
+      await saveUnifiedScribdResult(row, { postUrl: r.postUrl, status: 'Posted', batch: batchLabel });
+      console.log(`  ✅ Posted → ${r.postUrl}`);
+      posted++;
+    } catch (err: any) {
+      const kbEntry = recordError({ rawError: err.message, platform: 'scribd', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
+      await applyFix(kbEntry, { platform: 'scribd', accountName: row.name, rowIndex: row.rowIndex });
+      await saveUnifiedScribdResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: err.message });
+      console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      failed++;
+    } finally {
+      await closeScribdBrowser();
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  console.log(`\n[SCRIBD BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
+}
+
+// ── 4shared Batch ─────────────────────────────────────────────────────────────
+
+export async function runFourSharedBatch(batchNum: number = 1): Promise<void> {
+  const rows = await getRowsForContinuousFourSharedPosting(15);
+  if (rows.length === 0) { console.log('[4SHARED BATCH] No rows available'); return; }
+
+  const batchLabel = `Batch ${batchNum}`;
+  console.log(`\n[4SHARED BATCH] Starting ${batchLabel}... Found ${rows.length} rows`);
+
+  let posted = 0, failed = 0;
+  for (const row of rows) {
+    const pdfTitle = row.title || row.descriptionTitle || '';
+    const content = row.blogContent || '';
+    if (!content) { console.log(`  ⏭ Skipping row ${row.rowIndex} — no blog content`); continue; }
+
+    try {
+      let pdfPath = row.pdfPath?.trim();
+      if (!pdfPath) {
+        pdfPath = await htmlToPdf(content, makeSlug(pdfTitle), row.rowIndex);
+        await savePdfPath(row, pdfPath, undefined, 'newLogic').catch(() => {});
+      }
+      const page = await loginToFourShared({ nickname: row.name });
+      const r = await postToFourShared(page, pdfPath, row.targetUrl);
+      await saveUnifiedFourSharedResult(row, { postUrl: r.postUrl, status: 'Posted', batch: batchLabel });
+      console.log(`  ✅ Posted → ${r.postUrl}`);
+      posted++;
+    } catch (err: any) {
+      const kbEntry = recordError({ rawError: err.message, platform: 'fourshared', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
+      await applyFix(kbEntry, { platform: 'fourshared', accountName: row.name, rowIndex: row.rowIndex });
+      await saveUnifiedFourSharedResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: err.message });
+      console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      failed++;
+    } finally {
+      await closeFourSharedBrowser();
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  console.log(`\n[4SHARED BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
+}
+
+// ── Hatena Batch ──────────────────────────────────────────────────────────────
+
+export async function runHatenaBatch(batchNum: number = 1): Promise<void> {
+  const rows = await getRowsForContinuousHatenaPosting(15);
+  if (rows.length === 0) { console.log('[HATENA BATCH] No rows available'); return; }
+
+  const batchLabel = `Batch ${batchNum}`;
+  console.log(`\n[HATENA BATCH] Starting ${batchLabel}... Found ${rows.length} rows`);
+
+  let posted = 0, failed = 0;
+  for (const row of rows) {
+    try {
+      const page = await loginToHatena({ nickname: row.name });
+      const r = await postToHatena(page, row.title, row.targetUrl);
+      await saveUnifiedHatenaResult(row, { postUrl: r.postUrl, status: 'Posted', batch: batchLabel });
+      console.log(`  ✅ Posted → ${r.postUrl}`);
+      posted++;
+    } catch (err: any) {
+      const kbEntry = recordError({ rawError: err.message, platform: 'hatena', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
+      await applyFix(kbEntry, { platform: 'hatena', accountName: row.name, rowIndex: row.rowIndex });
+      await saveUnifiedHatenaResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: err.message });
+      console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      failed++;
+    } finally {
+      await closeHatenaBrowser();
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  console.log(`\n[HATENA BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
+}
+
+// ── Yumpu Batch ───────────────────────────────────────────────────────────────
+
+export async function runYumpuBatch(batchNum: number = 1): Promise<void> {
+  const rows = await getRowsForContinuousYumpuPosting(15);
+  if (rows.length === 0) { console.log('[YUMPU BATCH] No rows available'); return; }
+
+  const batchLabel = `Batch ${batchNum}`;
+  console.log(`\n[YUMPU BATCH] Starting ${batchLabel}... Found ${rows.length} rows`);
+
+  let posted = 0, failed = 0;
+  for (const row of rows) {
+    const yumpuTitle = row.title || row.descriptionTitle || '';
+    const content = row.blogContent || '';
+    if (!content) { console.log(`  ⏭ Skipping row ${row.rowIndex} — no blog content`); continue; }
+
+    try {
+      let pdfPath = row.pdfPath?.trim();
+      if (!pdfPath) {
+        pdfPath = await htmlToPdf(content, makeSlug(yumpuTitle), row.rowIndex);
+        await savePdfPath(row, pdfPath, undefined, 'newLogic').catch(() => {});
+      }
+      const page = await loginToYumpu({ nickname: row.name });
+      const r = await postToYumpu(page, pdfPath, yumpuTitle, yumpuTitle, row.targetUrl);
+      await saveUnifiedYumpuResult(row, { postUrl: r.postUrl, status: 'Posted', batch: batchLabel });
+      console.log(`  ✅ Posted → ${r.postUrl}`);
+      posted++;
+    } catch (err: any) {
+      const kbEntry = recordError({ rawError: err.message, platform: 'yumpu', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
+      await applyFix(kbEntry, { platform: 'yumpu', accountName: row.name, rowIndex: row.rowIndex });
+      await saveUnifiedYumpuResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: err.message });
+      console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      failed++;
+    } finally {
+      await closeYumpuBrowser();
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  console.log(`\n[YUMPU BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
+}
+
+// ── Issuu Batch ───────────────────────────────────────────────────────────────
+
+export async function runIssuuBatch(batchNum: number = 1): Promise<void> {
+  const rows = await getRowsForContinuousIssuuPosting(15);
+  if (rows.length === 0) { console.log('[ISSUU BATCH] No rows available'); return; }
+
+  const batchLabel = `Batch ${batchNum}`;
+  console.log(`\n[ISSUU BATCH] Starting ${batchLabel}... Found ${rows.length} rows`);
+
+  let posted = 0, failed = 0;
+  for (const row of rows) {
+    const issuuTitle = row.title || row.descriptionTitle || '';
+    const content = row.blogContent || '';
+    if (!content) { console.log(`  ⏭ Skipping row ${row.rowIndex} — no blog content`); continue; }
+
+    try {
+      let pdfPath = row.pdfPath?.trim();
+      if (!pdfPath) {
+        pdfPath = await htmlToPdf(content, makeSlug(issuuTitle), row.rowIndex);
+        await savePdfPath(row, pdfPath, undefined, 'newLogic').catch(() => {});
+      }
+      const page = await loginToIssuu({ nickname: row.name });
+      const r = await postToIssuu(page, pdfPath, issuuTitle, issuuTitle, row.targetUrl);
+      await saveUnifiedIssuuResult(row, { postUrl: r.postUrl, status: 'Posted', batch: batchLabel });
+      console.log(`  ✅ Posted → ${r.postUrl}`);
+      posted++;
+    } catch (err: any) {
+      const kbEntry = recordError({ rawError: err.message, platform: 'issuu', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
+      await applyFix(kbEntry, { platform: 'issuu', accountName: row.name, rowIndex: row.rowIndex });
+      await saveUnifiedIssuuResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: err.message });
+      console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
+      failed++;
+    } finally {
+      await closeIssuuBrowser();
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  console.log(`\n[ISSUU BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }

@@ -658,7 +658,13 @@ async function main() {
     ignoreDefaultArgs: ['--enable-automation'],
   });
 
-  const page = context.pages()[0] ?? (await context.newPage());
+  const openPages = context.pages();
+  const page = openPages[0] ?? (await context.newPage());
+  // The rotation sweeps this profile's Chrome with `pkill -9`, which leaves the
+  // persistent profile dirty so Chrome restores the crashed session's tabs on
+  // next launch. We only use pages()[0]; close every restored extra tab so
+  // about:blank tabs don't accumulate run after run.
+  for (const extra of openPages.slice(1)) await extra.close().catch(() => {});
   try {
     await page.goto(CHATGPT_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForTimeout(4000);

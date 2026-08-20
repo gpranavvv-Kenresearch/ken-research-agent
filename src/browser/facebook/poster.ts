@@ -3,6 +3,32 @@ import { humanDelay } from '../stagehand.js';
 import { preparePlainSocialPost } from '../../utils/socialText.js';
 import 'dotenv/config';
 
+/**
+ * Clear an initial FB popup/modal that lands on top of the feed on load
+ * (save-login prompt, cookie banner, notification nag) before we try to open the
+ * composer. Clicks known dismiss buttons, then Escapes any leftover dialog. Must
+ * only be called BEFORE the composer is opened, so Escape can't close our editor.
+ */
+async function dismissBlockingPopup(page: Page): Promise<void> {
+  const dismissLabels = [/^not now$/i, /^cancel$/i, /decline optional cookies/i, /only allow essential/i, /^close$/i];
+  for (const re of dismissLabels) {
+    try {
+      const btn = page.getByRole('button', { name: re }).first();
+      if (await btn.isVisible({ timeout: 1200 }).catch(() => false)) {
+        await btn.click().catch(() => {});
+        await humanDelay(500, 900);
+      }
+    } catch { /* try next */ }
+  }
+  // Any dialog still covering the feed (composer not open yet) → Escape it.
+  try {
+    if (await page.locator('[role="dialog"]').first().isVisible({ timeout: 800 }).catch(() => false)) {
+      await page.keyboard.press('Escape');
+      await humanDelay(400, 700);
+    }
+  } catch { /* ignore */ }
+}
+
 export async function postToFacebook(
   page: Page,
   postText: string,
@@ -16,34 +42,54 @@ export async function postToFacebook(
   await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
   await humanDelay(2000, 3000);
 
+  // Detect a Facebook security checkpoint (identity/video-selfie verification,
+  // "confirm you're a real person", account-locked review) FIRST. These wall the
+  // whole account behind a redirect — the composer never renders, so the old code
+  // reported a misleading "page may have changed". A checkpoint is NOT a selector
+  // problem and NOT retryable by automation: it needs a human. Fail with a distinct,
+  // greppable FB_CHECKPOINT error so the rotation can skip + flag the account.
+  if (/\/checkpoint\//.test(page.url())) {
+    throw new Error('FB_CHECKPOINT: account is on a Facebook security checkpoint (identity/selfie verification) — needs manual clearing, cannot auto-post.');
+  }
+
   // Wait for the feed itself to actually render before hunting for the composer —
-  // a same-day failure logged "Could not find Facebook post composer" 6 times with
-  // no other symptom, matching the same class of bug found in Medium/LinkedIn: the
-  // page navigation resolves before the SPA has painted anything, so every composer
-  // selector below (each only a 5s wait) times out on a still-loading shell rather
-  // than a genuinely different page. Gate on a stable home-page landmark first.
+  // the SPA navigation resolves before anything paints, so an immediate selector
+  // hunt times out on a still-loading shell. Gate on a stable home landmark first.
   await page.waitForSelector('div[role="feed"], div[role="main"]', { timeout: 15000 }).catch(() => {});
 
-  // Click the "What's on your mind?" composer button — try multiple selectors
+  // Dismiss any initial popup landing on top of the feed BEFORE opening the
+  // composer — FB routinely throws a "Save your login info?" / cookie / "turn on
+  // notifications" dialog on load that intercepts the composer click, which is the
+  // other half of today's failures (the composer element is there but a modal sits
+  // over it). Safe to Escape here: the composer dialog isn't open yet, so this can
+  // only close an intruding popup, never our own editor.
+  await dismissBlockingPopup(page);
+
+  // Open the composer. Facebook moved the trigger: the "What's on your mind, {Name}?"
+  // text is now VISIBLE TEXT inside an aria-label="Create a post" region, NOT an
+  // aria-label/placeholder attribute (verified live 2026-08-20). The old attribute
+  // selectors matched nothing. Match on ROLE/TEXT instead, and — critically — use a
+  // regex with an apostrophe wildcard (what.?s) so a curly ’ vs straight ' can't
+  // break the match. Region/text fallbacks cover future minor re-labels.
   console.log('   Opening post composer...');
-  const composerSelectors = [
-    '[aria-label*="What\'s on your mind"]',
-    '[aria-placeholder*="What\'s on your mind"]',
-    '[placeholder*="What\'s on your mind"]',
-    'div[role="button"]:has-text("What\'s on your mind")',
-    'span:has-text("What\'s on your mind")',
+  const composerCandidates = [
+    page.getByRole('button',  { name: /what.?s on your mind/i }),
+    page.getByRole('textbox', { name: /what.?s on your mind/i }),
+    page.getByText(/what.?s on your mind/i).first(),
+    page.locator('div[role="region"][aria-label*="Create a post" i]').getByRole('button').first(),
+    page.locator('div[aria-label*="Create a post" i]').first(),
   ];
 
   let opened = false;
-  for (const sel of composerSelectors) {
+  for (const cand of composerCandidates) {
     try {
-      await page.waitForSelector(sel, { timeout: 5000 });
-      await page.click(sel);
+      await cand.waitFor({ state: 'visible', timeout: 5000 });
+      await cand.click();
       opened = true;
-      console.log(`   Composer opened with: ${sel}`);
+      console.log('   Composer opened.');
       break;
     } catch {
-      // try next selector
+      // try next candidate
     }
   }
   if (!opened) throw new Error('Could not find Facebook post composer. Page may have changed.');

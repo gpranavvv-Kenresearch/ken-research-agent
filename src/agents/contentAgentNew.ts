@@ -122,15 +122,56 @@ function isRefusal(text: string): boolean {
   );
 }
 
+/**
+ * Detects degenerate/garbled model output — a free-tier model under load (e.g.
+ * a rate-limited rotation landing on a low-quality model) can return a "response"
+ * that is really just a token-repetition loop: the same arbitrary word(s) spammed
+ * dozens of times, often interleaved with stray non-English tokens. This is NOT a
+ * refusal (isRefusal doesn't catch it — the text is long and doesn't start with
+ * "I'm sorry") but it is unpostable. Caught in production on 2026-08-20: a FB post
+ * went live built from output like "...Giacomo यूक Giacomo यूक Cruise यूक folio...".
+ * Two independent, language-agnostic signals (either one trips it):
+ *   1. Any single word repeated far more than normal prose would ever repeat one.
+ *   2. A meaningful fraction of "words" are in a script the prompts never ask for
+ *      (all our prompts are English-only) — real output is essentially pure Latin.
+ */
+function isGibberish(text: string): boolean {
+  const words = text.trim().split(/\s+/).filter(w => w.length > 2);
+  if (words.length < 8) return false; // too short for frequency signal to mean anything
+
+  const freq = new Map<string, number>();
+  for (const w of words) {
+    const key = w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+    if (key) freq.set(key, (freq.get(key) ?? 0) + 1);
+  }
+  const maxCount = Math.max(...freq.values());
+  if (maxCount >= 6 && maxCount / words.length > 0.08) return true;
+
+  const nonLatinWords = words.filter(w =>
+    /[ऀ-ॿഀ-ൿሀ-፿가-힯぀-ヿ一-鿿]/.test(w)
+  ).length;
+  if (nonLatinWords / words.length > 0.05) return true;
+
+  return false;
+}
+
 async function callLLMWithRetry(prompt: string, maxTokens: number, retries = 3): Promise<string> {
+  let last = '';
   for (let attempt = 1; attempt <= retries; attempt++) {
     const result = await callLLM(prompt, maxTokens);
-    if (!isRefusal(result)) return result;
-    console.warn(`   ⚠️ LLM returned a refusal on attempt ${attempt}/${retries} — retrying...`);
+    last = result;
+    if (!isRefusal(result) && !isGibberish(result)) return result;
+    console.warn(`   ⚠️ LLM returned a ${isGibberish(result) ? 'garbled/repeated-token' : 'refusal'} response on attempt ${attempt}/${retries} — retrying...`);
     await new Promise(r => setTimeout(r, 2000));
   }
-  // Return last result even if it's a refusal, so the caller can decide what to do
-  return await callLLM(prompt, maxTokens);
+  // Every retry came back bad. Returning a refusal lets the caller's existing
+  // "no valid content" handling deal with it — but gibberish must NEVER reach a
+  // caller as if it were valid content (a refusal-shaped string is at least safe
+  // to post as-is; garbled text is not), so fail loudly instead of returning it.
+  if (isGibberish(last)) {
+    throw new Error('LLM_GIBBERISH: model kept returning garbled/repeated-token output after all retries — refusing to post.');
+  }
+  return last;
 }
 
 async function callLLM(prompt: string, maxTokens = 512): Promise<string> {
@@ -307,7 +348,7 @@ OUTPUT RULES:
 
 ${pastTweetsSection}`;
 
-  const raw = await callLLM(prompt, 400);
+  const raw = await callLLMWithRetry(prompt, 400);
   const tweet = raw.trim();
 
   // Safety check: ensure the full UTM URL is present (LLM must not truncate it)
@@ -435,7 +476,7 @@ OUTPUT RULES:
 
 ${pastTweetsSection}`;
 
-  const raw = await callLLM(prompt, 400);
+  const raw = await callLLMWithRetry(prompt, 400);
   const post = raw.trim();
 
   let finalPost = post;
@@ -580,7 +621,7 @@ OUTPUT RULES:
 
 ${pastTweetsSection}`;
 
-  const raw = await callLLM(prompt, 400);
+  const raw = await callLLMWithRetry(prompt, 400);
   const caption = raw.trim();
 
   // Save to the same shared history as X so future calls for this URL (on
@@ -631,7 +672,7 @@ Rules:
 
 Output format: ["tweet1", "tweet2", "tweet3", "tweet4 body\\n${utmUrl}\\n#hash1 #hash2"]`;
 
-  const raw = await callLLM(prompt, 1000);
+  const raw = await callLLMWithRetry(prompt, 1000);
 
   // Parse JSON array from response
   const match = raw.match(/\[[\s\S]*\]/);
@@ -1137,7 +1178,7 @@ JSON format:
   "blog": "blog post 200-300 words"
 }`;
 
-  const raw = await callLLM(prompt, 1500);
+  const raw = await callLLMWithRetry(prompt, 1500);
 
   let parsed: any;
   try {
@@ -1161,5 +1202,188 @@ JSON format:
     blog: String(parsed.blog || ''),
     seoScore: 75,
     sanityIssues: [],
+  };
+}
+
+// ══ SBM content generation (grafted) ══
+
+/**
+ * Generate a short 1–2 sentence bookmark note from targetUrl + title + market value.
+ * Used by Instapaper / Raindrop batches.
+ */
+export async function generateBookmarkNote(params: {
+  url: string;
+  title: string;
+  marketValue?: string;
+  overLimitBy?: number;
+}): Promise<string> {
+  const mv = (params.marketValue ?? '').trim();
+  const marketValueLine = mv && mv !== '0' && mv !== 'null'
+    ? mv
+    : '(not available — skip any market size number)';
+
+  const marketData = await fetchMarketData(params.title);
+  const marketDataSection = marketData
+    ? `REAL MARKET DATA (from web search — use specific numbers if present):\n${marketData}`
+    : 'No web data available — use general market language.';
+
+  const pastTweets = getPastTweets(params.url);
+  const pastTweetsSection = pastTweets.length > 0
+    ? `──────────────────────
+PREVIOUSLY POSTED CAPTIONS FOR THIS URL (${pastTweets.length} total, across platforms) — DO NOT reuse:
+- Same opening word or phrase
+- Same CTA phrase
+- Same power phrase
+- Same sentence structure or angle
+
+Past captions:
+${pastTweets.map((t, i) => `[${i + 1}] ${t}`).join('\n')}
+──────────────────────`
+    : '';
+
+  const prompt = `You are writing a short bookmark note for a Ken Research market research report saved on a read-later/bookmarking service.
+
+STEP 1 – Extract the market name from this URL:
+${params.url}
+
+Rules:
+- Take only the last path segment
+- Replace hyphens with spaces
+- Keep ALL words including geo (country, region) – do NOT remove any words
+
+STEP 2 – Write a 1–2 sentence note summarizing why this report is worth reading later. Match this tone:
+
+Example A: "Aerogel market in Bahrain is gearing up for a game-changing outlook with surging demand and innovation accelerating growth. Worth revisiting for the competitive landscape."
+
+Example B: "Global woodpulp market valued at $52B is set for a 4.2% CAGR through 2030 as sustainable packaging demand reshapes the industry. Saved for a deeper read."
+
+──────────────────────
+FORMAT RULES:
+- ONE flowing block – no blank lines
+- 1 or 2 sentences max – no em dashes
+- If real market data has CAGR, market size, or competitor names – weave ONE specific number naturally into the note
+- No URL anywhere in the note — the bookmark's own link field already holds the URL
+- No hashtags
+
+──────────────────────
+MARKET VALUE (from sheet):
+${marketValueLine}
+
+${marketDataSection}
+
+──────────────────────
+CHARACTER RULE:
+The full note must be ${280 - (params.overLimitBy ?? 0)} characters or fewer.${params.overLimitBy ? `\nPrevious attempt was ${params.overLimitBy} characters over — write a shorter, more concise version.` : ''}
+
+──────────────────────
+OUTPUT RULES:
+- First character must be a letter
+- No quotes around the output
+- No JSON, no labels, no explanation
+- No emojis
+- No bullet points
+- No hashtags
+- No URL anywhere in the output
+- Output ONLY the note text, nothing else
+- Never use: "projected to reach", "anticipated to grow", "value expected to reach", "driving innovation", "growing demand for"
+- Every note must feel unique – vary the opening structure each time
+
+${pastTweetsSection}`;
+
+  const raw = await callLLMWithRetry(prompt, 400);
+  const note = raw.trim();
+
+  saveTweetToHistory(params.url, note);
+  return note;
+}
+
+// SlideShare content generator
+// Returns structured data for pptGenerator: title, key points, description, tags
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SlideShareSlideContent {
+  title: string;
+  subtitle: string;
+  marketSize: string;
+  cagr: string;
+  keyPoints: string[];       // 8–10 concise bullet points for slides
+  description: string;       // 400–500 char plain-text description for SlideShare
+  tags: string[];            // 5 relevant tags
+}
+
+export async function generateSlideShareContent(params: {
+  url: string;
+  title: string;
+  marketValue?: string;
+  cagr?: string;
+  seedKeyword?: string;
+}): Promise<SlideShareSlideContent> {
+  const utmUrl = `${params.url}${UTM_PARAMS.SlideShare}`;
+  const marketData = await fetchMarketData(params.title);
+  const marketDataSection = marketData
+    ? `REAL MARKET DATA (use specific numbers where present):\n${marketData}`
+    : 'No external data — use general market language.';
+
+  const mv = (params.marketValue ?? '').trim();
+  const cagrVal = (params.cagr ?? '').trim();
+
+  const prompt = `You are writing slide content for a Ken Research market research report slideshow on SlideShare.
+
+Report: "${params.title}"
+${mv && mv !== 'null' ? `Market Size: ${mv}` : ''}
+${cagrVal ? `CAGR: ${cagrVal}` : ''}
+${marketDataSection}
+
+Generate slide content in this EXACT JSON format (no extra text, no markdown fences):
+{
+  "subtitle": "<10–15 word subtitle, e.g. 'Market Size, Growth Drivers, Trends & Competitive Landscape 2024-2030'>",
+  "marketSize": "<market size figure with year, e.g. 'USD 4.2 Billion (2024)' — or empty string if unknown>",
+  "cagr": "<CAGR figure, e.g. '8.5% (2024-2030)' — or empty string if unknown>",
+  "keyPoints": [
+    "<Point 1: market size or valuation with year>",
+    "<Point 2: primary growth driver>",
+    "<Point 3: second growth driver or trend>",
+    "<Point 4: key technology or innovation shaping the market>",
+    "<Point 5: largest segment or geography>",
+    "<Point 6: competitive landscape insight>",
+    "<Point 7: regulatory or macro factor>",
+    "<Point 8: forecast highlight for 2028–2030>",
+    "<Point 9: investment or M&A activity>",
+    "<Point 10: one actionable insight for businesses>"
+  ],
+  "description": "<400–500 character plain-text description of the report. Start with the market name and size. Include CAGR and key drivers. End with: Download the full report at ${utmUrl}>",
+  "tags": ["<tag1>", "<tag2>", "<tag3>", "<tag4>", "<tag5>"]
+}
+
+Rules:
+- Each keyPoint must be a complete sentence of 15–25 words
+- Use only real data from the market data section above — never invent numbers
+- Tags should be lowercase, single or hyphenated words (e.g. "market-research", "cagr")
+- Output ONLY valid JSON`;
+
+  const raw = await callLLMWithRetry(prompt, 900);
+
+  // Extract JSON
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error(`SlideShare content: no JSON in response: ${raw.slice(0, 150)}`);
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    throw new Error(`SlideShare content: JSON parse failed: ${jsonMatch[0].slice(0, 150)}`);
+  }
+
+  const keyPoints: string[] = Array.isArray(parsed.keyPoints) ? parsed.keyPoints.slice(0, 10) : [];
+  if (keyPoints.length < 3) throw new Error('SlideShare content: not enough key points generated');
+
+  return {
+    title: params.title,
+    subtitle: String(parsed.subtitle || 'Market Analysis, Growth Trends & Forecast'),
+    marketSize: String(parsed.marketSize || mv || ''),
+    cagr: String(parsed.cagr || cagrVal || ''),
+    keyPoints,
+    description: String(parsed.description || '').slice(0, 500),
+    tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 5).map(String) : ['market-research', 'ken-research'],
   };
 }

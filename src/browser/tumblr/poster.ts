@@ -1,5 +1,6 @@
 import { Page } from 'playwright';
 import { injectUTM, UTM_PARAMS } from '../../utils/utm.js';
+import { preparePlainSocialPost } from '../../utils/socialText.js';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -18,6 +19,7 @@ export async function postToTumblr(
   postText: string,
   targetUrl: string,
 ): Promise<{ success: true; postUrl: string; postedAt: Date }> {
+  const cleanPostText = preparePlainSocialPost(postText);
   const urlWithUtm = injectUTM(targetUrl, UTM_PARAMS.Tumblr);
 
   try {
@@ -99,7 +101,7 @@ export async function postToTumblr(
     if (await el.isVisible({ timeout: 3000 }).catch(() => false)) {
       await el.click({ timeout: 4000 }).catch(() => {});
       await sleep(400);
-      await page.keyboard.type(postText, { delay: 10 });
+      await page.keyboard.type(cleanPostText, { delay: 10 });
       bodyFilled = true;
       console.log(`   ✅ Caption typed (${sel})`);
       break;

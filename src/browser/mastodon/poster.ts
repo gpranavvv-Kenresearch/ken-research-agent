@@ -1,4 +1,5 @@
 import { Page, Locator } from 'playwright';
+import { preparePlainSocialPost } from '../../utils/socialText.js';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -14,6 +15,7 @@ export async function postToMastodon(
   page: Page,
   postText: string,
 ): Promise<{ success: true; postUrl: string; postedAt: Date }> {
+  const cleanPostText = preparePlainSocialPost(postText);
   try {
     const cdp = await page.context().newCDPSession(page);
     const { windowId } = await cdp.send('Browser.getWindowForTarget');
@@ -39,7 +41,7 @@ export async function postToMastodon(
     if (await el.isVisible({ timeout: 5000 }).catch(() => false)) {
       await el.click();
       await sleep(300);
-      await page.keyboard.type(postText, { delay: 8 });
+      await page.keyboard.type(cleanPostText, { delay: 8 });
       textareaEl = el;
       console.log(`   ✅ Post text typed (${sel})`);
       break;

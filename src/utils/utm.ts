@@ -24,6 +24,20 @@ export const UTM_PARAMS = {
   Coda: '?utm_source=Coda&utm_medium=Referral&utm_campaign=Automation',
   Tumblr: '?utm_source=Tumblr&utm_medium=Referral&utm_campaign=Automation',
   Mastodon: '?utm_source=Mastodon&utm_medium=Referral&utm_campaign=Automation',
+  // SBM + PPT/PDF platforms (SBM/PPT integration)
+  SlideShare: '?utm_source=SlideShare&utm_medium=Referral&utm_campaign=Automation',
+  SpeakerDeck: '?utm_source=SpeakerDeck&utm_medium=Referral&utm_campaign=Automation',
+  Issuu: '?utm_source=Issuu&utm_medium=Referral&utm_campaign=Automation',
+  PDF: '?utm_source=PPT/PDF&utm_medium=Referral&utm_campaign=Automation',
+  Instapaper: '?utm_source=Instapaper&utm_medium=Referral&utm_campaign=Automation',
+  Raindrop: '?utm_source=Raindrop&utm_medium=Referral&utm_campaign=Automation',
+  PdfHost: '?utm_source=PdfHost&utm_medium=Referral&utm_campaign=Automation',
+  Yumpu: '?utm_source=Yumpu&utm_medium=Referral&utm_campaign=Automation',
+  Pearltrees: '?utm_source=Pearltrees&utm_medium=Referral&utm_campaign=Automation',
+  Hatena: '?utm_source=Hatena&utm_medium=Referral&utm_campaign=Automation',
+  FlipHTML5: '?utm_source=FlipHTML5&utm_medium=Referral&utm_campaign=Automation',
+  FourShared: '?utm_source=4shared&utm_medium=Referral&utm_campaign=Automation',
+  Scribd: '?utm_source=Scribd&utm_medium=Referral&utm_campaign=Automation',
 };
 
 /**

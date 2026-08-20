@@ -80,10 +80,22 @@ const BLOG_SHEET_NAME = process.env.WORKER_NAME
   ? `${process.env.WORKER_NAME.charAt(0).toUpperCase()}${process.env.WORKER_NAME.slice(1).toLowerCase()} Blog`
   : 'Blogs';
 
+// SBM/PPT integration: the PDF/document platforms (Issuu, PdfHost, FlipHTML5,
+// Scribd, 4shared, Yumpu) read from a dedicated "New Logic" tab (content built
+// from blogContent), separate from Social Media (SBM) and Blogs. Same per-agent
+// spreadsheet + "{Name} …" tab-naming convention.
+const NEWLOGIC_SHEET_ID = RESOLVED_SHEET_ID;
+const NEWLOGIC_SHEET_NAME = process.env.WORKER_NAME
+  ? `${process.env.WORKER_NAME.charAt(0).toUpperCase()}${process.env.WORKER_NAME.slice(1).toLowerCase()} New Logic`
+  : 'New Logic';
+
 // Helper to get sheet config based on platform
-function getSheetConfig(platform?: 'social' | 'blog'): { id: string; name: string } {
+function getSheetConfig(platform?: 'social' | 'blog' | 'newLogic'): { id: string; name: string } {
   if (platform === 'blog') {
     return { id: BLOG_SHEET_ID, name: BLOG_SHEET_NAME };
+  }
+  if (platform === 'newLogic') {
+    return { id: NEWLOGIC_SHEET_ID, name: NEWLOGIC_SHEET_NAME };
   }
   return { id: SOCIAL_SHEET_ID, name: SOCIAL_SHEET_NAME }; // default to social
 }
@@ -92,7 +104,7 @@ function getSheetConfig(platform?: 'social' | 'blog'): { id: string; name: strin
 const SHEET_ID   = SOCIAL_SHEET_ID;
 const SHEET_NAME = SOCIAL_SHEET_NAME;
 
-export type SheetType = 'social' | 'blog';
+export type SheetType = 'social' | 'blog' | 'newLogic';
 
 export interface SheetRow {
   rowIndex: number;         // 1-based row index in sheet (for updates)
@@ -157,6 +169,36 @@ export interface SheetRow {
   mastodonError?: string;
   mastodonBatch?: string;
   lastPostedMastodon?: string;
+  // ── SBM + PPT/PDF platform columns (SBM/PPT integration) ──
+  // Generated PDF/PPTX artifact path (built from blogContent by htmlToPdf), reused across PDF platforms.
+  pdfPath?: string;
+  // SBM: Instapaper / Raindrop / Pearltrees / Hatena
+  instapaperUrl?: string;
+  instapaperNote?: string;
+  lastPostedInstapaper?: string;
+  raindropUrl?: string;
+  raindropNote?: string;
+  lastPostedRaindrop?: string;
+  pearltreesUrl?: string;
+  lastPostedPearltrees?: string;
+  hatenaUrl?: string;
+  lastPostedHatena?: string;
+  // PDF/PPT: Issuu / PdfHost / FlipHTML5 / Scribd / 4shared / Yumpu
+  issuuUrl?: string;
+  lastPostedIssuu?: string;
+  pdfhostUrl?: string;
+  lastPostedPdfhost?: string;
+  fliphtml5Url?: string;
+  lastPostedFliphtml5?: string;
+  scribdUrl?: string;
+  lastPostedScribd?: string;
+  fourSharedUrl?: string;
+  lastPostedFourShared?: string;
+  yumpuUrl?: string;
+  lastPostedYumpu?: string;
+  // PPT: SlideShare / SpeakerDeck
+  slideshareUrl?: string;
+  lastPostedSlideshare?: string;
   // Result columns
   messageStatus?: string;
   sanityIssues?: string;
@@ -179,6 +221,8 @@ export interface SheetRow {
   lastPostedBlog?: string;
   /** Runtime-only: which slot claimNextBlogSlot just claimed on this row (not a sheet column). */
   blogSlot?: 1 | 2;
+  /** Runtime-only: platform this row was picked for, so the save writes that platform's own columns. */
+  blogPlatformKey?: string;
 }
 
 // Backwards-compatible alias used by facebookPostingAgent and linkedinPostingAgent
@@ -708,6 +752,105 @@ const BLOG_ERROR_NAMES = ['Blog Error', 'blog error'];
 const BLOG_BATCH_NAMES = ['Blog Batch', 'blog batch'];
 const BLOG_LASTPOSTED_NAMES = ['Last Posted Blog', 'lastPostedBlog', 'lastpostedblog'];
 
+// ── Column-wise blog posting (per-platform Status/URL columns) ──────────────
+// The 2-slot model below shares two columns per row across all platforms. This
+// map restores the ORIGINAL per-platform-column model for platforms that own
+// their columns in the sheet: each platform scans its OWN Status column, picks
+// its own next unposted rows, and writes its own result — fully independent of
+// the others. Platforms NOT in this map (Patreon/Ameba/Paragraph, which have no
+// columns) keep the 2-slot model untouched.
+interface BlogPlatformCols { status: string[]; url: string[]; error: string[]; batch: string[]; lastPosted: string[]; }
+const BLOG_PLATFORM_COLS: Record<string, BlogPlatformCols> = {
+  'Medium':         { status: ['Medium Status'],         url: ['Medium Post URL', 'Medium URL'], error: ['Medium Error'],         batch: ['Medium Batch'],         lastPosted: ['lastPostedMedium', 'Last Posted Medium'] },
+  'Blogger':        { status: ['Blogger Status'],        url: ['Blogger Post URL'],              error: ['Blogger Error'],        batch: ['Blogger Batch'],        lastPosted: ['lastPostedBlogger'] },
+  'Notion':         { status: ['Notion Status'],         url: ['Notion Post URL'],               error: ['Notion Error'],         batch: ['Notion Batch'],         lastPosted: ['lastPostedNotion'] },
+  'WordPress':      { status: ['WordPress Status'],      url: ['WordPress Post URL'],            error: ['WordPress Error'],      batch: ['WordPress Batch'],      lastPosted: ['lastPostedWordpress'] },
+  'Dev.to':         { status: ['Dev.to Status'],         url: ['Dev.to Post URL'],               error: ['Dev.to Error'],         batch: ['Dev.to Batch'],         lastPosted: ['lastPostedDevto'] },
+  'HackMD':         { status: ['HackMD Status'],         url: ['HackMD Post URL'],               error: ['HackMD Error'],         batch: ['HackMD Batch'],         lastPosted: ['lastPostedHackmd'] },
+  'Google Sites':   { status: ['Google Site Status'],    url: ['Google Site Post URL'],          error: ['Google Site Error'],    batch: ['Google Site Batch'],    lastPosted: ['lastPostedGoogleSite'] },
+  'Note':           { status: ['Note Status'],           url: ['Note Post URL'],                 error: ['Note Error'],           batch: ['Note Batch'],           lastPosted: ['lastPostedNote'] },
+  'Substack':       { status: ['Substack Status'],       url: ['Substack Post URL'],             error: ['Substack Error'],       batch: ['Substack Batch'],       lastPosted: ['lastPostedSubstack'] },
+  'Calisthenics':   { status: ['Calisthenics Status'],   url: ['Calisthenics Post URL'],         error: ['Calisthenics Error'],   batch: ['Calisthenics Batch'],   lastPosted: ['lastPostedCalisthenics'] },
+  'Linkmate':       { status: ['Linkmate Status'],       url: ['Linkmate Post URL'],             error: ['Linkmate Error'],       batch: ['Linkmate Batch'],       lastPosted: ['lastPostedLinkmate'] },
+  'Coda':           { status: ['Coda Status'],           url: ['Coda Post URL'],                 error: ['Coda Error'],           batch: ['Coda Batch'],           lastPosted: ['Last Posted Coda'] },
+  'LinkedIn Pulse': { status: ['Linkedin Pulse Status'], url: ['Linkedin Pulse URL'],            error: ['Linkedin Pulse Error'], batch: ['Linkedin Pulse batch', 'Linkedin Pulse Batch'], lastPosted: ['lastPosted linkedin Pulse', 'lastPostedLinkedinPulse'] },
+};
+
+/**
+ * Column-wise row picker: up to `limit` rows that have generated content but are
+ * still UNPOSTED in this platform's own Status/URL column. Rows already posted
+ * under the legacy 2-slot model (shared "Blog Status") are treated as done, so
+ * switching models never re-posts them — posting continues forward from the last.
+ */
+async function pickBlogRowsForPlatform(platformKey: string, limit: number): Promise<SheetRow[]> {
+  const cols = BLOG_PLATFORM_COLS[platformKey];
+  if (!cols) return [];
+  const sheets = await getSheetsClient();
+  const cfg = getSheetConfig('blog');
+  const colMap = await getColumnMap(sheets, cfg.id, cfg.name);
+  const res = await withRetry(() => sheets.spreadsheets.values.get({
+    spreadsheetId: cfg.id, range: `${cfg.name}!A:ZZ`,
+  }), `pickBlogRowsForPlatform_${platformKey}`);
+  const rows: string[][] = res.data.values ?? [];
+
+  const titleIdx   = col(colMap, 'Blog Title', 'blog title', 'Title', 'title', 'Main Title') ?? -1;
+  const targetIdx  = col(colMap, 'Report URL', 'Download Report URL', 'Target URL', 'target url', 'targetUrl', 'URL', 'url') ?? -1;
+  const contentIdx = col(colMap, 'Blog Content', 'blog content', 'Blog Content for all', 'blogcontent', 'Content', 'content') ?? -1;
+  const statusIdx  = col(colMap, ...cols.status) ?? -1;
+  const urlIdx     = col(colMap, ...cols.url) ?? -1;
+  const slotIdx    = col(colMap, ...BLOG_STATUS_NAMES) ?? -1;   // legacy 2-slot guard → no re-posts
+
+  const done = (row: string[]): boolean => {
+    if (urlIdx >= 0 && (row[urlIdx] ?? '').trim()) return true;
+    if (statusIdx >= 0) {
+      const s = (row[statusIdx] ?? '').trim().toLowerCase();
+      if (s === 'posted' || s === 'failed' || s === 'error') return true;
+    }
+    if (slotIdx >= 0 && (row[slotIdx] ?? '').trim()) return true;   // already handled by old slot model
+    return false;
+  };
+
+  const results: SheetRow[] = [];
+  for (let i = 1; i < rows.length && results.length < limit; i++) {
+    const row = rows[i];
+    const title   = titleIdx   >= 0 ? (row[titleIdx]   ?? '').trim() : '';
+    const target  = targetIdx  >= 0 ? (row[targetIdx]  ?? '').trim() : '';
+    const content = contentIdx >= 0 ? (row[contentIdx] ?? '').trim() : '';
+    if (!title || !target || !content) continue;   // only rows with a generated article
+    if (done(row)) continue;
+    const mapped = mapRow(row, colMap, i + 1, 'blog');
+    mapped.blogPlatformKey = platformKey;
+    results.push(mapped);
+  }
+  console.log(`   📄 [${platformKey}] column-wise → ${results.length} unposted rows (scanned ${rows.length})`);
+  return results;
+}
+
+/** Column-wise result writer: writes into this platform's OWN Status/URL/Error/
+ * Batch/LastPosted columns instead of the shared 2-slot columns. */
+async function saveBlogPlatformResult(
+  platformKey: string,
+  row: SheetRow,
+  result: { postUrl: string; status: string; error?: string; batch?: string },
+): Promise<void> {
+  const cols = BLOG_PLATFORM_COLS[platformKey];
+  if (!cols) return;
+  const sheets = await getSheetsClient();
+  const cfg = getSheetConfig('blog');
+  const colMap = await getColumnMap(sheets, cfg.id, cfg.name);
+  const posted = (result.status ?? '').toLowerCase() === 'posted';
+  const updates = [
+    { names: cols.url,    value: result.postUrl || '' },
+    { names: cols.status, value: result.status },
+    { names: cols.error,  value: posted ? '' : (result.error ?? '') },
+    { names: cols.batch,  value: result.batch ?? '' },
+  ];
+  if (posted) updates.push({ names: cols.lastPosted, value: nowStamp() });
+  const data = buildUpdates(colMap, row.rowIndex, updates, cfg.name);
+  await batchWrite(sheets, data, cfg.id);
+  console.log(`   📝 [${platformKey}] row ${row.rowIndex}: ${result.status} → own column`);
+}
+
 /** Parses "P1:<state>|P2:<state>" into { 1: state, 2: state }. */
 function parseSlotState(raw: string | undefined): Record<1 | 2, string> {
   const out: Record<1 | 2, string> = { 1: '', 2: '' };
@@ -784,6 +927,11 @@ export async function claimNextBlogSlot(platformKey: string): Promise<SheetRow |
 
 /** Loops claimNextBlogSlot up to `limit` times, stopping early once no slot is available. */
 async function claimNextBlogSlots(platformKey: string, limit: number): Promise<SheetRow[]> {
+  // Column-wise platforms (own Status/URL columns) drain those directly; the rest
+  // keep the shared 2-slot model. One switch here covers every getRows* wrapper.
+  if (BLOG_PLATFORM_COLS[platformKey]) {
+    return pickBlogRowsForPlatform(platformKey, limit);
+  }
   const results: SheetRow[] = [];
   for (let i = 0; i < limit; i++) {
     const claimed = await claimNextBlogSlot(platformKey);
@@ -829,6 +977,11 @@ async function saveBlogSlotResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
+  // Column-wise platforms write to their own columns (key set during selection).
+  if (row.blogPlatformKey && BLOG_PLATFORM_COLS[row.blogPlatformKey]) {
+    await saveBlogPlatformResult(row.blogPlatformKey, row, result);
+    return;
+  }
   const slot = row.blogSlot;
   if (!slot) {
     console.warn(`   ⚠️ saveBlogSlotResult: row ${row.rowIndex} has no claimed slot — skipping save`);
@@ -2118,3 +2271,413 @@ export async function assignPendingRowsToLiveAccounts(agent: string): Promise<vo
   }
 }
 
+
+
+// ══ SBM + PPT/PDF platform sheet functions (grafted) ══
+// Appended verbatim from diverged bundle. New symbols only; nothing above modified.
+
+// ── round-robin account roster for New Logic platforms (copied helper) ──
+const NEW_LOGIC_ACCOUNT_NAMES_15 = [
+  'aniket', 'krishi', 'sameeksha', 'hritika', 'meenakshi', 'vansh', 'kamakshi',
+  'vishal', 'pranav', 'shrey', 'sanya', 'shivani', 'vijay', 'avdhesh', 'abhinav',
+];
+
+// ── pickRowsByEmptyStatus (copied helper: not present in repo) ──
+async function pickRowsByEmptyStatus(
+  statusColNames: string[],
+  label: string,
+  limit: number,
+  sheetType: 'blog' | 'social' | 'newLogic' = 'blog',
+): Promise<SheetRow[]> {
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig(sheetType);
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+  const res = await withRetry(() => sheets.spreadsheets.values.get({
+    spreadsheetId: sheetConfig.id, range: `${sheetConfig.name}!A:ZZ`,
+  }), `pickRowsByEmptyStatus_${label}`);
+  const rows: string[][] = res.data.values ?? [];
+
+  const statusIdx    = col(colMap, ...statusColNames) ?? -1;
+  const titleIdx     = col(colMap, 'Blog Title', 'blog title', 'Title', 'title', 'Main Title') ?? -1;
+  const targetUrlIdx = col(colMap, 'Report URL', 'Download Report URL', 'Target URL', 'target url', 'targetUrl', 'URL', 'url') ?? -1;
+  // New Logic rows don't get a "Name" account until some platform assigns
+  // one (getRowsNeedingSlot does this for the 9 slot platforms) — PdfHost/
+  // Yumpu/Issuu aren't part of that slot system, so they need their own
+  // round-robin assignment here, same roster/logic as getRowsNeedingSlot.
+  const nameIdx = sheetType === 'newLogic' ? (col(colMap, 'Name', 'name') ?? -1) : -1;
+
+  if (statusIdx < 0) {
+    console.warn(`   ⚠️ [${label}] Status column not found. Tried: [${statusColNames.join(', ')}]. Check sheet headers.`);
+    return [];
+  }
+
+  let assignedCount = 0;
+  if (nameIdx >= 0) {
+    for (let i = 1; i < rows.length; i++) {
+      if ((rows[i][nameIdx] ?? '').trim()) assignedCount++;
+    }
+  }
+
+  const results: SheetRow[] = [];
+  const nameAssignments: { rowIndex: number; name: string }[] = [];
+  for (let i = 1; i < rows.length && results.length < limit; i++) {
+    const row = rows[i];
+    if ((row[statusIdx] ?? '').trim()) continue;  // Posted / Failed / Error → skip
+
+    const title     = titleIdx >= 0 ? (row[titleIdx] ?? '').trim() : '';
+    const targetUrl = targetUrlIdx >= 0 ? (row[targetUrlIdx] ?? '').trim() : '';
+    if (!title || !targetUrl) continue;
+
+    const mapped = mapRow(row, colMap, i + 1, sheetType);
+    if (nameIdx >= 0 && !(row[nameIdx] ?? '').trim()) {
+      const accountName = NEW_LOGIC_ACCOUNT_NAMES_15[assignedCount % NEW_LOGIC_ACCOUNT_NAMES_15.length];
+      assignedCount++;
+      mapped.name = accountName;
+      nameAssignments.push({ rowIndex: mapped.rowIndex, name: accountName });
+    }
+
+    results.push(mapped);
+  }
+
+  if (nameAssignments.length > 0) {
+    const claimData = nameAssignments.flatMap(a =>
+      buildUpdates(colMap, a.rowIndex, [{ names: ['Name', 'name'], value: a.name }], sheetConfig.name)
+    );
+    await batchWrite(sheets, claimData, sheetConfig.id);
+  }
+
+  console.log(`   📄 [${label}] Found ${results.length} rows with empty status (col idx ${statusIdx}) on "${sheetConfig.name}"`);
+  return results;
+}
+
+// ──── Write PDF / PPTX file paths back to the sheet ────────────────────────
+export async function savePdfPath(row: SheetRow, pdfPath: string, pptxPath?: string, sheetType: SheetType = 'blog'): Promise<void> {
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig(sheetType);
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+
+  const fields: { names: string[]; value: string }[] = [
+    { names: ['PDF Path', 'pdf path', 'pdfPath'], value: pdfPath },
+  ];
+
+  if (pptxPath) {
+    fields.push({ names: ['PPTX Path', 'pptx path', 'pptxPath'], value: pptxPath });
+  }
+
+  const data = buildUpdates(colMap, row.rowIndex, fields, sheetConfig.name);
+
+  await batchWrite(sheets, data, sheetConfig.id);
+  console.log(`   📝 PDF/PPTX paths saved for row ${row.rowIndex} on "${sheetConfig.name}"`);
+}
+
+// ──── Issuu Posting ─────────────────────────────────────────────────────────────
+
+export async function getRowsForContinuousIssuuPosting(limit: number = 15): Promise<SheetRow[]> {
+  // New Logic (not Social Media) — Issuu needs row.blogContent to build the
+  // PDF via htmlToPdf(), and only New Logic/Blogs carry that column.
+  return pickRowsByEmptyStatus(['Issuu Status', 'issuu status', 'IssuuStatus'], 'Issuu', limit, 'newLogic');
+}
+
+export async function saveUnifiedIssuuResult(
+  row: SheetRow,
+  result: { postUrl: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig(row.sheetType ?? 'newLogic');
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+  const today = new Date().toISOString().split('T')[0];
+  const newUrl = appendValue(row.issuuUrl, result.postUrl);
+  const newLastPosted = result.status?.toLowerCase() === 'posted'
+    ? appendValue(row.lastPostedIssuu, today)
+    : (row.lastPostedIssuu ?? '');
+  const data = buildUpdates(colMap, row.rowIndex, [
+    { names: ['Issuu Post URL', 'issuu post url'], value: newUrl },
+    { names: ['Issuu Status', 'issuu status'], value: result.status },
+    { names: ['Issuu Error', 'issuu error'], value: result.error ?? '' },
+    { names: ['issuuBatch', 'issuu batch', 'Issuu Batch'], value: result.batch ?? '' },
+    { names: ['Last Posted Issuu', 'lastPostedIssuu', 'lastpostedissuu'], value: newLastPosted },
+  ], sheetConfig.name);
+  await batchWrite(sheets, data, sheetConfig.id);
+}
+
+// SlideShare (PPTX flow) — reads/writes the Blog sheet (content comes from blogContent).
+export async function saveUnifiedSlideshareResult(
+  row: SheetRow,
+  result: { postUrl: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig(row.sheetType ?? 'blog');
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+  const today = new Date().toISOString().split('T')[0];
+  const newUrl = appendValue(row.slideshareUrl, result.postUrl);
+  const newLastPosted = result.status?.toLowerCase() === 'posted'
+    ? appendValue(row.lastPostedSlideshare, today)
+    : (row.lastPostedSlideshare ?? '');
+  const data = buildUpdates(colMap, row.rowIndex, [
+    { names: ['SlideShare Post URL', 'slideshare post url'], value: newUrl },
+    { names: ['SlideShare Status', 'slideshare status'], value: result.status },
+    { names: ['SlideShare Error', 'slideshare error'], value: result.error ?? '' },
+    { names: ['slideshareBatch', 'slideshare batch', 'SlideShare Batch'], value: result.batch ?? '' },
+    { names: ['Last Posted SlideShare', 'lastPostedSlideshare', 'lastpostedslideshare'], value: newLastPosted },
+  ], sheetConfig.name);
+  await batchWrite(sheets, data, sheetConfig.id);
+}
+
+// ──── Instapaper Posting ────────────────────────────────────────────────────────
+
+export async function getRowsForContinuousInstapaperPosting(limit: number = 15): Promise<SheetRow[]> {
+  return pickRowsByEmptyStatus(['Instapaper Status', 'instapaper status', 'InstapaperStatus'], 'Instapaper', limit, 'social');
+}
+
+export async function saveUnifiedInstapaperResult(
+  row: SheetRow,
+  result: { postUrl: string; note?: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig(row.sheetType ?? 'social');
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+  const today = new Date().toISOString().split('T')[0];
+  const newUrl = appendValue(row.instapaperUrl, result.postUrl);
+  const newLastPosted = result.status?.toLowerCase() === 'posted'
+    ? appendValue(row.lastPostedInstapaper, today)
+    : (row.lastPostedInstapaper ?? '');
+  const data = buildUpdates(colMap, row.rowIndex, [
+    { names: ['Instapaper Post URL', 'instapaper post url'], value: newUrl },
+    { names: ['Instapaper Note', 'instapaper note'], value: result.note ?? row.instapaperNote ?? '' },
+    { names: ['Instapaper Status', 'instapaper status'], value: result.status },
+    { names: ['Instapaper Error', 'instapaper error'], value: result.error ?? '' },
+    { names: ['instapaperBatch', 'instapaper batch', 'Instapaper Batch'], value: result.batch ?? '' },
+    { names: ['Last Posted Instapaper', 'lastPostedInstapaper', 'lastpostedinstapaper'], value: newLastPosted },
+  ], sheetConfig.name);
+  await batchWrite(sheets, data, sheetConfig.id);
+}
+
+// ──── Raindrop Posting ──────────────────────────────────────────────────────────
+
+export async function getRowsForContinuousRaindropPosting(limit: number = 15): Promise<SheetRow[]> {
+  return pickRowsByEmptyStatus(['Raindrop Status', 'raindrop status', 'RaindropStatus'], 'Raindrop', limit, 'social');
+}
+
+export async function saveUnifiedRaindropResult(
+  row: SheetRow,
+  result: { postUrl: string; note?: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig(row.sheetType ?? 'social');
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+  const today = new Date().toISOString().split('T')[0];
+  const newUrl = appendValue(row.raindropUrl, result.postUrl);
+  const newLastPosted = result.status?.toLowerCase() === 'posted'
+    ? appendValue(row.lastPostedRaindrop, today)
+    : (row.lastPostedRaindrop ?? '');
+  const data = buildUpdates(colMap, row.rowIndex, [
+    { names: ['Raindrop Post URL', 'raindrop post url'], value: newUrl },
+    { names: ['Raindrop Note', 'raindrop note'], value: result.note ?? row.raindropNote ?? '' },
+    { names: ['Raindrop Status', 'raindrop status'], value: result.status },
+    { names: ['Raindrop Error', 'raindrop error'], value: result.error ?? '' },
+    { names: ['raindropBatch', 'raindrop batch', 'Raindrop Batch'], value: result.batch ?? '' },
+    { names: ['Last Posted Raindrop', 'lastPostedRaindrop', 'lastpostedraindrop'], value: newLastPosted },
+  ], sheetConfig.name);
+  await batchWrite(sheets, data, sheetConfig.id);
+}
+
+// ──── Pearltrees Posting ────────────────────────────────────────────────────────
+
+export async function getRowsForContinuousPearltreesPosting(limit: number = 15): Promise<SheetRow[]> {
+  return pickRowsByEmptyStatus(['Pearltrees Status', 'pearltrees status', 'PearltreesStatus'], 'Pearltrees', limit, 'social');
+}
+
+export async function saveUnifiedPearltreesResult(
+  row: SheetRow,
+  result: { postUrl: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig(row.sheetType ?? 'social');
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+  const today = new Date().toISOString().split('T')[0];
+  const newUrl = appendValue(row.pearltreesUrl, result.postUrl);
+  const newLastPosted = result.status?.toLowerCase() === 'posted'
+    ? appendValue(row.lastPostedPearltrees, today)
+    : (row.lastPostedPearltrees ?? '');
+  const data = buildUpdates(colMap, row.rowIndex, [
+    { names: ['Pearltrees Post URL', 'pearltrees post url'], value: newUrl },
+    { names: ['Pearltrees Status', 'pearltrees status'], value: result.status },
+    { names: ['Pearltrees Error', 'pearltrees error'], value: result.error ?? '' },
+    { names: ['pearltreesBatch', 'pearltrees batch', 'Pearltrees Batch'], value: result.batch ?? '' },
+    { names: ['Last Posted Pearltrees', 'lastPostedPearltrees', 'lastpostedpearltrees'], value: newLastPosted },
+  ], sheetConfig.name);
+  await batchWrite(sheets, data, sheetConfig.id);
+}
+
+// ──── PdfHost Posting ───────────────────────────────────────────────────────────
+
+export async function getRowsForContinuousPdfhostPosting(limit: number = 15): Promise<SheetRow[]> {
+  // New Logic (not Social Media) — needs row.blogContent for htmlToPdf().
+  return pickRowsByEmptyStatus(['PdfHost Status', 'pdfhost status', 'PdfHostStatus'], 'PdfHost', limit, 'newLogic');
+}
+
+export async function saveUnifiedPdfhostResult(
+  row: SheetRow,
+  result: { postUrl: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig(row.sheetType ?? 'newLogic');
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+  const today = new Date().toISOString().split('T')[0];
+  const newUrl = appendValue(row.pdfhostUrl, result.postUrl);
+  const newLastPosted = result.status?.toLowerCase() === 'posted'
+    ? appendValue(row.lastPostedPdfhost, today)
+    : (row.lastPostedPdfhost ?? '');
+  const data = buildUpdates(colMap, row.rowIndex, [
+    { names: ['PdfHost Post URL', 'pdfhost post url'], value: newUrl },
+    { names: ['PdfHost Status', 'pdfhost status'], value: result.status },
+    { names: ['PdfHost Error', 'pdfhost error'], value: result.error ?? '' },
+    { names: ['pdfhostBatch', 'pdfhost batch', 'PdfHost Batch'], value: result.batch ?? '' },
+    { names: ['Last Posted PdfHost', 'lastPostedPdfhost', 'lastpostedpdfhost'], value: newLastPosted },
+  ], sheetConfig.name);
+  await batchWrite(sheets, data, sheetConfig.id);
+}
+
+// ──── FlipHTML5 Posting ─────────────────────────────────────────────────────────
+
+export async function getRowsForContinuousFliphtml5Posting(limit: number = 15): Promise<SheetRow[]> {
+  // New Logic (not Social Media) — needs row.blogContent for htmlToPdf().
+  return pickRowsByEmptyStatus(['FlipHTML5 Status', 'fliphtml5 status', 'FlipHtml5Status'], 'FlipHTML5', limit, 'newLogic');
+}
+
+export async function saveUnifiedFliphtml5Result(
+  row: SheetRow,
+  result: { postUrl: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig(row.sheetType ?? 'newLogic');
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+  const today = new Date().toISOString().split('T')[0];
+  const newUrl = appendValue(row.fliphtml5Url, result.postUrl);
+  const newLastPosted = result.status?.toLowerCase() === 'posted'
+    ? appendValue(row.lastPostedFliphtml5, today)
+    : (row.lastPostedFliphtml5 ?? '');
+  const data = buildUpdates(colMap, row.rowIndex, [
+    { names: ['FlipHTML5 Post URL', 'fliphtml5 post url'], value: newUrl },
+    { names: ['FlipHTML5 Status', 'fliphtml5 status'], value: result.status },
+    { names: ['FlipHTML5 Error', 'fliphtml5 error'], value: result.error ?? '' },
+    { names: ['fliphtml5Batch', 'fliphtml5 batch', 'FlipHTML5 Batch'], value: result.batch ?? '' },
+    { names: ['Last Posted FlipHTML5', 'lastPostedFliphtml5', 'lastpostedfliphtml5'], value: newLastPosted },
+  ], sheetConfig.name);
+  await batchWrite(sheets, data, sheetConfig.id);
+}
+
+// ──── Scribd Posting ────────────────────────────────────────────────────────────
+
+export async function getRowsForContinuousScribdPosting(limit: number = 15): Promise<SheetRow[]> {
+  // New Logic (not Social Media) — needs row.blogContent for htmlToPdf().
+  return pickRowsByEmptyStatus(['Scribd Status', 'scribd status', 'ScribdStatus'], 'Scribd', limit, 'newLogic');
+}
+
+export async function saveUnifiedScribdResult(
+  row: SheetRow,
+  result: { postUrl: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig(row.sheetType ?? 'newLogic');
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+  const today = new Date().toISOString().split('T')[0];
+  const newUrl = appendValue(row.scribdUrl, result.postUrl);
+  const newLastPosted = result.status?.toLowerCase() === 'posted'
+    ? appendValue(row.lastPostedScribd, today)
+    : (row.lastPostedScribd ?? '');
+  const data = buildUpdates(colMap, row.rowIndex, [
+    { names: ['Scribd Post URL', 'scribd post url'], value: newUrl },
+    { names: ['Scribd Status', 'scribd status'], value: result.status },
+    { names: ['Scribd Error', 'scribd error'], value: result.error ?? '' },
+    { names: ['scribdBatch', 'scribd batch', 'Scribd Batch'], value: result.batch ?? '' },
+    { names: ['Last Posted Scribd', 'lastPostedScribd', 'lastpostedscribd'], value: newLastPosted },
+  ], sheetConfig.name);
+  await batchWrite(sheets, data, sheetConfig.id);
+}
+
+// ──── 4shared Posting ───────────────────────────────────────────────────────────
+
+export async function getRowsForContinuousFourSharedPosting(limit: number = 15): Promise<SheetRow[]> {
+  // New Logic (not Social Media) — needs row.blogContent for htmlToPdf().
+  return pickRowsByEmptyStatus(['4shared Status', '4shared status', 'FourSharedStatus'], '4shared', limit, 'newLogic');
+}
+
+export async function saveUnifiedFourSharedResult(
+  row: SheetRow,
+  result: { postUrl: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig(row.sheetType ?? 'newLogic');
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+  const today = new Date().toISOString().split('T')[0];
+  const newUrl = appendValue(row.fourSharedUrl, result.postUrl);
+  const newLastPosted = result.status?.toLowerCase() === 'posted'
+    ? appendValue(row.lastPostedFourShared, today)
+    : (row.lastPostedFourShared ?? '');
+  const data = buildUpdates(colMap, row.rowIndex, [
+    { names: ['4shared Post URL', '4shared post url'], value: newUrl },
+    { names: ['4shared Status', '4shared status'], value: result.status },
+    { names: ['4shared Error', '4shared error'], value: result.error ?? '' },
+    { names: ['fourSharedBatch', '4shared batch', '4shared Batch'], value: result.batch ?? '' },
+    { names: ['Last Posted 4shared', 'lastPostedFourShared', 'lastposted4shared'], value: newLastPosted },
+  ], sheetConfig.name);
+  await batchWrite(sheets, data, sheetConfig.id);
+}
+
+// ──── Hatena Posting ────────────────────────────────────────────────────────────
+
+export async function getRowsForContinuousHatenaPosting(limit: number = 15): Promise<SheetRow[]> {
+  return pickRowsByEmptyStatus(['Hatena Status', 'hatena status', 'HatenaStatus'], 'Hatena', limit, 'social');
+}
+
+export async function saveUnifiedHatenaResult(
+  row: SheetRow,
+  result: { postUrl: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig(row.sheetType ?? 'social');
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+  const today = new Date().toISOString().split('T')[0];
+  const newUrl = appendValue(row.hatenaUrl, result.postUrl);
+  const newLastPosted = result.status?.toLowerCase() === 'posted'
+    ? appendValue(row.lastPostedHatena, today)
+    : (row.lastPostedHatena ?? '');
+  const data = buildUpdates(colMap, row.rowIndex, [
+    { names: ['Hatena Post URL', 'hatena post url'], value: newUrl },
+    { names: ['Hatena Status', 'hatena status'], value: result.status },
+    { names: ['Hatena Error', 'hatena error'], value: result.error ?? '' },
+    { names: ['hatenaBatch', 'hatena batch', 'Hatena Batch'], value: result.batch ?? '' },
+    { names: ['Last Posted Hatena', 'lastPostedHatena', 'lastpostedhatena'], value: newLastPosted },
+  ], sheetConfig.name);
+  await batchWrite(sheets, data, sheetConfig.id);
+}
+
+// ──── Yumpu Posting ─────────────────────────────────────────────────────────────
+
+export async function getRowsForContinuousYumpuPosting(limit: number = 15): Promise<SheetRow[]> {
+  // New Logic (not Social Media) — needs row.blogContent for htmlToPdf().
+  return pickRowsByEmptyStatus(['Yumpu Status', 'yumpu status', 'YumpuStatus'], 'Yumpu', limit, 'newLogic');
+}
+
+export async function saveUnifiedYumpuResult(
+  row: SheetRow,
+  result: { postUrl: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  const sheets = await getSheetsClient();
+  const sheetConfig = getSheetConfig(row.sheetType ?? 'newLogic');
+  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
+  const today = new Date().toISOString().split('T')[0];
+  const newUrl = appendValue(row.yumpuUrl, result.postUrl);
+  const newLastPosted = result.status?.toLowerCase() === 'posted'
+    ? appendValue(row.lastPostedYumpu, today)
+    : (row.lastPostedYumpu ?? '');
+  const data = buildUpdates(colMap, row.rowIndex, [
+    { names: ['Yumpu Post URL', 'yumpu post url'], value: newUrl },
+    { names: ['Yumpu Status', 'yumpu status'], value: result.status },
+    { names: ['Yumpu Error', 'yumpu error'], value: result.error ?? '' },
+    { names: ['yumpuBatch', 'yumpu batch', 'Yumpu Batch'], value: result.batch ?? '' },
+    { names: ['Last Posted Yumpu', 'lastPostedYumpu', 'lastpostedyumpu'], value: newLastPosted },
+  ], sheetConfig.name);
+  await batchWrite(sheets, data, sheetConfig.id);
+}

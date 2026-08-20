@@ -655,7 +655,11 @@ async function main() {
     ignoreDefaultArgs: ['--enable-automation'],
   });
 
-  const page = context.pages()[0] ?? await context.newPage();
+  const openPages = context.pages();
+  const page = openPages[0] ?? await context.newPage();
+  // Close tabs the persistent profile restored after the rotation's `pkill -9`
+  // (we only use pages()[0]) so about:blank tabs don't accumulate across runs.
+  for (const extra of openPages.slice(1)) await extra.close().catch(() => {});
 
   try {
     await page.goto('https://chatgpt.com', { waitUntil: 'domcontentloaded', timeout: 60000 });
