@@ -12,7 +12,7 @@
 export interface PortalPlatform {
   key: string;           // short key used in the session-dir name (e.g. x, medium)
   label: string;         // human label for the dashboard
-  group: 'social' | 'blog' | 'engine';
+  group: 'social' | 'blog' | 'sbm' | 'document' | 'engine';
   loginUrl: string;      // URL Chrome opens for the login
   homeUrl?: string;      // logged-in landing page (reveals the stored account) for "View session";
                          // falls back to loginUrl, which usually redirects to home when logged in.
@@ -59,6 +59,27 @@ export const PLATFORMS: Record<string, PortalPlatform> = {
   // inspected live yet) — login itself works regardless per this file's own
   // note above; only the "ready" badge accuracy is approximate until confirmed.
   coda:         { key: 'coda',         label: 'Coda',         group: 'blog', loginUrl: 'https://coda.io/login',          homeUrl: 'https://coda.io/docs',                     registryFile: '.accounts/accounts-coda.json',         authCookies: ['coda_session', 'session'] },
+
+  // ── SBM (social bookmarking — SBM/PPT integration, 2026-08-20) ──
+  // authCookies are unconfirmed best guesses (no live cookie-DB inspection yet
+  // for these platforms) — same caveat as Mastodon/Coda above: the login itself
+  // always works regardless of badge accuracy, only the "ready" badge may lag
+  // until someone confirms the real cookie name live.
+  pearltrees: { key: 'pearltrees', label: 'Pearltrees', group: 'sbm', loginUrl: 'https://www.pearltrees.com/', homeUrl: 'https://www.pearltrees.com/', registryFile: '.accounts/accounts-pearltrees.json', authCookies: ['PHPSESSID'] },
+  raindrop:   { key: 'raindrop',   label: 'Raindrop',   group: 'sbm', loginUrl: 'https://app.raindrop.io/login', homeUrl: 'https://app.raindrop.io/my/0', registryFile: '.accounts/accounts-raindrop.json', authCookies: ['_raindrop_session', 'session'] },
+  hatena:     { key: 'hatena',     label: 'Hatena',      group: 'sbm', loginUrl: 'https://www.hatena.ne.jp/login?location=https%3A%2F%2Fb.hatena.ne.jp%2F', homeUrl: 'https://b.hatena.ne.jp/', registryFile: '.accounts/accounts-hatena.json', authCookies: ['rk', 'b_ck1'] },
+
+  // ── Document / PPT-PDF (SBM/PPT integration, 2026-08-20) ──
+  // Content is generated from blogContent (PDF) or the blog's slide outline
+  // (PPTX for SlideShare) rather than typed by hand — see contentConverter.ts /
+  // pptGenerator.ts. authCookies unconfirmed, same caveat as above.
+  pdfhost:     { key: 'pdfhost',     label: 'PdfHost',     group: 'document', loginUrl: 'https://pdfhost.io/login',         homeUrl: 'https://pdfhost.io/dashboard',        registryFile: '.accounts/accounts-pdfhost.json',     authCookies: ['pdfhost_session', 'laravel_session'] },
+  fliphtml5:   { key: 'fliphtml5',   label: 'FlipHTML5',   group: 'document', loginUrl: 'https://fliphtml5.com/login.php', homeUrl: 'https://fliphtml5.com/app/',          registryFile: '.accounts/accounts-fliphtml5.json',   authCookies: ['PHPSESSID'] },
+  fourshared:  { key: 'fourshared',  label: '4shared',     group: 'document', loginUrl: 'https://www.4shared.com/web/login', homeUrl: 'https://www.4shared.com/web/account/myFiles', registryFile: '.accounts/accounts-fourshared.json', authCookies: ['JSESSIONID'] },
+  yumpu:       { key: 'yumpu',       label: 'Yumpu',       group: 'document', loginUrl: 'https://www.yumpu.com/en/user/login', homeUrl: 'https://www.yumpu.com/en/account/create', registryFile: '.accounts/accounts-yumpu.json',   authCookies: ['yumpu_session', 'session'] },
+  issuu:       { key: 'issuu',       label: 'Issuu',       group: 'document', loginUrl: 'https://issuu.com/home/login',    homeUrl: 'https://issuu.com/publish',           registryFile: '.accounts/accounts-issuu.json',       authCookies: ['connect.sid'] },
+  slideshare:  { key: 'slideshare',  label: 'SlideShare',  group: 'document', loginUrl: 'https://www.slideshare.net/login', homeUrl: 'https://www.slideshare.net/',        registryFile: '.accounts/accounts-slideshare.json',  authCookies: ['lo_session', 'JSESSIONID'] },
+  speakerdeck: { key: 'speakerdeck', label: 'Speaker Deck', group: 'document', loginUrl: 'https://speakerdeck.com/signin', homeUrl: 'https://speakerdeck.com/new',         registryFile: '.accounts/accounts-speakerdeck.json', authCookies: ['_speaker_deck_session'] },
 
   // ── Engine (blog generation, not a posting target) ──
   // ChatGPT session used by generate_blog_chatgpt.ts to write the article HTML.
