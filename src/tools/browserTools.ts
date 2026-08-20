@@ -31,14 +31,10 @@ import { loginToWordpress, closeWordpressBrowser } from '../browser/wordpress/lo
 import { postToWordpress } from '../browser/wordpress/poster.js';
 import { loginToBlogger, closeBloggerBrowser } from '../browser/blogger/login.js';
 import { postToBlogger } from '../browser/blogger/poster.js';
-import { loginToPatreon, closePatreonBrowser, getPatreonAccountByNickname, getActivePatreonAccount } from '../browser/patreon/login.js';
-import { postToPatreon } from '../browser/patreon/poster.js';
 import { loginToNotion, closeNotionBrowser, getNotionAccountByNickname, getActiveNotionAccount } from '../browser/notion/login.js';
 import { postToNotion } from '../browser/notion/poster.js';
 import { loginToNote, closeNoteBrowser, getNoteAccountByNickname, getActiveNoteAccount } from '../browser/note/login.js';
 import { postToNote } from '../browser/note/poster.js';
-import { loginToParagraph, closeParagraphBrowser } from '../browser/paragraph/login.js';
-import { postToParagraph } from '../browser/paragraph/poster.js';
 import { loginToCoda, closeCodaBrowser, getCodaAccountByNickname } from '../browser/coda/login.js';
 import { postToCoda } from '../browser/coda/poster.js';
 import { loginToTumblr, closeTumblrBrowser } from '../browser/tumblr/login.js';
@@ -62,14 +58,8 @@ import { loginToScribd, closeScribdBrowser } from '../browser/scribd/login.js';
 import { postToScribd } from '../browser/scribd/poster.js';
 import { loginToFourShared, closeFourSharedBrowser } from '../browser/fourshared/login.js';
 import { postToFourShared } from '../browser/fourshared/poster.js';
-import { loginToYumpu, closeYumpuBrowser } from '../browser/yumpu/login.js';
-import { postToYumpu } from '../browser/yumpu/poster.js';
 import { loginToIssuu, closeIssuuBrowser } from '../browser/issuu/login.js';
 import { postToIssuu } from '../browser/issuu/poster.js';
-import { loginToSlideShare, closeSlideShareBrowser } from '../browser/slideshare/login.js';
-import { postToSlideShare } from '../browser/slideshare/poster.js';
-import { loginToSpeakerDeck, closeSpeakerDeckBrowser } from '../browser/speakerdeck/login.js';
-import { postToSpeakerDeck } from '../browser/speakerdeck/poster.js';
 import { getAccountByHandle } from '../config/accounts.js';
 export interface Tool {
   name: string;
@@ -95,10 +85,8 @@ let googleSitePage: Page | null = null;
 let linkedInPulsePage: Page | null = null;
 let devtoPage: Page | null = null;
 let linkmatePage: Page | null = null;
-let patreonPage: Page | null = null;
 let notionPage: Page | null = null;
 let notePage: Page | null = null;
-let paragraphPage: Page | null = null;
 // ══ SBM + PPT/PDF platform browser tools (grafted) ══
 let instapaperPage: Page | null = null;
 let raindropPage: Page | null = null;
@@ -108,10 +96,7 @@ let pdfhostPage: Page | null = null;
 let fliphtml5Page: Page | null = null;
 let scribdPage: Page | null = null;
 let foursharedPage: Page | null = null;
-let yumpuPage: Page | null = null;
 let issuuPage: Page | null = null;
-let slidesharePage: Page | null = null;
-let speakerdeckPage: Page | null = null;
 
 export const BROWSER_TOOLS: Tool[] = [
   {
@@ -429,29 +414,6 @@ export const BROWSER_TOOLS: Tool[] = [
     },
   },
   {
-    name: 'login_patreon',
-    description: 'Login to Patreon with account credentials',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        nickname: { type: 'string', description: 'Patreon account nickname' },
-      },
-      required: ['nickname'],
-    },
-  },
-  {
-    name: 'post_patreon',
-    description: 'Post to Patreon. Must call login_patreon first.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        title: { type: 'string', description: 'Post title' },
-        htmlContent: { type: 'string', description: 'Post content (HTML)' },
-      },
-      required: ['title', 'htmlContent'],
-    },
-  },
-  {
     name: 'login_notion',
     description: 'Login to Notion with account credentials',
     input_schema: {
@@ -488,29 +450,6 @@ export const BROWSER_TOOLS: Tool[] = [
   {
     name: 'post_note',
     description: 'Post an article to Note.com. Must call login_note first.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        title: { type: 'string', description: 'Article title' },
-        htmlContent: { type: 'string', description: 'Article content (HTML)' },
-      },
-      required: ['title', 'htmlContent'],
-    },
-  },
-  {
-    name: 'login_paragraph',
-    description: 'Login to Paragraph.com with account credentials',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        nickname: { type: 'string', description: 'Paragraph account nickname' },
-      },
-      required: ['nickname'],
-    },
-  },
-  {
-    name: 'post_paragraph',
-    description: 'Post an article to Paragraph.com. Must call login_paragraph first.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -602,16 +541,6 @@ export const BROWSER_TOOLS: Tool[] = [
     input_schema: { type: 'object' as const, properties: { filePath: { type: 'string', description: 'Local path to the file' }, targetUrl: { type: 'string', description: 'Report URL' } }, required: ['filePath', 'targetUrl'] },
   },
   {
-    name: 'login_yumpu',
-    description: 'Login to Yumpu with account credentials',
-    input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: 'Yumpu account nickname' } }, required: ['nickname'] },
-  },
-  {
-    name: 'post_yumpu',
-    description: 'Upload a PDF to Yumpu. Must call login_yumpu first.',
-    input_schema: { type: 'object' as const, properties: { filePath: { type: 'string', description: 'Local path to the PDF file' }, title: { type: 'string', description: 'Publication title' }, description: { type: 'string', description: 'Publication description' }, targetUrl: { type: 'string', description: 'Report URL' } }, required: ['filePath', 'title', 'description', 'targetUrl'] },
-  },
-  {
     name: 'login_issuu',
     description: 'Login to Issuu with account credentials',
     input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: 'Issuu account nickname' } }, required: ['nickname'] },
@@ -620,26 +549,6 @@ export const BROWSER_TOOLS: Tool[] = [
     name: 'post_issuu',
     description: 'Upload a PDF to Issuu. Must call login_issuu first.',
     input_schema: { type: 'object' as const, properties: { filePath: { type: 'string', description: 'Local path to the PDF file' }, title: { type: 'string', description: 'Publication title' }, description: { type: 'string', description: 'Publication description' }, targetUrl: { type: 'string', description: 'Report URL' } }, required: ['filePath', 'title', 'description', 'targetUrl'] },
-  },
-  {
-    name: 'login_slideshare',
-    description: 'Login to SlideShare with account credentials',
-    input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: 'SlideShare account nickname' } }, required: ['nickname'] },
-  },
-  {
-    name: 'post_slideshare',
-    description: 'Upload a slide deck (PPTX) to SlideShare. Must call login_slideshare first.',
-    input_schema: { type: 'object' as const, properties: { filePath: { type: 'string', description: 'Local path to the PPTX file' }, title: { type: 'string', description: 'Deck title' }, description: { type: 'string', description: 'Deck description' }, tags: { type: 'array', items: { type: 'string' }, description: 'Tags' } }, required: ['filePath', 'title', 'description'] },
-  },
-  {
-    name: 'login_speakerdeck',
-    description: 'Login to Speaker Deck with account credentials',
-    input_schema: { type: 'object' as const, properties: { nickname: { type: 'string', description: 'Speaker Deck account nickname' } }, required: ['nickname'] },
-  },
-  {
-    name: 'post_speakerdeck',
-    description: 'Upload a PDF to Speaker Deck. Must call login_speakerdeck first.',
-    input_schema: { type: 'object' as const, properties: { filePath: { type: 'string', description: 'Local path to the PDF file' }, title: { type: 'string', description: 'Deck title' }, description: { type: 'string', description: 'Deck description' }, targetUrl: { type: 'string', description: 'Report URL' } }, required: ['filePath', 'title', 'description', 'targetUrl'] },
   },
 ];
 
@@ -754,12 +663,6 @@ export async function executeBrowserTool(toolName: string, input: Record<string,
     if (toolName === 'post_blogger') {
       return await postBloggerTool(input.title, input.htmlContent);
     }
-    if (toolName === 'login_patreon') {
-      return await loginPatreonTool(input.nickname);
-    }
-    if (toolName === 'post_patreon') {
-      return await postPatreonTool(input.title, input.htmlContent);
-    }
     if (toolName === 'login_notion') {
       return await loginNotionTool(input.nickname);
     }
@@ -771,12 +674,6 @@ export async function executeBrowserTool(toolName: string, input: Record<string,
     }
     if (toolName === 'post_note') {
       return await postNoteTool(input.title, input.htmlContent);
-    }
-    if (toolName === 'login_paragraph') {
-      return await loginParagraphTool(input.nickname);
-    }
-    if (toolName === 'post_paragraph') {
-      return await postParagraphTool(input.title, input.htmlContent);
     }
     // ══ SBM + PPT/PDF platform browser tools (grafted) ══
     if (toolName === 'login_instapaper') {
@@ -827,29 +724,11 @@ export async function executeBrowserTool(toolName: string, input: Record<string,
     if (toolName === 'post_fourshared') {
       return await postFourSharedTool(input.filePath, input.targetUrl);
     }
-    if (toolName === 'login_yumpu') {
-      return await loginYumpuTool(input.nickname);
-    }
-    if (toolName === 'post_yumpu') {
-      return await postYumpuTool(input.filePath, input.title, input.description, input.targetUrl);
-    }
     if (toolName === 'login_issuu') {
       return await loginIssuuTool(input.nickname);
     }
     if (toolName === 'post_issuu') {
       return await postIssuuTool(input.filePath, input.title, input.description, input.targetUrl);
-    }
-    if (toolName === 'login_slideshare') {
-      return await loginSlideShareTool(input.nickname);
-    }
-    if (toolName === 'post_slideshare') {
-      return await postSlideShareTool(input.filePath, input.title, input.description, input.tags);
-    }
-    if (toolName === 'login_speakerdeck') {
-      return await loginSpeakerDeckTool(input.nickname);
-    }
-    if (toolName === 'post_speakerdeck') {
-      return await postSpeakerDeckTool(input.filePath, input.title, input.description, input.targetUrl);
     }
     return { error: `Unknown tool: ${toolName}`, success: false };
   } catch (err: any) {
@@ -1527,12 +1406,6 @@ export async function closeAllBrowsers(): Promise<void> {
     } catch (e) {}
     bloggerPage = null;
   }
-  if (patreonPage) {
-    try {
-      await closePatreonBrowser();
-    } catch (e) {}
-    patreonPage = null;
-  }
   if (notionPage) {
     try {
       await closeNotionBrowser();
@@ -1626,42 +1499,6 @@ async function postBloggerTool(title: string, htmlContent: string): Promise<any>
 }
 
 /**
- * Patreon Tools
- */
-let patreonNickname: string | null = null;
-
-async function loginPatreonTool(nickname: string): Promise<any> {
-  try {
-    patreonPage = await loginToPatreon({ nickname });
-    patreonNickname = nickname;
-    return { success: true, message: `Logged in to Patreon (${nickname})` };
-  } catch (err: any) {
-    try { await closePatreonBrowser(); } catch { /* ignore */ }
-    patreonPage = null;
-    patreonNickname = null;
-    return { error: err.message, success: false };
-  }
-}
-
-async function postPatreonTool(title: string, htmlContent: string): Promise<any> {
-  try {
-    if (!patreonPage) return { error: 'Not logged in. Call login_patreon first.', success: false };
-    const { getPatreonAccountByNickname: getByNick } = await import('../browser/patreon/login.js');
-    const account = patreonNickname ? getByNick(patreonNickname) : null;
-    const result = await postToPatreon(patreonPage, title, htmlContent, account?.creatorUrl);
-    return { success: result.success, postUrl: result.postUrl };
-  } catch (err: any) {
-    return { error: err.message, success: false };
-  } finally {
-    if (patreonPage) {
-      await closePatreonBrowser().catch(() => {});
-      patreonPage = null;
-      patreonNickname = null;
-    }
-  }
-}
-
-/**
  * Notion Tools
  */
 let notionNickname: string | null = null;
@@ -1725,40 +1562,6 @@ async function postNoteTool(title: string, htmlContent: string): Promise<any> {
       await closeNoteBrowser().catch(() => {});
       notePage = null;
       noteNickname = null;
-    }
-  }
-}
-
-/**
- * Paragraph Tools
- */
-let paragraphNickname: string | null = null;
-
-async function loginParagraphTool(nickname: string): Promise<any> {
-  try {
-    paragraphPage = await loginToParagraph({ nickname });
-    paragraphNickname = nickname;
-    return { success: true, message: `Logged in to Paragraph (${nickname})` };
-  } catch (err: any) {
-    try { await closeParagraphBrowser(); } catch { /* ignore */ }
-    paragraphPage = null;
-    paragraphNickname = null;
-    return { error: err.message, success: false };
-  }
-}
-
-async function postParagraphTool(title: string, htmlContent: string): Promise<any> {
-  try {
-    if (!paragraphPage) return { error: 'Not logged in. Call login_paragraph first.', success: false };
-    const result = await postToParagraph(paragraphPage, title, htmlContent);
-    return { success: result.success, postUrl: result.postUrl };
-  } catch (err: any) {
-    return { error: err.message, success: false };
-  } finally {
-    if (paragraphPage) {
-      await closeParagraphBrowser().catch(() => {});
-      paragraphPage = null;
-      paragraphNickname = null;
     }
   }
 }
@@ -1975,32 +1778,6 @@ async function postFourSharedTool(filePath: string, targetUrl: string): Promise<
   }
 }
 
-/** Yumpu */
-async function loginYumpuTool(nickname: string): Promise<any> {
-  try {
-    yumpuPage = await loginToYumpu({ nickname });
-    return { success: true, message: `Logged in to Yumpu (${nickname})` };
-  } catch (err: any) {
-    yumpuPage = null;
-    return { error: err.message, success: false };
-  }
-}
-
-async function postYumpuTool(filePath: string, title: string, description: string, targetUrl: string): Promise<any> {
-  try {
-    if (!yumpuPage) return { error: 'Not logged in. Call login_yumpu first.', success: false };
-    const result = await postToYumpu(yumpuPage, filePath, title, description, targetUrl);
-    return { success: result.success, postUrl: result.postUrl };
-  } catch (err: any) {
-    return { error: err.message, success: false };
-  } finally {
-    if (yumpuPage) {
-      await closeYumpuBrowser().catch(() => {});
-      yumpuPage = null;
-    }
-  }
-}
-
 /** Issuu */
 async function loginIssuuTool(nickname: string): Promise<any> {
   try {
@@ -2023,58 +1800,6 @@ async function postIssuuTool(filePath: string, title: string, description: strin
     if (issuuPage) {
       await closeIssuuBrowser().catch(() => {});
       issuuPage = null;
-    }
-  }
-}
-
-/** SlideShare */
-async function loginSlideShareTool(nickname: string): Promise<any> {
-  try {
-    slidesharePage = (await loginToSlideShare({ nickname })).page;
-    return { success: true, message: `Logged in to SlideShare (${nickname})` };
-  } catch (err: any) {
-    slidesharePage = null;
-    return { error: err.message, success: false };
-  }
-}
-
-async function postSlideShareTool(filePath: string, title: string, description: string, tags?: string[]): Promise<any> {
-  try {
-    if (!slidesharePage) return { error: 'Not logged in. Call login_slideshare first.', success: false };
-    const result = await postToSlideShare(slidesharePage, filePath, title, description, tags ?? []);
-    return { success: result.success, postUrl: result.postUrl };
-  } catch (err: any) {
-    return { error: err.message, success: false };
-  } finally {
-    if (slidesharePage) {
-      await closeSlideShareBrowser().catch(() => {});
-      slidesharePage = null;
-    }
-  }
-}
-
-/** Speaker Deck */
-async function loginSpeakerDeckTool(nickname: string): Promise<any> {
-  try {
-    speakerdeckPage = await loginToSpeakerDeck({ nickname });
-    return { success: true, message: `Logged in to Speaker Deck (${nickname})` };
-  } catch (err: any) {
-    speakerdeckPage = null;
-    return { error: err.message, success: false };
-  }
-}
-
-async function postSpeakerDeckTool(filePath: string, title: string, description: string, targetUrl: string): Promise<any> {
-  try {
-    if (!speakerdeckPage) return { error: 'Not logged in. Call login_speakerdeck first.', success: false };
-    const result = await postToSpeakerDeck(speakerdeckPage, filePath, title, description, targetUrl);
-    return { success: result.success, postUrl: result.postUrl };
-  } catch (err: any) {
-    return { error: err.message, success: false };
-  } finally {
-    if (speakerdeckPage) {
-      await closeSpeakerDeckBrowser().catch(() => {});
-      speakerdeckPage = null;
     }
   }
 }

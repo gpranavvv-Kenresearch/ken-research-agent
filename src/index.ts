@@ -27,11 +27,7 @@
  *   npm run dev -- save-x-session <nickname>          → login & save X session
  *   npm run dev -- save-fb-session <nickname>         → login & save Facebook session
  *   npm run dev -- save-li-session <nickname>         → login & save LinkedIn session
- *   npm run dev -- save-patreon-session <nickname>    → login & save Patreon session
  *   npm run dev -- save-notion-session <nickname>     → login & save Notion session
- *   npm run dev -- save-paragraph-session <nickname> → login & save Paragraph session
- *   npm run dev -- run-paragraph-batch               → run Paragraph batch once now
- *   npm run dev -- run-patreon-batch                  → run Patreon batch once now
  *   npm run dev -- run-notion-batch                   → run Notion batch once now
  *   npm run dev -- tracker                  → daily posting tracker (posted/failed/pending per platform)
  *   npm run dev -- status                   → show current sheet stats
@@ -169,35 +165,11 @@ async function main() {
     return;
   }
 
-  if (mode === 'run-patreon-batch') {
-    console.log('▶ Running Patreon batch now...\n');
-    const { runPatreonBatch } = await import('./coordinator/masterCoordinator.js');
-    await runPatreonBatch();
-    console.log('\n✅ Patreon batch complete');
-    return;
-  }
-
   if (mode === 'run-notion-batch') {
     console.log('▶ Running Notion batch now...\n');
     const { runNotionBatch } = await import('./coordinator/masterCoordinator.js');
     await runNotionBatch();
     console.log('\n✅ Notion batch complete');
-    return;
-  }
-
-  if (mode === 'run-paragraph-batch') {
-    console.log('▶ Running Paragraph batch now...\n');
-    const { runParagraphBatch } = await import('./coordinator/masterCoordinator.js');
-    await runParagraphBatch();
-    console.log('\n✅ Paragraph batch complete');
-    return;
-  }
-
-  if (mode === 'run-ameba-batch') {
-    console.log('▶ Running Ameba batch now...\n');
-    const { runAmebaBatch } = await import('./coordinator/masterCoordinator.js');
-    await runAmebaBatch();
-    console.log('\n✅ Ameba batch complete');
     return;
   }
 
@@ -257,20 +229,6 @@ async function main() {
     console.log(`\n🌐 Opening browser for LinkedIn login — ${nickname}`);
     await loginToLinkedIn({ nickname });
     console.log('\n✅ LinkedIn session saved. Press Ctrl+C to exit.');
-    await new Promise(() => {});
-    return;
-  }
-
-  if (mode === 'save-patreon-session') {
-    const nickname = process.argv[3];
-    if (!nickname) {
-      console.error('❌ Usage: npm run dev -- save-patreon-session <nickname>');
-      process.exit(1);
-    }
-    const { loginToPatreon } = await import('./browser/patreon/login.js');
-    console.log(`\n🌐 Opening browser for Patreon login — ${nickname}`);
-    await loginToPatreon({ nickname });
-    console.log('\n✅ Patreon session saved. Press Ctrl+C to exit.');
     await new Promise(() => {});
     return;
   }
@@ -571,87 +529,6 @@ async function main() {
     return;
   }
 
-  if (mode === 'save-ameba-session') {
-    const nickname = process.argv[3];
-    if (!nickname) {
-      console.error('❌ Usage: npm run dev -- save-ameba-session <nickname>');
-      console.error('   Example: npm run dev -- save-ameba-session pranav');
-      process.exit(1);
-    }
-    const path = await import('path');
-    const { chromium } = await import('playwright');
-    const sessionDir = path.default.resolve(`.sessions/ameba/${nickname}`);
-    const chromePath = process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : undefined);
-    console.log(`\n🔐 Opening Ameba browser for: ${nickname}`);
-    console.log(`   Session dir: ${sessionDir}\n`);
-    const fs = await import('fs');
-    if (!fs.default.existsSync(sessionDir)) fs.default.mkdirSync(sessionDir, { recursive: true });
-    const ctx = await chromium.launchPersistentContext(sessionDir, {
-      headless: process.env.HEADLESS !== 'false',
-      executablePath: chromePath,
-      viewport: null,
-      slowMo: 50,
-      ignoreDefaultArgs: ['--enable-automation'],
-      args: [
-        '--start-minimized',
-        '--disable-blink-features=AutomationControlled',
-        '--no-first-run', '--no-default-browser-check',
-        '--disable-session-crashed-bubble', '--disable-infobars',
-      ],
-    });
-    await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
-    await ctx.addInitScript(() => {
-      Object.defineProperty((globalThis as any).navigator, 'webdriver', { get: () => false });
-      (globalThis as any).window.chrome = (globalThis as any).window.chrome || { runtime: {} };
-    });
-    const pages = ctx.pages();
-    const pg = pages[0] || await ctx.newPage();
-    await pg.goto('https://www.ameba.jp/home', { waitUntil: 'domcontentloaded', timeout: 30000 });
-    process.stdout.write('\n✅ Browser open. Log in to Ameba, then type y and press Enter: ');
-    await new Promise<void>(resolve => {
-      process.stdin.resume();
-      process.stdin.setEncoding('utf8');
-      process.stdin.once('data', () => { process.stdin.pause(); resolve(); });
-    });
-    console.log(`\n✅ Session saved for ${nickname}! (${sessionDir})`);
-    await ctx.close();
-    return;
-  }
-
-  if (mode === 'save-paragraph-session') {
-    const nickname = process.argv[3];
-    if (!nickname) {
-      console.error('❌ Usage: npm run dev -- save-paragraph-session <nickname>');
-      console.error('   Example: npm run dev -- save-paragraph-session pranav');
-      process.exit(1);
-    }
-    const path = await import('path');
-    const { spawn } = await import('child_process');
-    const fs = await import('fs');
-    const sessionDir = path.default.resolve(`.sessions/paragraph/${nickname}`);
-    const chromePath = process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : undefined);
-    console.log(`\n🔐 Opening Paragraph in normal Chrome (no automation) for: ${nickname}`);
-    console.log(`   Session dir: ${sessionDir}\n`);
-    if (!fs.default.existsSync(sessionDir)) fs.default.mkdirSync(sessionDir, { recursive: true });
-    // Plain Chrome — no Playwright, no automation flags → bypasses captcha detection
-    const proc = spawn(chromePath, [
-      `--user-data-dir=${sessionDir}`,
-      '--no-first-run',
-      '--no-default-browser-check',
-      'https://paragraph.com/home',
-    ], { detached: true, stdio: 'ignore' });
-    proc.unref();
-    process.stdout.write('\n✅ Normal Chrome open. Log in to Paragraph, then type y and press Enter: ');
-    await new Promise<void>(resolve => {
-      process.stdin.resume();
-      process.stdin.setEncoding('utf8');
-      process.stdin.once('data', () => { process.stdin.pause(); resolve(); });
-    });
-    console.log(`\n✅ Session saved for ${nickname}! (${sessionDir})`);
-    console.log('   Close Chrome manually if still open.');
-    return;
-  }
-
   if (mode === 'save-hackmd-session') {
     const nickname = process.argv[3];
     if (!nickname) {
@@ -718,8 +595,6 @@ async function main() {
       wordpress: 'https://wordpress.com/',
       blogger: 'https://www.blogger.com/',
       notion: 'https://app.notion.com/',
-      patreon: 'https://www.patreon.com/login',
-      paragraph: 'https://paragraph.com/home',
       substack: 'https://substack.com/',
       hackmd: 'https://hackmd.io/?nav=overview',
       devto: 'https://dev.to/dashboard',
@@ -727,7 +602,6 @@ async function main() {
       calisthenics: 'https://calisthenics.mn.co/',
       linkmate: 'https://linkmate.mn.co/',
       note: 'https://note.com/',
-      ameba: 'https://www.ameba.jp/home',
       articlescad: 'https://articlescad.com/dashboard',
     };
     // Same file each platform's real posting/login code reads its sessionDir from
@@ -742,8 +616,6 @@ async function main() {
       wordpress: '.accounts/accounts-wordpress.json',
       blogger: '.accounts/accounts-blogger.json',
       notion: '.accounts/accounts-notion.json',
-      patreon: '.accounts/accounts-patreon.json',
-      paragraph: '.accounts/accounts-paragraph.json',
       substack: '.accounts/accounts-substack.json',
       hackmd: '.accounts/accounts-hackmd.json',
       devto: '.accounts/accounts-devto.json',
@@ -751,7 +623,6 @@ async function main() {
       calisthenics: '.accounts/accounts-calisthenics.json',
       linkmate: '.accounts/accounts-linkmate.json',
       note: '.accounts/accounts-note.json',
-      ameba: '.accounts/accounts-ameba.json',
       articlescad: '.accounts/accounts-articlescad.json',
     };
 

@@ -76,24 +76,6 @@ const FORMS: Record<string, LoginForm> = {
     pass: 'input[type="password"]',
     submit: 'div[role="button"]:has-text("Continue"), button:has-text("Continue"), button[type="submit"]',
   },
-  paragraph: {
-    user: 'input[type="email"]',
-    userValue: c => c.email,
-    pass: 'input[type="password"]',
-    submit: 'button[type="submit"]',
-  },
-  ameba: {
-    user: 'input[name="accountId"], input#login-id, input[type="email"]',
-    userValue: c => c.email,
-    pass: 'input[name="password"], input[type="password"]',
-    submit: 'button[type="submit"]',
-  },
-  patreon: {
-    user: 'input[name="email"], input[type="email"]',
-    userValue: c => c.email,
-    pass: 'input[name="password"], input[type="password"]',
-    submit: 'button[type="submit"]',
-  },
 };
 
 /** First VISIBLE element matching selector, polling up to timeoutMs. Null if none.

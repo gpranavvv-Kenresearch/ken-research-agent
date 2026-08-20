@@ -31,8 +31,6 @@ const PLATFORM_ACCOUNTS_FILE: Record<string, string> = {
   wordpress: '.accounts/accounts-wordpress.json',
   blogger: '.accounts/accounts-blogger.json',
   notion: '.accounts/accounts-notion.json',
-  patreon: '.accounts/accounts-patreon.json',
-  paragraph: '.accounts/accounts-paragraph.json',
   substack: '.accounts/accounts-substack.json',
   hackmd: '.accounts/accounts-hackmd.json',
   devto: '.accounts/accounts-devto.json',
@@ -40,7 +38,6 @@ const PLATFORM_ACCOUNTS_FILE: Record<string, string> = {
   calisthenics: '.accounts/accounts-calisthenics.json',
   linkmate: '.accounts/accounts-linkmate.json',
   note: '.accounts/accounts-note.json',
-  ameba: '.accounts/accounts-ameba.json',
   articlescad: '.accounts/accounts-articlescad.json',
 };
 

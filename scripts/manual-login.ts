@@ -90,21 +90,9 @@ const PLATFORMS: Record<string, { url: string; resolve: (nickname: string) => Pr
     url: 'https://hackmd.io/login',
     resolve: async (n) => (await import('../src/browser/hackmd/login.js')).getHackMDAccountByNickname(n)?.sessionDir,
   },
-  patreon: {
-    url: 'https://www.patreon.com/login',
-    resolve: async (n) => (await import('../src/browser/patreon/login.js')).getPatreonAccountByNickname(n)?.sessionDir,
-  },
   note: {
     url: 'https://note.com/login',
     resolve: async (n) => (await import('../src/browser/note/login.js')).getNoteAccountByNickname(n)?.sessionDir,
-  },
-  ameba: {
-    url: 'https://ameba.jp/login',
-    resolve: async (n) => (await import('../src/browser/ameba/login.js')).getAmebaAccountByNickname(n)?.sessionDir,
-  },
-  paragraph: {
-    url: 'https://paragraph.com/home',
-    resolve: async (n) => (await import('../src/browser/paragraph/login.js')).getParagraphAccountByNickname(n)?.sessionDir,
   },
   chatgpt: {
     url: 'https://chatgpt.com/',

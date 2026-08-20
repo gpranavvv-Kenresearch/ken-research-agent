@@ -146,10 +146,8 @@ import {
   getRowsForContinuousLinkedinPulsePosting,
   getRowsForContinuousCalisthenicsPosting,
   getRowsForContinuousSubstackPosting,
-  getRowsForContinuousPatreonPosting,
   getRowsForContinuousNotionPosting,
   getRowsForContinuousNotePosting,
-  saveUnifiedPatreonResult,
   saveUnifiedNotionResult,
   saveUnifiedNoteResult,
   getRowsForContinuousHackmdPosting,
@@ -173,8 +171,6 @@ import {
   getRowsForContinuousBloggerPosting,
   getSheetRowByIndex,
   SheetRow,
-  getRowsForContinuousParagraphPosting,
-  saveUnifiedParagraphResult,
   getRowsForContinuousCodaPosting,
   saveUnifiedCodaResult,
   getRowsForContinuousInstapaperPosting,
@@ -193,8 +189,6 @@ import {
   saveUnifiedFourSharedResult,
   getRowsForContinuousHatenaPosting,
   saveUnifiedHatenaResult,
-  getRowsForContinuousYumpuPosting,
-  saveUnifiedYumpuResult,
   getRowsForContinuousIssuuPosting,
   saveUnifiedIssuuResult,
   savePdfPath,
@@ -210,8 +204,6 @@ import { loginToFourShared, closeFourSharedBrowser } from '../browser/fourshared
 import { postToFourShared } from '../browser/fourshared/poster.js';
 import { loginToHatena, closeHatenaBrowser } from '../browser/hatena/login.js';
 import { postToHatena } from '../browser/hatena/poster.js';
-import { loginToYumpu, closeYumpuBrowser } from '../browser/yumpu/login.js';
-import { postToYumpu } from '../browser/yumpu/poster.js';
 import { loginToIssuu, closeIssuuBrowser } from '../browser/issuu/login.js';
 import { postToIssuu } from '../browser/issuu/poster.js';
 import fs from 'fs';
@@ -264,14 +256,13 @@ interface BatchCounters {
   calisthenics: number;
   substack: number;
   hackmd: number;
-  patreon: number;
   notion: number;
   note: number;
   // legacy field kept for backwards compat
   date?: string;
 }
 
-const ZERO_COUNTERS: BatchCounters = { x: 0, fb: 0, li: 0, medium: 0, linkmate: 0, googlesite: 0, devto: 0, linkedinpulse: 0, calisthenics: 0, substack: 0, hackmd: 0, patreon: 0, notion: 0, note: 0 };
+const ZERO_COUNTERS: BatchCounters = { x: 0, fb: 0, li: 0, medium: 0, linkmate: 0, googlesite: 0, devto: 0, linkedinpulse: 0, calisthenics: 0, substack: 0, hackmd: 0, notion: 0, note: 0 };
 
 function getCounters(): BatchCounters {
   if (!fs.existsSync(COUNTERS_FILE)) return { ...ZERO_COUNTERS };
@@ -2322,57 +2313,6 @@ async function saveWordpressBatchResult(
   });
 }
 
-// ──── Patreon Batch ───────────────────────────────────────────────────────────
-
-export async function runPatreonBatch(batchNum: number = 1): Promise<void> {
-  console.log(`\n[PATREON BATCH] Starting...`);
-  const rows = await getRowsForContinuousPatreonPosting(capToLiveAccounts(12, 'patreon'));
-  if (rows.length === 0) { console.log('[PATREON BATCH] No rows available'); return; }
-  const batchLabel = `Batch ${batchNum}`;
-  console.log(`  Found ${rows.length} rows ready for Patreon (${batchLabel})`);
-  let posted = 0, failed = 0;
-  const failures: FailureEntry[] = [];
-  for (const row of rows) {
-    try {
-      console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
-      let content = row.blogContent || '';
-      const title = row.title;
-      if (!content) {
-        await saveUnifiedPatreonResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: 'No blog content' });
-        failed++;
-        addFailure(failures, row.name, 'no blog content');
-        continue;
-      }
-      content = ensureTargetUrl(content, row.targetUrl);
-      const patreonAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'patreon', row.name);
-      if (!healthGate('Patreon', patreonAccount)) continue;
-      const postResult = await retryOnSelectorTimeout(async () => {
-        const loginResult = await executeBrowserTool('login_patreon', { nickname: patreonAccount });
-        if (!loginResult.success) throw new Error(loginResult.error || 'Login failed');
-        return executeBrowserTool('post_patreon', { title, htmlContent: content });
-      }, { label: 'Patreon post' });
-      healthRecordSafe('Patreon', patreonAccount, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
-      if (postResult.success) {
-        await saveUnifiedPatreonResult(row, { postUrl: postResult.postUrl || '', status: 'Posted', batch: batchLabel });
-        console.log(`    ✅ Posted → ${postResult.postUrl}`);
-        posted++;
-      } else {
-        await saveUnifiedPatreonResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: postResult.error });
-        failed++;
-        addFailure(failures, row.name, postResult.error);
-      }
-    } catch (err: any) {
-      console.error(`  ❌ Row ${row.rowIndex}: ${err.message}`);
-      addFailure(failures, row.name, err.message);
-      try { await saveUnifiedPatreonResult(row, { postUrl: '', status: 'Error', batch: batchLabel, error: err.message }); } catch {}
-      failed++;
-    }
-    await new Promise(r => setTimeout(r, 1000));
-  }
-  printDiagnostics('Patreon', failures, posted, rows.length);
-  console.log(`\n[PATREON BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
-}
-
 // ──── Notion Batch ─────────────────────────────────────────────────────────────
 
 export async function runNotionBatch(batchNum: number = 1, limit: number = 12): Promise<void> {
@@ -2475,67 +2415,9 @@ export async function runNoteBatch(batchNum: number = 1, limit: number = 12): Pr
   console.log(`\n[NOTE BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
-// ── Ameba Batch ───────────────────────────────────────────────────────────────
-
-export async function runAmebaBatch(batchNum: number = 1): Promise<void> {
-  const { getRowsForContinuousAmebaPosting, saveUnifiedAmebaResult } = await import('../sheets/sheets.js');
-  const { loginToAmeba, closeAmebaBrowser } = await import('../browser/ameba/login.js');
-  const { postToAmeba } = await import('../browser/ameba/poster.js');
-
-  const rows = await getRowsForContinuousAmebaPosting(capToLiveAccounts(12, 'ameba'));
-  if (rows.length === 0) { console.log('[AMEBA BATCH] No rows available'); return; }
-
-  const batchLabel = `Batch ${batchNum}`;
-  console.log(`\n[AMEBA BATCH] Starting ${batchLabel}...`);
-  console.log(`  Found ${rows.length} rows ready for Ameba posting`);
-  let posted = 0, failed = 0;
-  const failures: FailureEntry[] = [];
-
-  for (const row of rows) {
-    try {
-      console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
-      let content = row.blogContent || await generateHackmdPost(row);
-      content = ensureTargetUrl(content, row.targetUrl);
-      const title = row.title || row.descriptionTitle || '';
-
-      const amebaAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'ameba', row.name);
-      if (!healthGate('Ameba', amebaAccount)) continue;
-      const r = await retryOnSelectorTimeout(async () => {
-        const page = await loginToAmeba({ nickname: amebaAccount });
-        try {
-          return await postToAmeba(page, title, content);
-        } finally {
-          // Always close, even on failure — otherwise a retry's fresh login hits
-          // the same profile's SingletonLock from this attempt's still-open browser.
-          await closeAmebaBrowser();
-        }
-      }, { label: 'Ameba post' });
-      healthRecordSafe('Ameba', amebaAccount, { success: r.success, error: (r as any).error, reason: (r as any).reason });
-
-      if (r.success) {
-        await saveUnifiedAmebaResult(row, { postUrl: r.postUrl || '', status: 'Posted', batch: batchLabel });
-        console.log(`    ✅ Posted → ${r.postUrl}`);
-        posted++;
-      } else {
-        await saveUnifiedAmebaResult(row, { postUrl: '', status: 'Failed', batch: batchLabel });
-        failed++;
-        addFailure(failures, row.name, (r as any).error);
-      }
-    } catch (err: any) {
-      console.error(`  ❌ Row ${row.rowIndex}: ${err.message}`);
-      addFailure(failures, row.name, err.message);
-      try { await (await import('../sheets/sheets.js')).saveUnifiedAmebaResult(row, { postUrl: '', status: 'Error', batch: batchLabel, error: err.message }); } catch {}
-      failed++;
-    }
-    await new Promise(r => setTimeout(r, 1000));
-  }
-  printDiagnostics('Ameba', failures, posted, rows.length);
-  console.log(`\n[AMEBA BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
-}
-
 // ── Retry single row on a specific platform ───────────────────────────────────
 
-const BLOG_PLATFORMS  = ['googlesite', 'hackmd', 'devto', 'medium', 'linkmate', 'linkedin-pulse', 'calisthenics', 'substack', 'wordpress', 'blogger', 'patreon', 'notion', 'note'];
+const BLOG_PLATFORMS  = ['googlesite', 'hackmd', 'devto', 'medium', 'linkmate', 'linkedin-pulse', 'calisthenics', 'substack', 'wordpress', 'blogger', 'notion', 'note'];
 const SOCIAL_PLATFORMS = ['x', 'facebook', 'linkedin'];
 
 // Maps runRetryRow's lowercase platform key to the exact label claimNextBlogSlot
@@ -2543,8 +2425,8 @@ const SOCIAL_PLATFORMS = ['x', 'facebook', 'linkedin'];
 const BLOG_PLATFORM_LABELS: Record<string, string> = {
   googlesite: 'Google Sites', hackmd: 'HackMD', devto: 'Dev.to', medium: 'Medium',
   linkmate: 'Linkmate', 'linkedin-pulse': 'LinkedIn Pulse', calisthenics: 'Calisthenics',
-  substack: 'Substack', wordpress: 'WordPress', blogger: 'Blogger', patreon: 'Patreon',
-  notion: 'Notion', note: 'Note', paragraph: 'Paragraph', coda: 'Coda', ameba: 'Ameba',
+  substack: 'Substack', wordpress: 'WordPress', blogger: 'Blogger',
+  notion: 'Notion', note: 'Note', coda: 'Coda',
 };
 
 export async function runRetryRow(rowIndex: number, platform: string): Promise<void> {
@@ -2710,19 +2592,6 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
         const r = await postToLiAccount(liAccount, liPost);
         liPost = r.postText || liPost;
         await saveLiBatchResult(row, { liPost, liPostUrl: r.postUrl || '', liStatus: r.success ? 'Posted' : 'Failed', liBatch: label, liError: r.error });
-        console.log(r.success ? `✅ Posted → ${r.postUrl}` : `❌ Failed: ${r.error}`);
-        break;
-      }
-      case 'paragraph': {
-        let content = row.blogContent || '';
-        if (!content) { console.log('⏭ Skipping — no blog content'); break; }
-        content = ensureTargetUrl(content, row.targetUrl);
-        const paraTitle = row.title || row.descriptionTitle || title;
-        const paragraphAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'paragraph', row.name);
-        const loginResult = await executeBrowserTool('login_paragraph', { nickname: paragraphAccount });
-        if (!loginResult.success) throw new Error(loginResult.error || 'Paragraph login failed');
-        const r = await executeBrowserTool('post_paragraph', { title: paraTitle, htmlContent: content });
-        await saveUnifiedParagraphResult(row, { postUrl: r.postUrl || '', status: r.success ? 'Posted' : 'Failed', batch: label, error: r.error });
         console.log(r.success ? `✅ Posted → ${r.postUrl}` : `❌ Failed: ${r.error}`);
         break;
       }
@@ -2908,57 +2777,6 @@ export async function saveNoteSession(nickname: string): Promise<void> {
   } catch (err: any) {
     console.error(`❌ Error saving Note session: ${err.message}\n`);
   }
-}
-
-// ── Paragraph Batch ───────────────────────────────────────────────────────────
-
-export async function runParagraphBatch(batchNum: number = 1): Promise<void> {
-  console.log(`\n[PARAGRAPH BATCH] Starting...`);
-  const rows = await getRowsForContinuousParagraphPosting(capToLiveAccounts(12, 'paragraph'));
-  if (rows.length === 0) { console.log('[PARAGRAPH BATCH] No rows available'); return; }
-  const batchLabel = `Batch ${batchNum}`;
-  console.log(`  Found ${rows.length} rows ready for Paragraph (${batchLabel})`);
-  let posted = 0, failed = 0;
-  const failures: FailureEntry[] = [];
-  for (const row of rows) {
-    try {
-      console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
-      let content = row.blogContent || '';
-      const title = row.title || row.descriptionTitle || '';
-      if (!content) {
-        await saveUnifiedParagraphResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: 'No blog content' });
-        failed++;
-        addFailure(failures, row.name, 'no blog content');
-        continue;
-      }
-      content = ensureTargetUrl(content, row.targetUrl);
-      const paragraphAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'paragraph', row.name);
-      if (!healthGate('Paragraph', paragraphAccount)) continue;
-      const postResult = await retryOnSelectorTimeout(async () => {
-        const loginResult = await executeBrowserTool('login_paragraph', { nickname: paragraphAccount });
-        if (!loginResult.success) throw new Error(loginResult.error || 'Login failed');
-        return executeBrowserTool('post_paragraph', { title, htmlContent: content });
-      }, { label: 'Paragraph post' });
-      healthRecordSafe('Paragraph', paragraphAccount, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
-      if (postResult.success) {
-        await saveUnifiedParagraphResult(row, { postUrl: postResult.postUrl || '', status: 'Posted', batch: batchLabel });
-        console.log(`    ✅ Posted → ${postResult.postUrl}`);
-        posted++;
-      } else {
-        await saveUnifiedParagraphResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: postResult.error });
-        failed++;
-        addFailure(failures, row.name, postResult.error);
-      }
-    } catch (err: any) {
-      console.error(`  ❌ Row ${row.rowIndex}: ${err.message}`);
-      addFailure(failures, row.name, err.message);
-      try { await saveUnifiedParagraphResult(row, { postUrl: '', status: 'Error', batch: batchLabel, error: err.message }); } catch {}
-      failed++;
-    }
-    await new Promise(r => setTimeout(r, 1000));
-  }
-  printDiagnostics('Paragraph', failures, posted, rows.length);
-  console.log(`\n[PARAGRAPH BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
 // ── Save HackMD Session ──────────────────────────────────────────────────────
@@ -3345,46 +3163,6 @@ export async function runHatenaBatch(batchNum: number = 1): Promise<void> {
     await new Promise(r => setTimeout(r, 1000));
   }
   console.log(`\n[HATENA BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
-}
-
-// ── Yumpu Batch ───────────────────────────────────────────────────────────────
-
-export async function runYumpuBatch(batchNum: number = 1): Promise<void> {
-  const rows = await getRowsForContinuousYumpuPosting(15);
-  if (rows.length === 0) { console.log('[YUMPU BATCH] No rows available'); return; }
-
-  const batchLabel = `Batch ${batchNum}`;
-  console.log(`\n[YUMPU BATCH] Starting ${batchLabel}... Found ${rows.length} rows`);
-
-  let posted = 0, failed = 0;
-  for (const row of rows) {
-    const yumpuTitle = row.title || row.descriptionTitle || '';
-    const content = row.blogContent || '';
-    if (!content) { console.log(`  ⏭ Skipping row ${row.rowIndex} — no blog content`); continue; }
-
-    try {
-      let pdfPath = row.pdfPath?.trim();
-      if (!pdfPath) {
-        pdfPath = await htmlToPdf(content, makeSlug(yumpuTitle), row.rowIndex);
-        await savePdfPath(row, pdfPath, undefined, 'newLogic').catch(() => {});
-      }
-      const page = await loginToYumpu({ nickname: row.name });
-      const r = await postToYumpu(page, pdfPath, yumpuTitle, yumpuTitle, row.targetUrl);
-      await saveUnifiedYumpuResult(row, { postUrl: r.postUrl, status: 'Posted', batch: batchLabel });
-      console.log(`  ✅ Posted → ${r.postUrl}`);
-      posted++;
-    } catch (err: any) {
-      const kbEntry = recordError({ rawError: err.message, platform: 'yumpu', stage: 'post', rowIndex: row.rowIndex, rowTitle: row.title, batchRun: batchNum });
-      await applyFix(kbEntry, { platform: 'yumpu', accountName: row.name, rowIndex: row.rowIndex });
-      await saveUnifiedYumpuResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: err.message });
-      console.error(`  ❌ Row ${row.rowIndex} [${kbEntry.classification}]: ${err.message}`);
-      failed++;
-    } finally {
-      await closeYumpuBrowser();
-    }
-    await new Promise(r => setTimeout(r, 1000));
-  }
-  console.log(`\n[YUMPU BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
 // ── Issuu Batch ───────────────────────────────────────────────────────────────

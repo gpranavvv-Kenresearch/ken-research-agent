@@ -194,11 +194,6 @@ export interface SheetRow {
   lastPostedScribd?: string;
   fourSharedUrl?: string;
   lastPostedFourShared?: string;
-  yumpuUrl?: string;
-  lastPostedYumpu?: string;
-  // PPT: SlideShare / SpeakerDeck
-  slideshareUrl?: string;
-  lastPostedSlideshare?: string;
   // Result columns
   messageStatus?: string;
   sanityIssues?: string;
@@ -757,8 +752,7 @@ const BLOG_LASTPOSTED_NAMES = ['Last Posted Blog', 'lastPostedBlog', 'lastposted
 // map restores the ORIGINAL per-platform-column model for platforms that own
 // their columns in the sheet: each platform scans its OWN Status column, picks
 // its own next unposted rows, and writes its own result — fully independent of
-// the others. Platforms NOT in this map (Patreon/Ameba/Paragraph, which have no
-// columns) keep the 2-slot model untouched.
+// the others. Platforms NOT in this map keep the 2-slot model untouched.
 interface BlogPlatformCols { status: string[]; url: string[]; error: string[]; batch: string[]; lastPosted: string[]; }
 const BLOG_PLATFORM_COLS: Record<string, BlogPlatformCols> = {
   'Medium':         { status: ['Medium Status'],         url: ['Medium Post URL', 'Medium URL'], error: ['Medium Error'],         batch: ['Medium Batch'],         lastPosted: ['lastPostedMedium', 'Last Posted Medium'] },
@@ -2005,19 +1999,6 @@ export async function saveUnifiedHackmdResult(
   await saveBlogSlotResult(row, result);
 }
 
-// ──── Patreon Blog Posting ─────────────────────────────────────────────────────
-
-export async function getRowsForContinuousPatreonPosting(limit: number = 15): Promise<SheetRow[]> {
-  return claimNextBlogSlots('Patreon', limit);
-}
-
-export async function saveUnifiedPatreonResult(
-  row: SheetRow,
-  result: { postUrl: string; status: string; error?: string; batch?: string }
-): Promise<void> {
-  await saveBlogSlotResult(row, result);
-}
-
 // ──── Notion Blog Posting ─────────────────────────────────────────────────────
 
 export async function getRowsForContinuousNotionPosting(limit: number = 15): Promise<SheetRow[]> {
@@ -2038,32 +2019,6 @@ export async function getRowsForContinuousNotePosting(limit: number = 15): Promi
 }
 
 export async function saveUnifiedNoteResult(
-  row: SheetRow,
-  result: { postUrl: string; status: string; error?: string; batch?: string }
-): Promise<void> {
-  await saveBlogSlotResult(row, result);
-}
-
-// ── Ameba ─────────────────────────────────────────────────────────────────────
-
-export async function getRowsForContinuousAmebaPosting(limit: number = 15): Promise<SheetRow[]> {
-  return claimNextBlogSlots('Ameba', limit);
-}
-
-export async function saveUnifiedAmebaResult(
-  row: SheetRow,
-  result: { postUrl: string; status: string; error?: string; batch?: string }
-): Promise<void> {
-  await saveBlogSlotResult(row, result);
-}
-
-// ── Paragraph ─────────────────────────────────────────────────────────────────
-
-export async function getRowsForContinuousParagraphPosting(limit: number = 15): Promise<SheetRow[]> {
-  return claimNextBlogSlots('Paragraph', limit);
-}
-
-export async function saveUnifiedParagraphResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
@@ -2400,29 +2355,6 @@ export async function saveUnifiedIssuuResult(
   await batchWrite(sheets, data, sheetConfig.id);
 }
 
-// SlideShare (PPTX flow) — reads/writes the Blog sheet (content comes from blogContent).
-export async function saveUnifiedSlideshareResult(
-  row: SheetRow,
-  result: { postUrl: string; status: string; error?: string; batch?: string }
-): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig(row.sheetType ?? 'blog');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = new Date().toISOString().split('T')[0];
-  const newUrl = appendValue(row.slideshareUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(row.lastPostedSlideshare, today)
-    : (row.lastPostedSlideshare ?? '');
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['SlideShare Post URL', 'slideshare post url'], value: newUrl },
-    { names: ['SlideShare Status', 'slideshare status'], value: result.status },
-    { names: ['SlideShare Error', 'slideshare error'], value: result.error ?? '' },
-    { names: ['slideshareBatch', 'slideshare batch', 'SlideShare Batch'], value: result.batch ?? '' },
-    { names: ['Last Posted SlideShare', 'lastPostedSlideshare', 'lastpostedslideshare'], value: newLastPosted },
-  ], sheetConfig.name);
-  await batchWrite(sheets, data, sheetConfig.id);
-}
-
 // ──── Instapaper Posting ────────────────────────────────────────────────────────
 
 export async function getRowsForContinuousInstapaperPosting(limit: number = 15): Promise<SheetRow[]> {
@@ -2649,35 +2581,6 @@ export async function saveUnifiedHatenaResult(
     { names: ['Hatena Error', 'hatena error'], value: result.error ?? '' },
     { names: ['hatenaBatch', 'hatena batch', 'Hatena Batch'], value: result.batch ?? '' },
     { names: ['Last Posted Hatena', 'lastPostedHatena', 'lastpostedhatena'], value: newLastPosted },
-  ], sheetConfig.name);
-  await batchWrite(sheets, data, sheetConfig.id);
-}
-
-// ──── Yumpu Posting ─────────────────────────────────────────────────────────────
-
-export async function getRowsForContinuousYumpuPosting(limit: number = 15): Promise<SheetRow[]> {
-  // New Logic (not Social Media) — needs row.blogContent for htmlToPdf().
-  return pickRowsByEmptyStatus(['Yumpu Status', 'yumpu status', 'YumpuStatus'], 'Yumpu', limit, 'newLogic');
-}
-
-export async function saveUnifiedYumpuResult(
-  row: SheetRow,
-  result: { postUrl: string; status: string; error?: string; batch?: string }
-): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig(row.sheetType ?? 'newLogic');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = new Date().toISOString().split('T')[0];
-  const newUrl = appendValue(row.yumpuUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(row.lastPostedYumpu, today)
-    : (row.lastPostedYumpu ?? '');
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['Yumpu Post URL', 'yumpu post url'], value: newUrl },
-    { names: ['Yumpu Status', 'yumpu status'], value: result.status },
-    { names: ['Yumpu Error', 'yumpu error'], value: result.error ?? '' },
-    { names: ['yumpuBatch', 'yumpu batch', 'Yumpu Batch'], value: result.batch ?? '' },
-    { names: ['Last Posted Yumpu', 'lastPostedYumpu', 'lastpostedyumpu'], value: newLastPosted },
   ], sheetConfig.name);
   await batchWrite(sheets, data, sheetConfig.id);
 }

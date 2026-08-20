@@ -90,8 +90,8 @@ export function latestBlogPostDate(row: RawRow): string {
 export const BLOG_PLATFORM_KEY_BY_LABEL: Record<string, string> = {
   'Google Sites': 'googlesite', HackMD: 'hackmd', 'Dev.to': 'devto', Medium: 'medium',
   Linkmate: 'linkmate', 'LinkedIn Pulse': 'linkedin-pulse', Calisthenics: 'calisthenics',
-  Substack: 'substack', WordPress: 'wordpress', Blogger: 'blogger', Patreon: 'patreon',
-  Notion: 'notion', Note: 'note', Paragraph: 'paragraph', Coda: 'coda', Ameba: 'ameba',
+  Substack: 'substack', WordPress: 'wordpress', Blogger: 'blogger',
+  Notion: 'notion', Note: 'note', Coda: 'coda',
 };
 
 export const SOCIAL_PLATFORMS: PlatformDef[] = [
@@ -149,12 +149,9 @@ export const BLOG_PLATFORM_META: Record<string, { icon: string; color: string }>
   Notion: { icon: 'N', color: '#888' },
   'Google Sites': { icon: 'G', color: '#4285F4' },
   Note: { icon: '📝', color: '#4DB6AC' },
-  Paragraph: { icon: '¶', color: '#9C27B0' },
-  Patreon: { icon: 'P', color: '#F96854' },
   Calisthenics: { icon: 'C', color: '#4CAF50' },
   Linkmate: { icon: '🔗', color: '#FF9800' },
   Coda: { icon: 'C', color: '#F46A54' },
-  Ameba: { icon: 'A', color: '#2D8CFF' },
 };
 
 export const ACCOUNT_NICKNAMES = [

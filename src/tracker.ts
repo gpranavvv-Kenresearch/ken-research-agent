@@ -39,8 +39,6 @@ const PLATFORMS = [
   { key: 'medium',          displayName: 'Medium',         statusCol: 'Medium Status',          errorCol: 'Medium Error',          lastPostedCol: 'lastPostedMedium',         sheet: 'blog' },
   { key: 'notion',          displayName: 'Notion',         statusCol: 'Notion Status',          errorCol: 'Notion Error',          lastPostedCol: 'lastPostedNotion',         sheet: 'blog' },
   { key: 'substack',        displayName: 'Substack',       statusCol: 'Substack Status',        errorCol: 'Substack Error',        lastPostedCol: 'lastPostedSubstack',       sheet: 'blog' },
-  { key: 'paragraph',       displayName: 'Paragraph',      statusCol: 'Paragraph Status',       errorCol: 'Paragraph Error',       lastPostedCol: 'lastPostedParagraph',      sheet: 'blog' },
-  { key: 'ameba',           displayName: 'Ameba',          statusCol: 'Ameba Status',           errorCol: 'Ameba Error',           lastPostedCol: 'lastPostedAmeba',          sheet: 'blog' },
 ];
 
 // ──── Auth ────────────────────────────────────────────────────────────────

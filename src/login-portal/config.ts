@@ -50,11 +50,8 @@ export const PLATFORMS: Record<string, PortalPlatform> = {
   blogger:      { key: 'blogger',      label: 'Blogger',      group: 'blog', loginUrl: 'https://www.blogger.com/',       homeUrl: 'https://www.blogger.com/',                 registryFile: '.accounts/accounts-blogger.json',      authCookies: ['SID', '__Secure-1PSID'] },
   googlesite:   { key: 'googlesite',   label: 'Google Sites', group: 'blog', loginUrl: 'https://sites.google.com/new',   homeUrl: 'https://sites.google.com/',                registryFile: '.accounts/accounts-googlesite.json',   authCookies: ['SID', '__Secure-1PSID'] },
   note:         { key: 'note',         label: 'Note',         group: 'blog', loginUrl: 'https://note.com/login',         homeUrl: 'https://note.com/',                        registryFile: '.accounts/accounts-note.json',         authCookies: ['_note_session_v5', 'note_gql_web_session'] },
-  paragraph:    { key: 'paragraph',    label: 'Paragraph',    group: 'blog', loginUrl: 'https://paragraph.com/home',     homeUrl: 'https://paragraph.com/home',               registryFile: '.accounts/accounts-paragraph.json',    authCookies: ['privy-token', 'privy-session'] },
-  patreon:      { key: 'patreon',      label: 'Patreon',      group: 'blog', loginUrl: 'https://www.patreon.com/login',  homeUrl: 'https://www.patreon.com/dashboard',        registryFile: '.accounts/accounts-patreon.json',      authCookies: ['session_id'] },
   calisthenics: { key: 'calisthenics', label: 'Calisthenics', group: 'blog', loginUrl: 'https://calisthenics.mn.co/',    homeUrl: 'https://calisthenics.mn.co/',              registryFile: '.accounts/accounts-calisthenics.json', authCookies: ['_session_id'] },
   linkmate:     { key: 'linkmate',     label: 'Linkmate',     group: 'blog', loginUrl: 'https://linkmate.mn.co/',        homeUrl: 'https://linkmate.mn.co/',                  registryFile: '.accounts/accounts-linkmate.json',     authCookies: ['_session_id'] },
-  ameba:        { key: 'ameba',        label: 'Ameba',        group: 'blog', loginUrl: 'https://ameba.jp/login',         homeUrl: 'https://www.ameba.jp/home',                registryFile: '.accounts/accounts-ameba.json',        authCookies: ['user_session1', 'asauth'] },
   // authCookies unconfirmed (coda.io's actual session cookie name hasn't been
   // inspected live yet) — login itself works regardless per this file's own
   // note above; only the "ready" badge accuracy is approximate until confirmed.
@@ -76,10 +73,7 @@ export const PLATFORMS: Record<string, PortalPlatform> = {
   pdfhost:     { key: 'pdfhost',     label: 'PdfHost',     group: 'document', loginUrl: 'https://pdfhost.io/login',         homeUrl: 'https://pdfhost.io/dashboard',        registryFile: '.accounts/accounts-pdfhost.json',     authCookies: ['pdfhost_session', 'laravel_session'] },
   fliphtml5:   { key: 'fliphtml5',   label: 'FlipHTML5',   group: 'document', loginUrl: 'https://fliphtml5.com/login.php', homeUrl: 'https://fliphtml5.com/app/',          registryFile: '.accounts/accounts-fliphtml5.json',   authCookies: ['PHPSESSID'] },
   fourshared:  { key: 'fourshared',  label: '4shared',     group: 'document', loginUrl: 'https://www.4shared.com/web/login', homeUrl: 'https://www.4shared.com/web/account/myFiles', registryFile: '.accounts/accounts-fourshared.json', authCookies: ['JSESSIONID'] },
-  yumpu:       { key: 'yumpu',       label: 'Yumpu',       group: 'document', loginUrl: 'https://www.yumpu.com/en/user/login', homeUrl: 'https://www.yumpu.com/en/account/create', registryFile: '.accounts/accounts-yumpu.json',   authCookies: ['yumpu_session', 'session'] },
   issuu:       { key: 'issuu',       label: 'Issuu',       group: 'document', loginUrl: 'https://issuu.com/home/login',    homeUrl: 'https://issuu.com/publish',           registryFile: '.accounts/accounts-issuu.json',       authCookies: ['connect.sid'] },
-  slideshare:  { key: 'slideshare',  label: 'SlideShare',  group: 'document', loginUrl: 'https://www.slideshare.net/login', homeUrl: 'https://www.slideshare.net/',        registryFile: '.accounts/accounts-slideshare.json',  authCookies: ['lo_session', 'JSESSIONID'] },
-  speakerdeck: { key: 'speakerdeck', label: 'Speaker Deck', group: 'document', loginUrl: 'https://speakerdeck.com/signin', homeUrl: 'https://speakerdeck.com/new',         registryFile: '.accounts/accounts-speakerdeck.json', authCookies: ['_speaker_deck_session'] },
 
   // ── Engine (blog generation, not a posting target) ──
   // ChatGPT session used by generate_blog_chatgpt.ts to write the article HTML.

@@ -27,9 +27,7 @@
  * Each platform batch call still pulls its row-limit set inside each
  * platform's own row-picker in masterCoordinator.ts.
  *
- * Patreon and Substack are intentionally excluded from this rotation.
- * Ameba and Paragraph removed 2026-07-29 — being replaced, kept out of the
- * rotation entirely until new accounts/platforms are ready.
+ * Substack is intentionally excluded from this rotation.
  *
  * Unrelated maintenance jobs (midnight counter reset, weekly SERP recheck,
  * Sunday failed-post sweep) keep their own cron schedules, unaffected by this.
@@ -96,7 +94,7 @@ const STAGES: PlatformDef[][] = [
   [X, FB, LI, LI_PULSE, MEDIUM, WORDPRESS, BLOGGER, GOOGLESITE, NOTE, HACKMD, LINKMATE, CALISTHENICS, NOTION, DEVTO],
   // Stage 2 — drop LinkedIn Pulse, Medium (14 left, Dev.to still included)
   [X, FB, LI, WORDPRESS, BLOGGER, GOOGLESITE, NOTE, HACKMD, LINKMATE, CALISTHENICS, NOTION, DEVTO],
-  // Stage 3 — drop Note, Blogger, WordPress, Paragraph, Ameba, Dev.to (8 left)
+  // Stage 3 — drop Note, Blogger, WordPress, Dev.to (8 left)
   [X, FB, LI, GOOGLESITE, HACKMD, LINKMATE, CALISTHENICS, NOTION],
   // Stage 4 — drop LinkedIn (post), Linkmate, Calisthenics (5 left)
   [X, FB, GOOGLESITE, HACKMD, NOTION],

@@ -1,7 +1,7 @@
 /**
  * proxy-ab-report.ts — daily A/B snapshot: do the PROXIED accounts get blocked
  * less than the un-proxied ones? Compares health across the wired platforms
- * (X / Facebook / Ameba / Note — the ones proxies actually affect).
+ * (X / Facebook / Note — the ones proxies actually affect).
  *
  * Run:  node --import=tsx scripts/proxy-ab-report.ts
  * Cron on the VPS appends its output to logs/proxy-ab-report.log daily.
@@ -9,7 +9,7 @@
 import { allAccounts } from '../src/health/accountHealth.js';
 import { proxySummary } from '../src/health/proxyPool.js';
 
-const WIRED = new Set(['X', 'Facebook', 'Ameba', 'Note']); // platforms proxies apply to
+const WIRED = new Set(['X', 'Facebook', 'Note']); // platforms proxies apply to
 
 interface Agg { entries: number; active: number; cooldown: number; quarantined: number; dead: number; posts: number; fails: number; }
 const blank = (): Agg => ({ entries: 0, active: 0, cooldown: 0, quarantined: 0, dead: 0, posts: 0, fails: 0 });
@@ -37,7 +37,7 @@ function main() {
     add(proxied.has(h.nickname.toLowerCase()) ? A : B, h);
   }
   const day = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-  console.log(`\n=== Proxy A/B — ${day} (X/FB/Ameba/Note) ===`);
+  console.log(`\n=== Proxy A/B — ${day} (X/FB/Note) ===`);
   console.log(`  proxied nicks: ${[...proxied].join(', ') || '(none)'}`);
   if (A.entries + B.entries === 0) { console.log('  (no ledger data yet — accounts appear after they post)'); return; }
   console.log(line('PROXIED accounts', A));

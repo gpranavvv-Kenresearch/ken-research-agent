@@ -22,11 +22,8 @@ const PLATFORMS = [
   { key: 'blogger', label: 'Blogger', group: 'blog', icon: 'B', color: 'bg-orange-600 text-white' },
   { key: 'googlesite', label: 'Google Sites', group: 'blog', icon: 'G', color: 'bg-green-700 text-white' },
   { key: 'note', label: 'Note', group: 'blog', icon: 'n', color: 'bg-emerald-600 text-white' },
-  { key: 'paragraph', label: 'Paragraph', group: 'blog', icon: '¶', color: 'bg-indigo-600 text-white' },
-  { key: 'patreon', label: 'Patreon', group: 'blog', icon: 'P', color: 'bg-red-600 text-white' },
   { key: 'calisthenics', label: 'Calisthenics', group: 'blog', icon: 'C', color: 'bg-purple-600 text-white' },
   { key: 'linkmate', label: 'Linkmate', group: 'blog', icon: 'L', color: 'bg-teal-600 text-white' },
-  { key: 'ameba', label: 'Ameba', group: 'blog', icon: 'A', color: 'bg-rose-600 text-white' },
   { key: 'coda', label: 'Coda', group: 'blog', icon: 'C', color: 'bg-red-500 text-white' },
   // SBM (social bookmarking)
   { key: 'pearltrees', label: 'Pearltrees', group: 'sbm', icon: 'P', color: 'bg-lime-600 text-white' },
@@ -36,10 +33,7 @@ const PLATFORMS = [
   { key: 'pdfhost', label: 'PdfHost', group: 'document', icon: 'PDF', color: 'bg-red-700 text-white' },
   { key: 'fliphtml5', label: 'FlipHTML5', group: 'document', icon: 'F', color: 'bg-amber-600 text-white' },
   { key: 'fourshared', label: '4shared', group: 'document', icon: '4', color: 'bg-blue-500 text-white' },
-  { key: 'yumpu', label: 'Yumpu', group: 'document', icon: 'Y', color: 'bg-orange-700 text-white' },
   { key: 'issuu', label: 'Issuu', group: 'document', icon: 'I', color: 'bg-orange-500 text-white' },
-  { key: 'slideshare', label: 'SlideShare', group: 'document', icon: 'S', color: 'bg-green-600 text-white' },
-  { key: 'speakerdeck', label: 'Speaker Deck', group: 'document', icon: 'SD', color: 'bg-slate-600 text-white' },
   // Engine (blog writer, not a posting target)
   { key: 'chatgpt', label: 'ChatGPT (blog writer)', group: 'engine', icon: '✦', color: 'bg-emerald-700 text-white' },
   { key: 'chatgpt-image', label: 'ChatGPT (image gen)', group: 'engine', icon: '🖼', color: 'bg-fuchsia-700 text-white' },

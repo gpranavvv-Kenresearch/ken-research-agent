@@ -102,7 +102,7 @@ export function deleteFleetAccount(agent: string, platform: string, index: numbe
 const HEALTH_LABEL: Record<string, string> = {
   x: 'X', fb: 'Facebook', li: 'LinkedIn', 'linkedin-pulse': 'LinkedIn Pulse',
   medium: 'Medium', devto: 'Dev.to', calisthenics: 'Calisthenics',
-  ameba: 'Ameba', note: 'Note', linkmate: 'Linkmate', paragraph: 'Paragraph',
+  note: 'Note', linkmate: 'Linkmate',
   blogger: 'Blogger', wordpress: 'WordPress', googlesite: 'Google Sites',
   hackmd: 'HackMD', notion: 'Notion',
 };

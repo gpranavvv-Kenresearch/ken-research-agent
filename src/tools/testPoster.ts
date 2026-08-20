@@ -10,7 +10,6 @@
  *   npx tsx src/tools/testPoster.ts --platform raindrop --nickname pranav
  *   npx tsx src/tools/testPoster.ts --platform mastodon --nickname pranav
  *   npx tsx src/tools/testPoster.ts --platform pdfhost --nickname pranav
- *   npx tsx src/tools/testPoster.ts --platform yumpu --nickname pranav
  *   npx tsx src/tools/testPoster.ts --platform issuu --nickname pranav
  *   npx tsx src/tools/testPoster.ts --platform pearltrees --nickname pranav
  *   npx tsx src/tools/testPoster.ts --platform scribd --nickname pranav
@@ -35,7 +34,7 @@ async function main() {
   const nickname = args[args.indexOf('--nickname') + 1] || 'pranav';
 
   if (!platform) {
-    console.error('Usage: npx tsx src/tools/testPoster.ts --platform <instapaper|raindrop|mastodon|pdfhost|yumpu|issuu|pearltrees> --nickname <name>');
+    console.error('Usage: npx tsx src/tools/testPoster.ts --platform <instapaper|raindrop|mastodon|pdfhost|issuu|pearltrees> --nickname <name>');
     process.exit(1);
   }
 
@@ -80,18 +79,6 @@ async function main() {
         const result = await postToPdfHost(page, pdfPath, TEST_TITLE, 'Test description from testPoster.ts');
         console.log('\n✅ RESULT:', result);
         await closePdfHostBrowser();
-        break;
-      }
-      case 'yumpu': {
-        const { loginToYumpu, closeYumpuBrowser } = await import('../browser/yumpu/login.js');
-        const { postToYumpu } = await import('../browser/yumpu/poster.js');
-        console.log('   Generating test PDF...');
-        const pdfPath = await htmlToPdf(TEST_HTML, 'test-widget-market', 999999);
-        console.log(`   PDF built: ${pdfPath}`);
-        const page = await loginToYumpu({ nickname });
-        const result = await postToYumpu(page, pdfPath, TEST_TITLE, 'Test description from testPoster.ts', TEST_URL);
-        console.log('\n✅ RESULT:', result);
-        await closeYumpuBrowser();
         break;
       }
       case 'issuu': {

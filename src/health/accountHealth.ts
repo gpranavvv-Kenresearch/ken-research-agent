@@ -50,7 +50,7 @@ export interface AccountHealth {
 const SAFE_CAP: Record<string, number> = {
   X: 6, Facebook: 4, LinkedIn: 2, 'LinkedIn Pulse': 1,
   Medium: 3, 'Dev.to': 3, Calisthenics: 3,
-  Ameba: 5, Note: 5, Linkmate: 5, Paragraph: 8,
+  Note: 5, Linkmate: 5,
   Blogger: 10, WordPress: 10, 'Google Sites': 10, HackMD: 10, Notion: 10,
 };
 const DEFAULT_CAP = 5;
