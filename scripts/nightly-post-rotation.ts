@@ -5,9 +5,12 @@
  * Triggers at 8:00 AM IST every day. For each agent, runs the existing
  * counted post cycle (postCycle.ts's startPostCycle, same mechanism as the
  * dashboard's "Post Now" button) — 2 posts each on X/FB/LinkedIn per round.
- * Blog platforms mostly post once per round (2/day total): LinkedIn Pulse
- * and Medium are the exceptions, capped at 1/day total by only appearing in
- * ONE of the 2 rounds each (LinkedIn Pulse in round 1, Medium in round 2).
+ * Blog platforms post in fixed pairs sharing one row each (2-slot claim model
+ * — see sheets.ts): (Medium|LinkedIn Pulse)+GoogleSites, Linkmate+Calisthenics,
+ * Note+Notion, Dev.to+Coda, Velog+Blogger, HackMD+WordPress. Medium/LinkedIn
+ * Pulse are capped at 1/day total by only appearing in ONE of the 2 rounds
+ * each (Medium in round 1, LinkedIn Pulse in round 2) — everything else runs
+ * both rounds.
  * Waits for that agent's whole cycle to fully finish (polling
  * postCycleStatus) before starting the next agent — never two agents
  * posting at once — then a 5-minute break before the next agent starts.
@@ -33,16 +36,26 @@ const PERSON_GAP_MS = 5 * 60 * 1000; // 5 min between one agent finishing and th
 const POLL_MS = 15000; // how often to check whether an agent's cycle has finished
 
 // 2 posts/day each on X/Facebook/LinkedIn (1 per round × 2 rounds).
-// Blog platforms: LinkedIn Pulse and Medium are 1 post/day total, so each
-// appears in only ONE of the 2 rounds (never both) — everything else posts
-// once per round × 2 rounds = 2/day, same as before.
+//
+// Blog platforms use the shared 2-slot claim model (see sheets.ts
+// claimNextBlogSlot): whichever 2 platforms run back-to-back on a round claim
+// that row's 2 slots together, so KEY ORDER BELOW is the actual pairing, not
+// cosmetic. Fixed pairs per round, as specified:
+//   (Medium|LinkedIn Pulse) + Google Sites, Linkmate + Calisthenics,
+//   Note + Notion, Dev.to + Coda, Velog + Blogger, HackMD + WordPress
+// Round 1 leads with Medium, round 2 leads with LinkedIn Pulse (each still
+// only 1x/day total) — every other pair is identical both rounds.
 const SOCIAL_COUNTS: Record<string, number> = { x: 2, fb: 2, lipost: 2 };
-const TWICE_DAILY_BLOG_COUNTS: Record<string, number> = {
-  wordpress: 1, blogger: 1, googlepost: 1, note: 1, hackmd: 1,
-  linkmate: 1, calisthenics: 1, notion: 1, devto: 1, coda: 1,
+const SHARED_BLOG_COUNTS: Record<string, number> = {
+  googlepost: 1,
+  linkmate: 1, calisthenics: 1,
+  note: 1, notion: 1,
+  devto: 1, coda: 1,
+  velog: 1, blogger: 1,
+  hackmd: 1, wordpress: 1,
 };
-const ROUND1_COUNTS: Record<string, number> = { ...SOCIAL_COUNTS, ...TWICE_DAILY_BLOG_COUNTS, lipulse: 1 };
-const ROUND2_COUNTS: Record<string, number> = { ...SOCIAL_COUNTS, ...TWICE_DAILY_BLOG_COUNTS, medium: 1 };
+const ROUND1_COUNTS: Record<string, number> = { ...SOCIAL_COUNTS, medium: 1, ...SHARED_BLOG_COUNTS };
+const ROUND2_COUNTS: Record<string, number> = { ...SOCIAL_COUNTS, lipulse: 1, ...SHARED_BLOG_COUNTS };
 const COUNTS_BY_ROUND: Record<number, Record<string, number>> = { 1: ROUND1_COUNTS, 2: ROUND2_COUNTS };
 
 const SKIP_WAIT = process.argv.includes('--now');

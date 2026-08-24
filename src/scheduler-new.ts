@@ -41,7 +41,7 @@ import {
   runMediumBatch, runLinkmateBatch, runGoogleSiteBatch,
   runDevtoBatch, runLinkedinPulseBatch, runCalisthenicsNBatch,
   runWordpressBatch, runBloggerBatch, runHackmdBatch,
-  runNotionBatch, runNoteBatch, runCodaBatch,
+  runNotionBatch, runNoteBatch, runCodaBatch, runVelogBatch,
   runWeeklySerpRecheck, resetBatchCounters,
   runRetryRow,
 } from './coordinator/masterCoordinator.js';
@@ -78,6 +78,7 @@ const NOTION:       PlatformDef = { label: 'Notion',         run: runNotionBatch
 const CODA:         PlatformDef = { label: 'Coda',           run: runCodaBatch };
 const TUMBLR:       PlatformDef = { label: 'Tumblr',         run: runTumblrBatch };
 const MASTODON:     PlatformDef = { label: 'Mastodon',       run: runMastodonBatch };
+const VELOG:        PlatformDef = { label: 'Velog',          run: runVelogBatch };
 
 // Key map for the counted, round-based "Post Now" cycle (runCountedPostCycle) —
 // the dashboard form's platform keys to the PlatformDef objects above.
@@ -85,7 +86,7 @@ const COUNTED_PLATFORMS: Record<string, PlatformDef> = {
   x: X, fb: FB, lipost: LI, lipulse: LI_PULSE, medium: MEDIUM,
   wordpress: WORDPRESS, blogger: BLOGGER, googlepost: GOOGLESITE, note: NOTE,
   hackmd: HACKMD, linkmate: LINKMATE, calisthenics: CALISTHENICS, notion: NOTION, devto: DEVTO,
-  coda: CODA, tumblr: TUMBLR, mastodon: MASTODON,
+  coda: CODA, tumblr: TUMBLR, mastodon: MASTODON, velog: VELOG,
 };
 
 // ── The 5 stages, exactly as agreed ────────────────────────────────────────────
