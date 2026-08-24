@@ -4,7 +4,7 @@ dotenv.config();
 
 export const settings = {
   openRouter: {
-    keys: Array.from({ length: 10 }, (_, i) => process.env[`OPENROUTER_API_KEY_${i + 1}`] || '').filter(Boolean),
+    keys: Array.from({ length: 18 }, (_, i) => process.env[`OPENROUTER_API_KEY_${i + 1}`] || '').filter(Boolean),
     model: 'anthropic/claude-haiku-4-5',
   },
   twitter: {
@@ -48,7 +48,7 @@ export const settings = {
 };
 
 function validateOpenRouterKeys(): void {
-  const hasKey = Array.from({ length: 10 }, (_, i) => process.env[`OPENROUTER_API_KEY_${i + 1}`]).some(Boolean);
+  const hasKey = Array.from({ length: 18 }, (_, i) => process.env[`OPENROUTER_API_KEY_${i + 1}`]).some(Boolean);
   if (!hasKey) throw new Error('Missing OpenRouter API keys. Set at least OPENROUTER_API_KEY_1 in .env');
 }
 

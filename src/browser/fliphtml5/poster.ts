@@ -10,7 +10,6 @@
 import { Page } from 'playwright';
 import path from 'path';
 import fs from 'fs';
-import { injectUTM, UTM_PARAMS } from '../../utils/utm.js';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -32,7 +31,12 @@ export async function postToFlipHtml5(
   if (!fs.existsSync(filePath)) {
     throw new Error(`File not found: ${filePath}`);
   }
-  void injectUTM(targetUrl, UTM_PARAMS.FlipHTML5);
+  // No caption/description field in this upload flow — the report link is
+  // embedded (UTM-tagged) inside the PDF content itself before this function
+  // is ever called, by the coordinator that generates it. targetUrl is kept
+  // in the signature only for interface consistency with the other
+  // doc-upload platforms.
+  void targetUrl;
 
   console.log('   Navigating to FlipHTML5 upload page...');
   await page.goto(UPLOAD_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });

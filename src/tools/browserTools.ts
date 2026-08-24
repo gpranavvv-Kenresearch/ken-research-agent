@@ -35,6 +35,8 @@ import { loginToNotion, closeNotionBrowser, getNotionAccountByNickname, getActiv
 import { postToNotion } from '../browser/notion/poster.js';
 import { loginToNote, closeNoteBrowser, getNoteAccountByNickname, getActiveNoteAccount } from '../browser/note/login.js';
 import { postToNote } from '../browser/note/poster.js';
+import { loginToVelog, closeVelogBrowser } from '../browser/velog/login.js';
+import { postToVelog } from '../browser/velog/poster.js';
 import { loginToCoda, closeCodaBrowser, getCodaAccountByNickname } from '../browser/coda/login.js';
 import { postToCoda } from '../browser/coda/poster.js';
 import { loginToTumblr, closeTumblrBrowser } from '../browser/tumblr/login.js';
@@ -87,6 +89,7 @@ let devtoPage: Page | null = null;
 let linkmatePage: Page | null = null;
 let notionPage: Page | null = null;
 let notePage: Page | null = null;
+let velogPage: Page | null = null;
 // ══ SBM + PPT/PDF platform browser tools (grafted) ══
 let instapaperPage: Page | null = null;
 let raindropPage: Page | null = null;
@@ -459,6 +462,29 @@ export const BROWSER_TOOLS: Tool[] = [
       required: ['title', 'htmlContent'],
     },
   },
+  {
+    name: 'login_velog',
+    description: 'Login to Velog with account credentials',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        nickname: { type: 'string', description: 'Velog account nickname' },
+      },
+      required: ['nickname'],
+    },
+  },
+  {
+    name: 'post_velog',
+    description: 'Post an article to Velog. Must call login_velog first.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        title: { type: 'string', description: 'Article title' },
+        htmlContent: { type: 'string', description: 'Article content (HTML)' },
+      },
+      required: ['title', 'htmlContent'],
+    },
+  },
   // ══ SBM + PPT/PDF platform browser tools (grafted) ══
   {
     name: 'login_instapaper',
@@ -674,6 +700,12 @@ export async function executeBrowserTool(toolName: string, input: Record<string,
     }
     if (toolName === 'post_note') {
       return await postNoteTool(input.title, input.htmlContent);
+    }
+    if (toolName === 'login_velog') {
+      return await loginVelogTool(input.nickname);
+    }
+    if (toolName === 'post_velog') {
+      return await postVelogTool(input.title, input.htmlContent);
     }
     // ══ SBM + PPT/PDF platform browser tools (grafted) ══
     if (toolName === 'login_instapaper') {
@@ -1418,6 +1450,12 @@ export async function closeAllBrowsers(): Promise<void> {
     } catch (e) {}
     notePage = null;
   }
+  if (velogPage) {
+    try {
+      await closeVelogBrowser();
+    } catch (e) {}
+    velogPage = null;
+  }
 }
 
 /**
@@ -1562,6 +1600,35 @@ async function postNoteTool(title: string, htmlContent: string): Promise<any> {
       await closeNoteBrowser().catch(() => {});
       notePage = null;
       noteNickname = null;
+    }
+  }
+}
+
+/**
+ * Velog Tools
+ */
+async function loginVelogTool(nickname: string): Promise<any> {
+  try {
+    velogPage = await loginToVelog({ nickname });
+    return { success: true, message: `Logged in to Velog (${nickname})` };
+  } catch (err: any) {
+    try { await closeVelogBrowser(); } catch { /* ignore */ }
+    velogPage = null;
+    return { error: err.message, success: false };
+  }
+}
+
+async function postVelogTool(title: string, htmlContent: string): Promise<any> {
+  try {
+    if (!velogPage) return { error: 'Not logged in. Call login_velog first.', success: false };
+    const result = await postToVelog(velogPage, title, htmlContent);
+    return { success: result.success, postUrl: result.postUrl };
+  } catch (err: any) {
+    return { error: err.message, success: false };
+  } finally {
+    if (velogPage) {
+      await closeVelogBrowser().catch(() => {});
+      velogPage = null;
     }
   }
 }

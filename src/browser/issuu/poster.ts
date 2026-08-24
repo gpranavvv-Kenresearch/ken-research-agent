@@ -23,7 +23,6 @@
 import { Page } from 'playwright';
 import path from 'path';
 import fs from 'fs';
-import { injectUTM, UTM_PARAMS } from '../../utils/utm.js';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -46,8 +45,10 @@ export async function postToIssuu(
     throw new Error(`File not found: ${filePath}`);
   }
   // Kept for interface compatibility with the other doc-upload platforms —
-  // this tray flow has no description field to fill, only title.
-  void injectUTM(targetUrl, UTM_PARAMS.Issuu);
+  // this tray flow has no description field to fill, only title. The report
+  // link is embedded (UTM-tagged) inside the PDF content itself before this
+  // function is ever called, by the coordinator that generates it.
+  void targetUrl;
   void description;
 
   console.log('   Navigating to Issuu dashboard...');

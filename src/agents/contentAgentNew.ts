@@ -45,7 +45,29 @@ function saveTweetToHistory(url: string, tweet: string): void {
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
-const OPENROUTER_MODEL = 'google/gemma-4-26b-a4b-it:free';
+// google/gemma-4-26b-a4b-it:free (the old single fixed model) is STILL in
+// OpenRouter's catalog — it wasn't removed, it's upstream rate-limited
+// (HTTP 429, confirmed live 2026-08-24), which is functionally the same
+// as "failing completely" at real request volume.
+//
+// Every candidate below was live-tested with the actual production prompt
+// shape (format rules, char limits, Ken Research branding requirement) —
+// not just checked for existing in the catalog. Most failed outright:
+//   nvidia/nemotron-3.5-lightning:free        — untested variant, superseded by nano below
+//   nvidia/nemotron-nano-9b-v2:free            — returned empty every time
+//   nvidia/nemotron-3-nano-30b-a3b:free        — leaks raw chain-of-thought instead of an answer
+//   nvidia/nemotron-3-super-120b-a12b:free     — same chain-of-thought leak
+//   liquid/lfm-2.5-2.6b:free                   — empty
+//   thinkingmachines/inkling:free              — HTTP 403, not available outside their own apps
+//   cohere/north-mini-code:free                — empty (also a code model, wrong tool anyway)
+//   dots-studio/dots-3-note-preview:free       — empty
+//   poolside/laguna-xs-2.1:free                — empty
+// Only these two gave clean, on-instruction, coherent output across
+// repeated live runs — that's the actual bar, not "does the slug exist":
+const OPENROUTER_MODELS = [
+  'nvidia/nemotron-nano-12b-v2-vl:free',
+  'poolside/laguna-s-2.1:free',
+];
 const NVIDIA_MODEL = 'meta/llama-3.1-70b-instruct';
 
 interface ApiKey {
@@ -79,9 +101,12 @@ export interface ContentParams {
 function buildKeyPool(): ApiKey[] {
   const pool: ApiKey[] = [];
 
-  for (let i = 1; i <= 15; i++) {
+  for (let i = 1; i <= 18; i++) {
     const k = process.env[`OPENROUTER_API_KEY_${i}`]?.trim();
-    if (k) pool.push({ key: k, baseUrl: OPENROUTER_BASE_URL, model: OPENROUTER_MODEL, label: `OpenRouter-${i}` });
+    if (k) {
+      const model = OPENROUTER_MODELS[(i - 1) % OPENROUTER_MODELS.length];
+      pool.push({ key: k, baseUrl: OPENROUTER_BASE_URL, model, label: `OpenRouter-${i}(${model.split('/')[1]})` });
+    }
   }
 
   for (let i = 1; i <= 4; i++) {
@@ -176,7 +201,7 @@ async function callLLMWithRetry(prompt: string, maxTokens: number, retries = 3):
 
 async function callLLM(prompt: string, maxTokens = 512): Promise<string> {
   const pool = buildKeyPool();
-  if (pool.length === 0) throw new Error('No API keys found. Set OPENROUTER_API_KEY_1…_12 or NVIDIA_API_KEY in .env');
+  if (pool.length === 0) throw new Error('No API keys found. Set OPENROUTER_API_KEY_1…_18 or NVIDIA_API_KEY in .env');
 
   for (let i = 0; i < pool.length; i++) {
     const { key, baseUrl, model, label } = pool[i];
@@ -308,7 +333,8 @@ FORMAT RULES:
 - If real market data has CAGR, market size, or competitor names – weave ONE specific number naturally into the tweet
 - End with a short CTA phrase + colon, then the URL on the same line
 - Then a space, then two hashtags
-- Rotate CTA phrases: "Explore the momentum building now:", "Explore the surge shaping the future:", "Full outlook:", "Dive into the full picture:", "See what's driving the shift:"
+- Mention "Ken Research" by name once in the post — the easiest way is to fold it into the CTA phrase itself
+- Rotate CTA phrases: "Ken Research decodes the shift:", "Ken Research uncovers what's next:", "Ken Research finds what's driving this:", "Ken Research breaks down the shift:", "Ken Research reveals what's ahead:", "Ken Research maps out the opportunity:", "Explore the momentum building now:", "Explore the surge shaping the future:", "Full outlook:", "Dive into the full picture:", "See what's driving the shift:"
 - Hashtag 1 = core market keyword (no geo), Hashtag 2 = industry sector or geo
 
 ──────────────────────
@@ -435,7 +461,8 @@ FORMAT RULES:
 - 1 or 2 sentences max – no em dashes; use "with", "as", "while", "and" for flow
 - If real market data has CAGR, market size, or competitor names – weave ONE specific number naturally into the post
 - End with a short CTA phrase + colon, then the URL on the same line — nothing after the URL
-- Rotate CTA phrases: "Explore the momentum building now:", "Explore the surge shaping the future:", "Full outlook:", "Dive into the full picture:", "See what's driving the shift:"
+- Mention "Ken Research" by name once in the post — the easiest way is to fold it into the CTA phrase itself
+- Rotate CTA phrases: "Ken Research decodes the shift:", "Ken Research uncovers what's next:", "Ken Research finds what's driving this:", "Ken Research breaks down the shift:", "Ken Research reveals what's ahead:", "Ken Research maps out the opportunity:", "Explore the momentum building now:", "Explore the surge shaping the future:", "Full outlook:", "Dive into the full picture:", "See what's driving the shift:"
 - NO hashtags anywhere in the post
 
 ──────────────────────
@@ -582,7 +609,8 @@ FORMAT RULES:
 - 1 or 2 sentences max – no em dashes; use "with", "as", "while", "and" for flow
 - If real market data has CAGR, market size, or competitor names – weave ONE specific number naturally into the caption
 - End with a short CTA phrase + colon, then 2-3 hashtags on the same line — do NOT include the URL itself, Tumblr attaches the link as its own card
-- Rotate CTA phrases: "Explore the momentum building now:", "Explore the surge shaping the future:", "Full outlook:", "Dive into the full picture:", "See what's driving the shift:"
+- Mention "Ken Research" by name once in the caption — the easiest way is to fold it into the CTA phrase itself
+- Rotate CTA phrases: "Ken Research decodes the shift:", "Ken Research uncovers what's next:", "Ken Research finds what's driving this:", "Ken Research breaks down the shift:", "Ken Research reveals what's ahead:", "Ken Research maps out the opportunity:", "Explore the momentum building now:", "Explore the surge shaping the future:", "Full outlook:", "Dive into the full picture:", "See what's driving the shift:"
 - Hashtag 1 = core market keyword (no geo), hashtag 2 = industry sector or geo, optional hashtag 3 = a broader theme (e.g. #MarketResearch, #Growth)
 
 ──────────────────────
@@ -888,8 +916,9 @@ Write ONE professional Facebook post following this exact structure:
 
 1. ${style.hook}
 ${style.body}
-5. Ken Research CTA – one sentence ending with: "Read the full report: ${utmUrl}"
-6. Hashtags – 5–7 relevant professional hashtags.
+5. Ken Research positioning – one sentence naming Ken Research and using active language like "decodes"/"uncovers"/"finds"/"reveals"/"maps out"/"helps businesses decode" — vary the phrasing each time, e.g.: "Ken Research decodes shifts like this for businesses navigating the space.", "Ken Research uncovers what's driving this market.", "Ken Research finds the opportunities other reports miss."
+6. Ken Research CTA – one sentence ending with: "Read the full report: ${utmUrl}"
+7. Hashtags – 5–7 relevant professional hashtags.
 
 Hard rules:
 - Use ONLY data from the web search results. Do NOT invent numbers.
@@ -926,10 +955,11 @@ Caption Requirements:
 7. No emojis.
 8. Do NOT use em dashes (—) anywhere. Use a comma, colon, or period instead.
 9. Do not sound promotional or generic.
-10. End with this CTA:
+10. Just before the CTA, add one Ken Research positioning sentence using active language like "decodes"/"uncovers"/"finds"/"reveals"/"maps out"/"helps businesses decode" — vary the phrasing each time, e.g. "Ken Research decodes shifts like this for businesses navigating the space.", "Ken Research uncovers what's driving this market.", "Ken Research finds the opportunities other reports miss."
+11. End with this CTA:
     Read the full [Market Name] Report by Ken Research:
     ${utmUrl}
-11. Add 5-7 relevant SEO hashtags at the end.
+12. Add 5-7 relevant SEO hashtags at the end.
 
 Caption Structure:
 - Opening Hook (1-2 strong lines introducing the market opportunity)

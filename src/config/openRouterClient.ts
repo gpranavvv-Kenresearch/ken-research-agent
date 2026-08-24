@@ -7,7 +7,7 @@ const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 // Load all non-empty keys from env
 function loadKeys(): string[] {
   const keys: string[] = [];
-  for (let i = 1; i <= 15; i++) {
+  for (let i = 1; i <= 18; i++) {
     const key = process.env[`OPENROUTER_API_KEY_${i}`];
     if (key && key.trim()) keys.push(key.trim());
   }
@@ -92,7 +92,7 @@ async function makeRequest(key: string, params: OpenRouterParams): Promise<OpenR
 export async function callOpenRouter(params: OpenRouterParams): Promise<OpenRouterResponse> {
   const keys = loadKeys();
   if (keys.length === 0) {
-    throw new Error('No OpenRouter API keys found. Set OPENROUTER_API_KEY_1 … _15 in .env');
+    throw new Error('No OpenRouter API keys found. Set OPENROUTER_API_KEY_1 … _18 in .env');
   }
 
   const state = loadState();

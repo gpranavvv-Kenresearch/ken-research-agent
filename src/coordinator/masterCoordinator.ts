@@ -60,7 +60,7 @@ function extractSocialPost(rawContent: string | undefined): string | null {
   return content.replace(/^\d{4}-\d{2}-\d{2}:\s*/, '').trim() || null;
 }
 
-import { ensureTargetUrl } from '../utils/utm.js';
+import { ensureTargetUrl, injectUTM, UTM_PARAMS } from '../utils/utm.js';
 import { retryOnSelectorTimeout } from '../utils/retry.js';
 import { record as healthRecord } from '../health/accountHealth.js';
 import { proxyDispatcher } from '../health/proxyPool.js';
@@ -148,8 +148,10 @@ import {
   getRowsForContinuousSubstackPosting,
   getRowsForContinuousNotionPosting,
   getRowsForContinuousNotePosting,
+  getRowsForContinuousVelogPosting,
   saveUnifiedNotionResult,
   saveUnifiedNoteResult,
+  saveUnifiedVelogResult,
   getRowsForContinuousHackmdPosting,
   savePostingResult,
   saveUnifiedSeoData,
@@ -2415,9 +2417,60 @@ export async function runNoteBatch(batchNum: number = 1, limit: number = 12): Pr
   console.log(`\n[NOTE BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
 }
 
+// ──── Velog Batch ──────────────────────────────────────────────────────────────
+
+export async function runVelogBatch(batchNum: number = 1, limit: number = 12): Promise<void> {
+  console.log(`\n[VELOG BATCH] Starting...`);
+  const rows = await getRowsForContinuousVelogPosting(capToLiveAccounts(limit, 'velog'));
+  if (rows.length === 0) { console.log('[VELOG BATCH] No rows available'); return; }
+  const batchLabel = `Batch ${batchNum}`;
+  console.log(`  Found ${rows.length} rows ready for Velog (${batchLabel})`);
+  let posted = 0, failed = 0;
+  const failures: FailureEntry[] = [];
+  for (const row of rows) {
+    try {
+      console.log(`\n  Processing: ${row.title.slice(0, 60)}`);
+      let content = row.blogContent || '';
+      const title = row.title || row.descriptionTitle || '';
+      if (!content) {
+        await saveUnifiedVelogResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: 'No blog content' });
+        failed++;
+        addFailure(failures, row.name, 'no blog content');
+        continue;
+      }
+      content = ensureTargetUrl(content, row.targetUrl);
+      const velogAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'velog', row.name);
+      if (!healthGate('Velog', velogAccount)) continue;
+      const postResult = await retryOnSelectorTimeout(async () => {
+        const loginResult = await executeBrowserTool('login_velog', { nickname: velogAccount });
+        if (!loginResult.success) throw new Error(loginResult.error || 'Login failed');
+        return executeBrowserTool('post_velog', { title, htmlContent: content });
+      }, { label: 'Velog post' });
+      healthRecordSafe('Velog', velogAccount, { success: postResult.success, error: postResult.error, reason: (postResult as any).reason });
+      if (postResult.success) {
+        await saveUnifiedVelogResult(row, { postUrl: postResult.postUrl || '', status: 'Posted', batch: batchLabel });
+        console.log(`    ✅ Posted → ${postResult.postUrl}`);
+        posted++;
+      } else {
+        await saveUnifiedVelogResult(row, { postUrl: '', status: 'Failed', batch: batchLabel, error: postResult.error });
+        failed++;
+        addFailure(failures, row.name, postResult.error);
+      }
+    } catch (err: any) {
+      console.error(`  ❌ Row ${row.rowIndex}: ${err.message}`);
+      addFailure(failures, row.name, err.message);
+      try { await saveUnifiedVelogResult(row, { postUrl: '', status: 'Error', batch: batchLabel, error: err.message }); } catch {}
+      failed++;
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  printDiagnostics('Velog', failures, posted, rows.length);
+  console.log(`\n[VELOG BATCH] ${batchLabel} complete: ${posted}/${rows.length} posted, ${failed} failed`);
+}
+
 // ── Retry single row on a specific platform ───────────────────────────────────
 
-const BLOG_PLATFORMS  = ['googlesite', 'hackmd', 'devto', 'medium', 'linkmate', 'linkedin-pulse', 'calisthenics', 'substack', 'wordpress', 'blogger', 'notion', 'note'];
+const BLOG_PLATFORMS  = ['googlesite', 'hackmd', 'devto', 'medium', 'linkmate', 'linkedin-pulse', 'calisthenics', 'substack', 'wordpress', 'blogger', 'notion', 'note', 'velog'];
 const SOCIAL_PLATFORMS = ['x', 'facebook', 'linkedin'];
 
 // Maps runRetryRow's lowercase platform key to the exact label claimNextBlogSlot
@@ -2426,7 +2479,7 @@ const BLOG_PLATFORM_LABELS: Record<string, string> = {
   googlesite: 'Google Sites', hackmd: 'HackMD', devto: 'Dev.to', medium: 'Medium',
   linkmate: 'Linkmate', 'linkedin-pulse': 'LinkedIn Pulse', calisthenics: 'Calisthenics',
   substack: 'Substack', wordpress: 'WordPress', blogger: 'Blogger',
-  notion: 'Notion', note: 'Note', coda: 'Coda',
+  notion: 'Notion', note: 'Note', coda: 'Coda', velog: 'Velog',
 };
 
 export async function runRetryRow(rowIndex: number, platform: string): Promise<void> {
@@ -2560,6 +2613,18 @@ export async function runRetryRow(rowIndex: number, platform: string): Promise<v
         if (!loginResult.success) throw new Error(loginResult.error || 'Notion login failed');
         const r = await executeBrowserTool('post_notion', { title: notionTitle, htmlContent: ensureTargetUrl(content, row.targetUrl) });
         await saveUnifiedNotionResult(row, { postUrl: r.postUrl || '', status: r.success ? 'Posted' : 'Failed', batch: label, error: r.error });
+        console.log(r.success ? `✅ Posted → ${r.postUrl}` : `❌ Failed: ${r.error}`);
+        break;
+      }
+      case 'velog': {
+        const content = row.blogContent || '';
+        if (!content) { console.log('⏭ Skipping — no blog content'); break; }
+        const velogTitle = row.title || row.descriptionTitle || title;
+        const velogAccount = selectAccountForPlatform(process.env.WORKER_NAME || row.name, 'velog', row.name);
+        const loginResult = await executeBrowserTool('login_velog', { nickname: velogAccount });
+        if (!loginResult.success) throw new Error(loginResult.error || 'Velog login failed');
+        const r = await executeBrowserTool('post_velog', { title: velogTitle, htmlContent: ensureTargetUrl(content, row.targetUrl) });
+        await saveUnifiedVelogResult(row, { postUrl: r.postUrl || '', status: r.success ? 'Posted' : 'Failed', batch: label, error: r.error });
         console.log(r.success ? `✅ Posted → ${r.postUrl}` : `❌ Failed: ${r.error}`);
         break;
       }
@@ -2992,7 +3057,15 @@ export async function runPdfhostBatch(batchNum: number = 1): Promise<void> {
     try {
       let pdfPath = row.pdfPath?.trim();
       if (!pdfPath) {
-        pdfPath = await htmlToPdf(content, makeSlug(pdfTitle), row.rowIndex);
+        // The PDF is the whole "post" — there's no separate caption/description
+        // field on any of these document platforms, so the report link has to
+        // live inside the document itself. This PDF is cached and REUSED across
+        // every PDF platform for this row (savePdfPath/row.pdfPath), so it gets
+        // one generic document-source UTM tag, not a per-platform one — a
+        // platform-specific tag baked in here would be wrong for every platform
+        // except whichever one happens to generate it first.
+        const taggedContent = injectUTM(ensureTargetUrl(content, row.targetUrl), UTM_PARAMS.PDF);
+        pdfPath = await htmlToPdf(taggedContent, makeSlug(pdfTitle), row.rowIndex);
         await savePdfPath(row, pdfPath, undefined, 'newLogic').catch(() => {});
       }
       const page = await loginToPdfHost({ nickname: row.name });
@@ -3032,7 +3105,11 @@ export async function runFliphtml5Batch(batchNum: number = 1): Promise<void> {
     try {
       let pdfPath = row.pdfPath?.trim();
       if (!pdfPath) {
-        pdfPath = await htmlToPdf(content, makeSlug(pdfTitle), row.rowIndex);
+        // Cached and reused across every PDF platform for this row — one
+        // generic document-source UTM tag, not a per-platform one (see PdfHost
+        // batch above for the full explanation).
+        const taggedContent = injectUTM(ensureTargetUrl(content, row.targetUrl), UTM_PARAMS.PDF);
+        pdfPath = await htmlToPdf(taggedContent, makeSlug(pdfTitle), row.rowIndex);
         await savePdfPath(row, pdfPath, undefined, 'newLogic').catch(() => {});
       }
       const page = await loginToFlipHtml5({ nickname: row.name });
@@ -3072,7 +3149,11 @@ export async function runScribdBatch(batchNum: number = 1): Promise<void> {
     try {
       let pdfPath = row.pdfPath?.trim();
       if (!pdfPath) {
-        pdfPath = await htmlToPdf(content, makeSlug(pdfTitle), row.rowIndex);
+        // Cached and reused across every PDF platform for this row — one
+        // generic document-source UTM tag, not a per-platform one (see PdfHost
+        // batch above for the full explanation).
+        const taggedContent = injectUTM(ensureTargetUrl(content, row.targetUrl), UTM_PARAMS.PDF);
+        pdfPath = await htmlToPdf(taggedContent, makeSlug(pdfTitle), row.rowIndex);
         await savePdfPath(row, pdfPath, undefined, 'newLogic').catch(() => {});
       }
       const page = await loginToScribd({ nickname: row.name });
@@ -3112,7 +3193,11 @@ export async function runFourSharedBatch(batchNum: number = 1): Promise<void> {
     try {
       let pdfPath = row.pdfPath?.trim();
       if (!pdfPath) {
-        pdfPath = await htmlToPdf(content, makeSlug(pdfTitle), row.rowIndex);
+        // Cached and reused across every PDF platform for this row — one
+        // generic document-source UTM tag, not a per-platform one (see PdfHost
+        // batch above for the full explanation).
+        const taggedContent = injectUTM(ensureTargetUrl(content, row.targetUrl), UTM_PARAMS.PDF);
+        pdfPath = await htmlToPdf(taggedContent, makeSlug(pdfTitle), row.rowIndex);
         await savePdfPath(row, pdfPath, undefined, 'newLogic').catch(() => {});
       }
       const page = await loginToFourShared({ nickname: row.name });
@@ -3183,7 +3268,11 @@ export async function runIssuuBatch(batchNum: number = 1): Promise<void> {
     try {
       let pdfPath = row.pdfPath?.trim();
       if (!pdfPath) {
-        pdfPath = await htmlToPdf(content, makeSlug(issuuTitle), row.rowIndex);
+        // Cached and reused across every PDF platform for this row — one
+        // generic document-source UTM tag, not a per-platform one (see PdfHost
+        // batch above for the full explanation).
+        const taggedContent = injectUTM(ensureTargetUrl(content, row.targetUrl), UTM_PARAMS.PDF);
+        pdfPath = await htmlToPdf(taggedContent, makeSlug(issuuTitle), row.rowIndex);
         await savePdfPath(row, pdfPath, undefined, 'newLogic').catch(() => {});
       }
       const page = await loginToIssuu({ nickname: row.name });

@@ -768,6 +768,10 @@ const BLOG_PLATFORM_COLS: Record<string, BlogPlatformCols> = {
   'Linkmate':       { status: ['Linkmate Status'],       url: ['Linkmate Post URL'],             error: ['Linkmate Error'],       batch: ['Linkmate Batch'],       lastPosted: ['lastPostedLinkmate'] },
   'Coda':           { status: ['Coda Status'],           url: ['Coda Post URL'],                 error: ['Coda Error'],           batch: ['Coda Batch'],           lastPosted: ['Last Posted Coda'] },
   'LinkedIn Pulse': { status: ['Linkedin Pulse Status'], url: ['Linkedin Pulse URL'],            error: ['Linkedin Pulse Error'], batch: ['Linkedin Pulse batch', 'Linkedin Pulse Batch'], lastPosted: ['lastPosted linkedin Pulse', 'lastPostedLinkedinPulse'] },
+  // 'Post URl' (missing an 'l') matches the actual header text already present
+  // in the sheet — kept as the primary name with the correctly-spelled variant
+  // as a fallback, in case a differently-typed sheet is added later.
+  'Velog':          { status: ['Velog Status'],          url: ['Velog Post URl', 'Velog Post URL'], error: ['Velog Error'],         batch: ['Velog Batch'],          lastPosted: ['Last Posted Velog', 'lastPostedVelog'] },
 };
 
 /**
@@ -2019,6 +2023,19 @@ export async function getRowsForContinuousNotePosting(limit: number = 15): Promi
 }
 
 export async function saveUnifiedNoteResult(
+  row: SheetRow,
+  result: { postUrl: string; status: string; error?: string; batch?: string }
+): Promise<void> {
+  await saveBlogSlotResult(row, result);
+}
+
+// ──── Velog Blog Posting ───────────────────────────────────────────────────────
+
+export async function getRowsForContinuousVelogPosting(limit: number = 15): Promise<SheetRow[]> {
+  return claimNextBlogSlots('Velog', limit);
+}
+
+export async function saveUnifiedVelogResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {

@@ -21,6 +21,7 @@ export const UTM_PARAMS = {
   Coda: '?utm_source=Coda&utm_medium=Referral&utm_campaign=Automation',
   Tumblr: '?utm_source=Tumblr&utm_medium=Referral&utm_campaign=Automation',
   Mastodon: '?utm_source=Mastodon&utm_medium=Referral&utm_campaign=Automation',
+  Velog: '?utm_source=Velog&utm_medium=Referral&utm_campaign=Automation',
   // SBM + PPT/PDF platforms (SBM/PPT integration)
   Issuu: '?utm_source=Issuu&utm_medium=Referral&utm_campaign=Automation',
   PDF: '?utm_source=PPT/PDF&utm_medium=Referral&utm_campaign=Automation',
