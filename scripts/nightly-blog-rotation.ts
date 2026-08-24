@@ -3,8 +3,11 @@
  *
  * Round-robin, in order sanya → hritika → meenakshi → vijay → vansh → sameeksha
  * (each with their OWN ChatGPT account: .sessions-cookies/chatgpt-profile-{agent}).
- * Each person generates up to BLOGS_PER_PERSON blogs, then a BREAK_MIN (5 min)
- * break, then the next person. Loops forever, day and night — no schedule window.
+ * Each person generates up to BLOGS_PER_PERSON blogs, then a BREAK_MIN (10 min)
+ * break before the next person — except after the LAST person in a pass
+ * (sameeksha), which gets the longer CYCLE_BREAK_MIN (1 hour) instead, before
+ * the whole rotation loops back around to sanya. Loops forever, day and
+ * night — no schedule window.
  *
  * Deliberately no "starts at midnight" gate: this process is meant to run
  * continuously 24/7 (see the self-healing watchdog below) — a hard start-time
@@ -42,7 +45,8 @@ import path from 'path';
 
 const AGENTS = ['sanya', 'hritika', 'meenakshi', 'vijay', 'vansh', 'sameeksha'];
 const BLOGS_PER_PERSON = Number(process.env.BLOG_LIMIT || 5);           // blogs each person generates before the break
-const BREAK_MIN = Number(process.env.BLOG_BREAK_MIN || 5);              // break between people
+const BREAK_MIN = Number(process.env.BLOG_BREAK_MIN || 10);             // break between one person finishing and the next starting
+const CYCLE_BREAK_MIN = Number(process.env.BLOG_CYCLE_BREAK_MIN || 60); // longer break after the LAST person in a full pass, before looping back to the first
 const PERSON_MAX_MIN = Number(process.env.BLOG_PERSON_MAX_MIN || 150);  // safety cap per person (hang guard)
 const DRY_SLEEP_MIN = 30;                                               // whole pass found no work → wait, recheck
 
@@ -138,10 +142,12 @@ function istTimestamp(): string {
 }
 
 async function main() {
-  log(`Blog loop starting. Order: ${AGENTS.join(' → ')} | ${BLOGS_PER_PERSON} blogs/person | ${BREAK_MIN} min break | ${SKIP_WAIT ? '[--now: one person]' : '[continuous]'}`);
+  log(`Blog loop starting. Order: ${AGENTS.join(' → ')} | ${BLOGS_PER_PERSON} blogs/person | ${BREAK_MIN} min between people | ${CYCLE_BREAK_MIN} min after a full cycle | ${SKIP_WAIT ? '[--now: one person]' : '[continuous]'}`);
   for (;;) {
     let anyWork = false;
-    for (const agent of AGENTS) {
+    for (let i = 0; i < AGENTS.length; i++) {
+      const agent = AGENTS[i];
+      const isLastInCycle = i === AGENTS.length - 1;
       // NO OVERLAP: before this person starts, kill any leftover generation + Chrome.
       sweepBlogGeneration();
       await sleep(3000);
@@ -153,8 +159,13 @@ async function main() {
       await generateForPerson(agent, PERSON_MAX_MIN * 60 * 1000);
       verifyAndReport(agent, startStamp);
       if (SKIP_WAIT) { log('--now: one person done, exiting.'); return; }
-      log(`--- ${agent} done — ${BREAK_MIN} min break before next person ---`);
-      await sleep(BREAK_MIN * 60 * 1000);
+      // Every person in the middle of a pass gets the short BREAK_MIN gap;
+      // the LAST person before the rotation loops back to the first gets the
+      // longer CYCLE_BREAK_MIN instead — one full lap through everyone, then
+      // a real rest, not another short gap immediately into round two.
+      const breakMin = isLastInCycle ? CYCLE_BREAK_MIN : BREAK_MIN;
+      log(`--- ${agent} done — ${breakMin} min break before ${isLastInCycle ? 'the cycle restarts from the first person' : 'next person'} ---`);
+      await sleep(breakMin * 60 * 1000);
     }
     if (SKIP_WAIT) return;
     if (!anyWork) {
