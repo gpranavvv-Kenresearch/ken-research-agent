@@ -56,7 +56,8 @@ if (!url || !title) out({ status: 'error', message: '--url and --title are requi
 const CHROME_PATH = process.env.CHROME_PATH || undefined;
 const CHATGPT_URL = 'https://chatgpt.com/';
 const RESPONSE_TIMEOUT_MS = 30 * 60 * 1000;   // hard cap 30 min
-const POLL_MS = Math.round(3.5 * 60 * 1000);  // check every ~3.5 min (generation is 12-15+ min)
+const POLL_MS = 60 * 1000;                    // check every 1 min (generation is 12-15+ min when it's actually working)
+const STALL_CHECKS_TO_GIVE_UP = 4;            // this many consecutive 1-min checks with an unchanged length → treat as stuck, give up
 
 // One profile PER AGENT (not shared team-wide) so two agents can each generate
 // blog text concurrently without fighting over the same Chrome profile lock.
@@ -516,7 +517,7 @@ async function waitForCompletion(page: Page): Promise<void> {
   let goneChecks = 0;
   let lastLength = -1;
   let unchangedChecks = 0;
-  await page.waitForTimeout(60000); // let generation get underway (~1 min) before first check
+  await page.waitForTimeout(5 * 60 * 1000); // let generation get underway (5 min) before the first check
   while (Date.now() - start < RESPONSE_TIMEOUT_MS) {
     // Always check for the rate-limit popup first — it silently stalls
     // generation, so clear it (via Enter, its default button) before reading
@@ -524,7 +525,7 @@ async function waitForCompletion(page: Page): Promise<void> {
     if (await dismissRateLimitModalByEnter(page)) {
       progress('  …cleared a rate-limit popup, continuing to wait.');
     }
-    // Check every ~3.5 min: ChatGPT shows a Stop button while streaming. When the
+    // Check every 1 min: ChatGPT shows a Stop button while streaming. When the
     // Stop button has been gone for two checks in a row (with a real reply present),
     // the blog is finished. Robust to tiny page changes (Sources panel, etc.).
     const stopping = await page
@@ -538,15 +539,18 @@ async function waitForCompletion(page: Page): Promise<void> {
     } else {
       goneChecks = 0;
     }
-    // Second, independent completion signal: the Stop-button check can get stuck
-    // reporting "still writing" (a UI glitch) even though generation actually
-    // finished. If the character count is IDENTICAL for 3 checks in a row, the
-    // text has genuinely stopped changing — treat that as done regardless of
-    // what the Stop button says, instead of waiting out the full 30 min timeout.
-    if (text.length > 500 && text.length === lastLength) {
+    // Stuck-generation detector: if the response length is IDENTICAL across
+    // STALL_CHECKS_TO_GIVE_UP consecutive 1-min checks, ChatGPT has frozen —
+    // it's not writing, whether that's at 0 characters (never started) or a
+    // tiny stub like 55 (started, then died mid-reply). Deliberately no
+    // minimum-length gate here (an earlier version required >500 chars,
+    // which meant a response stuck at a small stub never got caught and just
+    // burned the full 30-min timeout) — any unchanged length this many times
+    // in a row means it's dead, not "still writing."
+    if (text.length === lastLength) {
       unchangedChecks++;
-      if (unchangedChecks >= 3) {
-        progress(`  Character count unchanged for 3 checks in a row — treating as finished.`);
+      if (unchangedChecks >= STALL_CHECKS_TO_GIVE_UP) {
+        progress(`  Stuck: character count unchanged (${text.length}) for ${STALL_CHECKS_TO_GIVE_UP} checks in a row — giving up on this row.`);
         return;
       }
     } else {
