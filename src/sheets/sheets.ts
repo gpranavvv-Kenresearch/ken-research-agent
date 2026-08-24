@@ -923,13 +923,13 @@ export async function claimNextBlogSlot(platformKey: string): Promise<SheetRow |
   return null;
 }
 
-/** Loops claimNextBlogSlot up to `limit` times, stopping early once no slot is available. */
+/** Loops claimNextBlogSlot up to `limit` times, stopping early once no slot is available.
+ * Every platform goes through the shared 2-slot model: claim a row, take one of
+ * its 2 open slots, move to the next row once both are taken. Over many platform
+ * calls this spreads posting across rows (2 platforms/row) instead of every
+ * platform converging on the same row — this is the deliberate design, not a
+ * per-platform independent picker. */
 async function claimNextBlogSlots(platformKey: string, limit: number): Promise<SheetRow[]> {
-  // Column-wise platforms (own Status/URL columns) drain those directly; the rest
-  // keep the shared 2-slot model. One switch here covers every getRows* wrapper.
-  if (BLOG_PLATFORM_COLS[platformKey]) {
-    return pickBlogRowsForPlatform(platformKey, limit);
-  }
   const results: SheetRow[] = [];
   for (let i = 0; i < limit; i++) {
     const claimed = await claimNextBlogSlot(platformKey);
