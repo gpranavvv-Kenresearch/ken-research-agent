@@ -10,7 +10,7 @@
  * ONE of the 2 rounds each (LinkedIn Pulse in round 1, Medium in round 2).
  * Waits for that agent's whole cycle to fully finish (polling
  * postCycleStatus) before starting the next agent — never two agents
- * posting at once.
+ * posting at once — then a 5-minute break before the next agent starts.
  *
  * Once all 5 agents finish round 1, waits 1 hour and runs round 2 with its
  * own counts (fresh rows get picked automatically — already-posted rows are
@@ -29,6 +29,7 @@ import { startPostCycle, postCycleStatus } from '../src/login-portal/postCycle.j
 const AGENTS = ['sanya', 'meenakshi', 'vansh', 'sameeksha', 'hritika', 'vijay'];
 const ROUNDS_PER_DAY = 2;
 const ROUND_GAP_MS = 60 * 60 * 1000; // 1 hour between round 1 and round 2
+const PERSON_GAP_MS = 5 * 60 * 1000; // 5 min between one agent finishing and the next starting
 const POLL_MS = 15000; // how often to check whether an agent's cycle has finished
 
 // 2 posts/day each on X/Facebook/LinkedIn (1 per round × 2 rounds).
@@ -70,10 +71,15 @@ async function runOneAgentPostCycle(agent: string, counts: Record<string, number
 async function runRound(roundNum: number): Promise<void> {
   const counts = COUNTS_BY_ROUND[roundNum];
   log(`--- Round ${roundNum} starting: ${AGENTS.join(' → ')}, counts: ${JSON.stringify(counts)} ---`);
-  for (const agent of AGENTS) {
+  for (let i = 0; i < AGENTS.length; i++) {
+    const agent = AGENTS[i];
     log(`=== Posting cycle starting for ${agent} ===`);
     await runOneAgentPostCycle(agent, counts);
     log(`${agent} posting cycle complete.`);
+    if (i < AGENTS.length - 1) {
+      log(`--- 5 min break before ${AGENTS[i + 1]} ---`);
+      await new Promise((r) => setTimeout(r, PERSON_GAP_MS));
+    }
   }
   log(`--- Round ${roundNum} complete ---`);
 }

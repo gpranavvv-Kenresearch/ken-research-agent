@@ -1,10 +1,18 @@
 /**
  * nightly-blog-rotation.ts — CONTINUOUS blog-generation loop, N blogs per person.
  *
- * Round-robin across the 6 personal-sheet agents (each with their OWN ChatGPT
- * account: .sessions-cookies/chatgpt-profile-{agent}). Each person generates up
- * to BLOGS_PER_PERSON blogs, then a BREAK_MIN break, then the next person. Loops
- * forever, day and night — no schedule window.
+ * Round-robin, in order sanya → hritika → meenakshi → vijay → vansh → sameeksha
+ * (each with their OWN ChatGPT account: .sessions-cookies/chatgpt-profile-{agent}).
+ * Each person generates up to BLOGS_PER_PERSON blogs, then a BREAK_MIN (5 min)
+ * break, then the next person. Loops forever, day and night — no schedule window.
+ *
+ * Deliberately no "starts at midnight" gate: this process is meant to run
+ * continuously 24/7 (see the self-healing watchdog below) — a hard start-time
+ * gate would mean that if it ever got killed and restarted mid-day (a crash,
+ * a manual sweep, a VPS reboot), it would sit completely idle for up to ~24h
+ * waiting for the next midnight instead of resuming right away. In steady
+ * state it's already running through every midnight anyway, so the practical
+ * effect is the same without that failure mode.
  *
  *   for each agent, forever:
  *     - sweep any leftover generation/Chrome FIRST (NO OVERLAP — the previous
@@ -32,9 +40,9 @@ import { spawn, spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-const AGENTS = ['sanya', 'meenakshi', 'vansh', 'sameeksha', 'hritika', 'vijay'];
+const AGENTS = ['sanya', 'hritika', 'meenakshi', 'vijay', 'vansh', 'sameeksha'];
 const BLOGS_PER_PERSON = Number(process.env.BLOG_LIMIT || 5);           // blogs each person generates before the break
-const BREAK_MIN = Number(process.env.BLOG_BREAK_MIN || 30);             // break between people
+const BREAK_MIN = Number(process.env.BLOG_BREAK_MIN || 5);              // break between people
 const PERSON_MAX_MIN = Number(process.env.BLOG_PERSON_MAX_MIN || 150);  // safety cap per person (hang guard)
 const DRY_SLEEP_MIN = 30;                                               // whole pass found no work → wait, recheck
 
