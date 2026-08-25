@@ -87,11 +87,13 @@ function sweepBlogGeneration(): void {
  * generation/Chrome PID on exit so the next person starts clean. */
 function generateForPerson(agent: string, maxMs: number): Promise<void> {
   return new Promise((resolve) => {
+    const blogLog = `/tmp/blog-gen-${agent}.log`;
+    try { fs.appendFileSync(blogLog, `\n=== ${new Date().toISOString()} run start ===\n`); } catch { /* noop */ }
     const child = spawn(process.execPath, [
       '--import=tsx', 'scripts/run-blog-generator.ts',
       '--name', agent, '--limit', String(BLOGS_PER_PERSON), '--image-prompt', '1',
     ], {
-      env: { ...process.env, WORKER_NAME: agent, DISPLAY: process.env.DISPLAY || ':99' },
+      env: { ...process.env, WORKER_NAME: agent, DISPLAY: process.env.DISPLAY || ':99', BLOG_LOG: blogLog },
       stdio: 'ignore',
     });
     let done = false;
