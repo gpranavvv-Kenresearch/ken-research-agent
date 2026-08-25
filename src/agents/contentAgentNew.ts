@@ -62,10 +62,15 @@ const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 //   cohere/north-mini-code:free                — empty (also a code model, wrong tool anyway)
 //   dots-studio/dots-3-note-preview:free       — empty
 //   poolside/laguna-xs-2.1:free                — empty
-// Only these two gave clean, on-instruction, coherent output across
-// repeated live runs — that's the actual bar, not "does the slug exist":
+// nvidia/nemotron-nano-12b-v2-vl:free (previously pinned here) went 404 dead
+// on OpenRouter's free tier sometime after it was verified live — a pinned
+// model list silently goes stale. Switched to OpenRouter's own 'openrouter/free'
+// router, which dynamically routes each call to whatever free endpoint is
+// currently live, weighted 2:1 against poolside/laguna-s-2.1:free (still
+// verified live) as a pinned hedge in case the router itself is down.
 const OPENROUTER_MODELS = [
-  'nvidia/nemotron-nano-12b-v2-vl:free',
+  'openrouter/free',
+  'openrouter/free',
   'poolside/laguna-s-2.1:free',
 ];
 const NVIDIA_MODEL = 'meta/llama-3.1-70b-instruct';
@@ -180,21 +185,41 @@ function isGibberish(text: string): boolean {
   return false;
 }
 
+// Some free-tier models (especially reasoning models reached via the
+// 'openrouter/free' router) leak their internal chain-of-thought instead of
+// the actual answer — e.g. "The user says: 'Say OK in one word'..." Confirmed
+// live against this exact key pool. Distinct from isGibberish (token-repeat
+// garbage): this is coherent English, just the model's scratch reasoning
+// instead of on-task output, so it needs its own detector.
+const REASONING_LEAK_RE = /^(we need to|let'?s (think|analyze|produce|write)|first,? (step|let'?s)?|okay,? (so|the user|let'?s)|(the )?user (asks|wants|is asking|says|wrote|provided|has (asked|said))|analyzing the (request|prompt)|here'?s (a |my )?thinking)/i;
+
+function isReasoningLeak(text: string): boolean {
+  const t = text.trim();
+  if (REASONING_LEAK_RE.test(t)) return true;
+  const markers = (t.match(/\b(so we (should|must|need to|will)|must (output|ensure)|let'?s see|note:|actually,|however,? maybe|possibly|probably|let'?s follow)\b/gi) || []).length;
+  return markers >= 2;
+}
+
 async function callLLMWithRetry(prompt: string, maxTokens: number, retries = 3): Promise<string> {
   let last = '';
   for (let attempt = 1; attempt <= retries; attempt++) {
     const result = await callLLM(prompt, maxTokens);
     last = result;
-    if (!isRefusal(result) && !isGibberish(result)) return result;
-    console.warn(`   ⚠️ LLM returned a ${isGibberish(result) ? 'garbled/repeated-token' : 'refusal'} response on attempt ${attempt}/${retries} — retrying...`);
+    if (!isRefusal(result) && !isGibberish(result) && !isReasoningLeak(result)) return result;
+    const reason = isGibberish(result) ? 'garbled/repeated-token' : isReasoningLeak(result) ? 'leaked reasoning' : 'refusal';
+    console.warn(`   ⚠️ LLM returned a ${reason} response on attempt ${attempt}/${retries} — retrying...`);
     await new Promise(r => setTimeout(r, 2000));
   }
   // Every retry came back bad. Returning a refusal lets the caller's existing
-  // "no valid content" handling deal with it — but gibberish must NEVER reach a
-  // caller as if it were valid content (a refusal-shaped string is at least safe
-  // to post as-is; garbled text is not), so fail loudly instead of returning it.
+  // "no valid content" handling deal with it — but gibberish/leaked-reasoning
+  // must NEVER reach a caller as if it were valid content (a refusal-shaped
+  // string is at least safe to post as-is; those are not), so fail loudly
+  // instead of returning them.
   if (isGibberish(last)) {
     throw new Error('LLM_GIBBERISH: model kept returning garbled/repeated-token output after all retries — refusing to post.');
+  }
+  if (isReasoningLeak(last)) {
+    throw new Error('LLM_REASONING_LEAK: model kept leaking internal reasoning instead of on-task output after all retries — refusing to post.');
   }
   return last;
 }

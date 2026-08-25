@@ -20,6 +20,7 @@ import path from 'path';
 import { acquireBrowserSlot } from '../src/utils/browserSlots.js';
 import { acquireJobSlot, estimateWaitMs } from '../src/utils/jobQueue.js';
 import { runBlogSanityChecks } from '../src/agents/blogSanityAgent.js';
+import { validateBrandAuthority } from '../src/agents/blogBrandValidator.js';
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -381,6 +382,15 @@ async function pass() {
         const sanity = runBlogSanityChecks(html, { title: marketName });
         if (sanity.changes.length > 0) {
           console.log(`   [BLOG SANITY] Applied: ${sanity.changes.join(', ')}`);
+        }
+        // Log-only for now — the generation prompt already enforces most of
+        // this; a false block here would lose real, otherwise-good content.
+        const brandCheck = validateBrandAuthority(sanity.html, { title: res.title || marketName });
+        if (brandCheck.status !== 'PASS') {
+          const issueSummary = brandCheck.issues.map((i) => `${i.rule}: ${i.problem}`).join(' | ');
+          console.log(`   [BRAND CHECK] ${brandCheck.status} (score ${brandCheck.score}/10): ${issueSummary}`);
+        } else {
+          console.log(`   [BRAND CHECK] PASS (score ${brandCheck.score}/10)`);
         }
         writeRow(row._dataRow, { ...res, html: sanity.html }, coverImageUrl);
         done++;
