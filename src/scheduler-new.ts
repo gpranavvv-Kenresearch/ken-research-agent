@@ -53,7 +53,11 @@ import { killPostingChrome } from './utils/procKill.js';
 import { acquireBrowserSlot } from './utils/browserSlots.js';
 
 // Which agent's blog-generation session runs during the posting gaps.
-const BLOG_GEN_AGENT = process.env.WORKER_NAME || 'abhinav';
+// No hardcoded name fallback — a wrong-but-non-empty default here silently
+// impersonates a real person's UTM campaign tag (see .env's WORKER_NAME
+// comment for the incident this caused). Missing WORKER_NAME must fail
+// loudly instead.
+const BLOG_GEN_AGENT = process.env.WORKER_NAME || (() => { throw new Error('WORKER_NAME must be set to run scheduler-new.ts'); })();
 
 const STAGE_GAP_MS = 60 * 60 * 1000; // 1 hour between every stage
 const ROUND_GAP_MS = 30 * 60 * 1000; // 30 min between rounds — runCountedPostCycle only
