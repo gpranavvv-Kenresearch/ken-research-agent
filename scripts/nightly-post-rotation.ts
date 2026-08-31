@@ -4,7 +4,8 @@
  *
  * Triggers at 8:00 AM IST every day. For each agent, runs the existing
  * counted post cycle (postCycle.ts's startPostCycle, same mechanism as the
- * dashboard's "Post Now" button) — 2 posts each on X/FB/LinkedIn per round.
+ * dashboard's "Post Now" button) — 2 posts each on X/FB/LinkedIn/Tumblr/Mastodon
+ * per round.
  * Blog platforms post in fixed pairs sharing one row each (2-slot claim model
  * — see sheets.ts): (Medium|LinkedIn Pulse)+GoogleSites, Linkmate+Calisthenics,
  * Note+Notion, Dev.to+Coda, Velog+Blogger, HackMD+WordPress. Medium/LinkedIn
@@ -27,6 +28,7 @@
  *   npx tsx scripts/nightly-post-rotation.ts --now     # skip the wait, start immediately (testing)
  */
 import fs from 'fs';
+import path from 'path';
 import { startPostCycle, postCycleStatus } from '../src/login-portal/postCycle.js';
 
 const AGENTS = ['sanya', 'meenakshi', 'vansh', 'sameeksha', 'hritika', 'vijay'];
@@ -39,24 +41,48 @@ const POLL_MS = 15000; // how often to check whether an agent's cycle has finish
 //
 // Blog platforms use the shared 2-slot claim model (see sheets.ts
 // claimNextBlogSlot): whichever 2 platforms run back-to-back on a round claim
-// that row's 2 slots together, so KEY ORDER BELOW is the actual pairing, not
-// cosmetic. Fixed pairs per round, as specified:
-//   (Medium|LinkedIn Pulse) + Google Sites, Linkmate + Calisthenics,
-//   Note + Notion, Dev.to + Coda, Velog + Blogger, HackMD + WordPress
-// Round 1 leads with Medium, round 2 leads with LinkedIn Pulse (each still
-// only 1x/day total) — every other pair is identical both rounds.
-const SOCIAL_COUNTS: Record<string, number> = { x: 2, fb: 2, lipost: 2 };
-const SHARED_BLOG_COUNTS: Record<string, number> = {
-  googlepost: 1,
-  linkmate: 1, calisthenics: 1,
-  note: 1, notion: 1,
-  devto: 1, coda: 1,
-  velog: 1, blogger: 1,
-  hackmd: 1, wordpress: 1,
+// that row's 2 slots together, so PAIR order matters. Fixed pairs, as
+// specified: (Medium|LinkedIn Pulse) + Google Sites, Linkmate + Calisthenics,
+// Note + Notion, Dev.to + Coda, Velog + Blogger, HackMD + WordPress.
+//
+// A fixed run order starves every pair after the first when only 1-2 fresh
+// rows exist that day — the leading pair always wins both slots on the only
+// available row, and everything after it sees "no open slot" forever, every
+// single day. So which pair leads is ROTATED and persisted across runs
+// (blog-pair-rotation.json) — advances by 1 every round so each pair gets a
+// turn to go first before the cycle repeats.
+const SOCIAL_COUNTS: Record<string, number> = { x: 2, fb: 2, lipost: 2, tumblr: 2, mastodon: 2 };
+const PAIR_GROUPS: [string, string][] = [
+  ['linkmate', 'calisthenics'],
+  ['note', 'notion'],
+  ['devto', 'coda'],
+  ['velog', 'blogger'],
+  ['hackmd', 'wordpress'],
+];
+const ROTATION_FILE = path.join(process.cwd(), '.cache', 'blog-pair-rotation.json');
+function nextRotationPointer(): number {
+  let pointer = 0;
+  try { pointer = JSON.parse(fs.readFileSync(ROTATION_FILE, 'utf-8')).pointer ?? 0; } catch { /* first run */ }
+  try {
+    fs.mkdirSync(path.dirname(ROTATION_FILE), { recursive: true });
+    fs.writeFileSync(ROTATION_FILE, JSON.stringify({ pointer: (pointer + 1) % PAIR_GROUPS.length }));
+  } catch { /* a lost rotation tick just repeats today's order tomorrow — not fatal */ }
+  return pointer;
+}
+function rotatedBlogCounts(): Record<string, number> {
+  const pointer = nextRotationPointer();
+  const rotatedPairs = [...PAIR_GROUPS.slice(pointer), ...PAIR_GROUPS.slice(0, pointer)];
+  const counts: Record<string, number> = { googlepost: 1 };
+  for (const [a, b] of rotatedPairs) { counts[a] = 1; counts[b] = 1; }
+  return counts;
+}
+function buildRoundCounts(leadKey: string): Record<string, number> {
+  return { ...SOCIAL_COUNTS, [leadKey]: 1, ...rotatedBlogCounts() };
+}
+const COUNTS_BY_ROUND: Record<number, () => Record<string, number>> = {
+  1: () => buildRoundCounts('medium'),
+  2: () => buildRoundCounts('lipulse'),
 };
-const ROUND1_COUNTS: Record<string, number> = { ...SOCIAL_COUNTS, medium: 1, ...SHARED_BLOG_COUNTS };
-const ROUND2_COUNTS: Record<string, number> = { ...SOCIAL_COUNTS, lipulse: 1, ...SHARED_BLOG_COUNTS };
-const COUNTS_BY_ROUND: Record<number, Record<string, number>> = { 1: ROUND1_COUNTS, 2: ROUND2_COUNTS };
 
 const SKIP_WAIT = process.argv.includes('--now');
 
@@ -82,7 +108,7 @@ async function runOneAgentPostCycle(agent: string, counts: Record<string, number
 }
 
 async function runRound(roundNum: number): Promise<void> {
-  const counts = COUNTS_BY_ROUND[roundNum];
+  const counts = COUNTS_BY_ROUND[roundNum]();
   log(`--- Round ${roundNum} starting: ${AGENTS.join(' → ')}, counts: ${JSON.stringify(counts)} ---`);
   for (let i = 0; i < AGENTS.length; i++) {
     const agent = AGENTS[i];
@@ -108,7 +134,7 @@ async function waitUntilNext8AmIst(): Promise<void> {
 }
 
 async function main() {
-  log(`Nightly post rotation starting. Order: ${AGENTS.join(' → ')}, round1: ${JSON.stringify(ROUND1_COUNTS)}, round2: ${JSON.stringify(ROUND2_COUNTS)}.`);
+  log(`Nightly post rotation starting. Order: ${AGENTS.join(' → ')}. Blog pair lead rotates each round (see ${ROTATION_FILE}).`);
   for (;;) {
     if (!SKIP_WAIT) await waitUntilNext8AmIst();
     for (let round = 1; round <= ROUNDS_PER_DAY; round++) {
