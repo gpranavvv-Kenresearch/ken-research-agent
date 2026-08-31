@@ -21,6 +21,11 @@ import { acquireBrowserSlot } from '../src/utils/browserSlots.js';
 import { acquireJobSlot, estimateWaitMs } from '../src/utils/jobQueue.js';
 import { runBlogSanityChecks } from '../src/agents/blogSanityAgent.js';
 import { validateBrandAuthority } from '../src/agents/blogBrandValidator.js';
+import { applyPreferredSourceCTA, validatePreferredSourceCTA, PreferredSourceMode } from '../src/agents/blogPreferredSourceAgent.js';
+
+// 'tracked' uses the approved encurtador.dev/acesse.one short URL. Single
+// constant so the mode can be flipped in one place if ever needed.
+const PREFERRED_SOURCE_MODE: PreferredSourceMode = 'tracked';
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -383,16 +388,29 @@ async function pass() {
         if (sanity.changes.length > 0) {
           console.log(`   [BLOG SANITY] Applied: ${sanity.changes.join(', ')}`);
         }
+
+        // Writes into the ONE shared Blog Content cell every off-page
+        // platform poster reads from, so this one insertion point covers
+        // all of them.
+        const cta = applyPreferredSourceCTA(sanity.html, { mode: PREFERRED_SOURCE_MODE, title: res.title || marketName });
+        console.log(`   [PREFERRED SOURCE CTA] ${cta.applied ? `applied (${cta.placement})` : `not applied (${cta.placement})`}`);
+        if (cta.applied) {
+          const ctaCheck = validatePreferredSourceCTA(cta.html, PREFERRED_SOURCE_MODE);
+          if (ctaCheck.status !== 'PASS') {
+            console.log(`   [PREFERRED SOURCE CTA] ISSUE: ${ctaCheck.issues.join(' | ')}`);
+          }
+        }
+
         // Log-only for now — the generation prompt already enforces most of
         // this; a false block here would lose real, otherwise-good content.
-        const brandCheck = validateBrandAuthority(sanity.html, { title: res.title || marketName });
+        const brandCheck = validateBrandAuthority(cta.html, { title: res.title || marketName });
         if (brandCheck.status !== 'PASS') {
           const issueSummary = brandCheck.issues.map((i) => `${i.rule}: ${i.problem}`).join(' | ');
           console.log(`   [BRAND CHECK] ${brandCheck.status} (score ${brandCheck.score}/10): ${issueSummary}`);
         } else {
           console.log(`   [BRAND CHECK] PASS (score ${brandCheck.score}/10)`);
         }
-        writeRow(row._dataRow, { ...res, html: sanity.html }, coverImageUrl);
+        writeRow(row._dataRow, { ...res, html: cta.html }, coverImageUrl);
         done++;
       }
     }
