@@ -19,7 +19,7 @@
  *       --url "<report url>" --title "<report title>" [--session-dir <dir>]
  */
 
-import { chromium, Page } from 'playwright';
+import { chromium, BrowserContext, Page } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -936,6 +936,19 @@ function buildPrompt(sampleHtml: string): string {
   );
 }
 
+// Minimizes the window to the taskbar (not headless — the account still needs
+// a real, logged-in-looking browser) via CDP; '--start-minimized' alone is
+// unreliable once the page has already navigated. Best-effort — a failure
+// here should never abort generation.
+async function minimizeToTaskbar(context: BrowserContext, page: Page): Promise<void> {
+  try {
+    const cdp = await context.newCDPSession(page);
+    const { windowId } = await (cdp as any).send('Browser.getWindowForTarget');
+    await (cdp as any).send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'minimized' } });
+    await cdp.detach().catch(() => {});
+  } catch { /* ignore if CDP unavailable */ }
+}
+
 async function isLoggedIn(page: Page): Promise<boolean> {
   // ChatGPT can be slow to render on the VPS — poll up to ~40s for the composer
   // (or any logged-in affordance) before deciding it's logged out.
@@ -1114,6 +1127,8 @@ async function main() {
   // next launch. We only use pages()[0]; close every restored extra tab so
   // about:blank tabs don't accumulate run after run.
   for (const extra of openPages.slice(1)) await extra.close().catch(() => {});
+  // Runs before login-check on purpose — stays minimized even during manual login.
+  await minimizeToTaskbar(context, page);
   try {
     await page.goto(CHATGPT_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForTimeout(4000);
@@ -1123,7 +1138,7 @@ async function main() {
       // ChatGPT login (email, password, verification) almost never finishes
       // that fast. Give the human an actual chance: wait here for Enter instead
       // of closing the browser out from under a login in progress.
-      progress('Not logged in — log in to ChatGPT in the browser window, then press Enter here to continue.');
+      progress('Not logged in — restore the minimized Chrome window from the taskbar and log in manually, then press Enter here to continue.');
       await new Promise<void>((resolve) => {
         process.stdin.resume();
         process.stdin.once('data', () => { process.stdin.pause(); resolve(); });

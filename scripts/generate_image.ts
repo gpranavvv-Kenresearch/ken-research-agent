@@ -32,7 +32,7 @@
  *   {"status":"error","message":"..."}
  */
 
-import { chromium, Page } from 'playwright';
+import { chromium, BrowserContext, Page } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 import https from 'https';
@@ -637,6 +637,19 @@ async function uploadToImageKit(imageBuffer: Buffer, publicId: string): Promise<
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
+// Minimizes the window to the taskbar (not headless — the account still needs
+// a real, logged-in-looking browser) via CDP; '--start-minimized' alone is
+// unreliable once the page has already navigated. Best-effort — a failure
+// here should never abort generation.
+async function minimizeToTaskbar(context: BrowserContext, page: Page): Promise<void> {
+  try {
+    const cdp = await context.newCDPSession(page);
+    const { windowId } = await (cdp as any).send('Browser.getWindowForTarget');
+    await (cdp as any).send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'minimized' } });
+    await cdp.detach().catch(() => {});
+  } catch { /* ignore if CDP unavailable */ }
+}
+
 async function main() {
   const prompt = buildImagePrompt(marketName, reportUrl, imagePromptChoice);
   console.error(`[generate_image] Starting for: ${marketName}`);
@@ -660,6 +673,8 @@ async function main() {
   // Close tabs the persistent profile restored after the rotation's `pkill -9`
   // (we only use pages()[0]) so about:blank tabs don't accumulate across runs.
   for (const extra of openPages.slice(1)) await extra.close().catch(() => {});
+  // Runs before login-check on purpose — stays minimized even during manual login.
+  await minimizeToTaskbar(context, page);
 
   try {
     await page.goto('https://chatgpt.com', { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -677,7 +692,7 @@ async function main() {
     if (await isLoggedIn()) {
       console.error('[generate_image] Already logged in ✓');
     } else {
-      console.error('[generate_image] Not logged in — waiting up to 5 min for manual login...');
+      console.error('[generate_image] Not logged in — restore the minimized Chrome window from the taskbar and log in manually. Waiting up to 5 min...');
       const deadline = Date.now() + 5 * 60 * 1000;
       let ok = false;
       while (Date.now() < deadline) {
