@@ -654,9 +654,17 @@ async function main() {
   const prompt = buildImagePrompt(marketName, reportUrl, imagePromptChoice);
   console.error(`[generate_image] Starting for: ${marketName}`);
 
+  // Deliberately its OWN env var, separate from the shared HEADLESS used by
+  // every posting/login script — those must always stay headed regardless
+  // of this. Defaults to headed (false) for safety: a human running this
+  // script directly (e.g. to manually log in) gets a visible browser unless
+  // the automated caller (run-blog-generator.ts) explicitly opts into
+  // headless for its unattended scheduled runs.
+  const headless = process.env.GEN_HEADLESS === 'true';
+
   const context = await chromium.launchPersistentContext(CHATGPT_PROFILE, {
     channel: 'chrome',
-    headless: false,
+    headless,
     env: { ...process.env, DISPLAY: process.env.DISPLAY || ':99' },
     viewport: { width: 1280, height: 900 },
     acceptDownloads: true,

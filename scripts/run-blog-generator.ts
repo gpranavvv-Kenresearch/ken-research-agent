@@ -27,6 +27,14 @@ import { applyPreferredSourceCTA, validatePreferredSourceCTA, PreferredSourceMod
 // constant so the mode can be flipped in one place if ever needed.
 const PREFERRED_SOURCE_MODE: PreferredSourceMode = 'tracked';
 
+// This script is only ever used for actual generation (scheduled or a
+// dashboard "generate now" click) — never for a manual ChatGPT login, which
+// is its own separate standalone invocation of generate_blog_chatgpt.ts /
+// generate_image.ts directly. So it's always safe to run the ChatGPT windows
+// headless here; set on process.env so it flows through the existing
+// spawnTsx(args, process.env) calls below without touching each call site.
+process.env.GEN_HEADLESS = 'true';
+
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
   return i !== -1 ? process.argv[i + 1] : undefined;

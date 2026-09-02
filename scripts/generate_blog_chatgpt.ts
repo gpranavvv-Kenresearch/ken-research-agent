@@ -1111,8 +1111,16 @@ async function main() {
   const dir = sessionDir();
   fs.mkdirSync(dir, { recursive: true });
 
+  // Deliberately its OWN env var, separate from the shared HEADLESS used by
+  // every posting/login script — those must always stay headed regardless
+  // of this. Defaults to headed (false) for safety: a human running this
+  // script directly (e.g. to manually log in) gets a visible browser unless
+  // the automated caller (run-blog-generator.ts) explicitly opts into
+  // headless for its unattended scheduled runs.
+  const headless = process.env.GEN_HEADLESS === 'true';
+
   const context = await chromium.launchPersistentContext(dir, {
-    headless: false,
+    headless,
     channel: 'chrome',
     executablePath: CHROME_PATH && fs.existsSync(CHROME_PATH) ? CHROME_PATH : undefined,
     viewport: null,
