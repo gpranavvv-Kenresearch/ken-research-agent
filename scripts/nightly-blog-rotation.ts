@@ -1,13 +1,15 @@
 /**
- * nightly-blog-rotation.ts — CONTINUOUS blog-generation loop, N blogs per person.
+ * nightly-blog-rotation.ts — CONTINUOUS blog-generation loop, ONE blog per person per turn.
  *
- * Round-robin, in order sanya → hritika → meenakshi → vijay → vansh → sameeksha
+ * Round-robin, in order vijay → hritika → sanya → meenakshi → vansh → sameeksha
  * (each with their OWN ChatGPT account: .sessions-cookies/chatgpt-profile-{agent}).
- * Each person generates up to BLOGS_PER_PERSON blogs, then a BREAK_MIN (10 min)
- * break before the next person — except after the LAST person in a pass
+ * Each person generates BLOGS_PER_PERSON (default 1) blog — generated and
+ * written into their own sheet immediately — then a BREAK_MIN (10 min) break
+ * before the next person — except after the LAST person in a pass
  * (sameeksha), which gets the longer CYCLE_BREAK_MIN (1 hour) instead, before
- * the whole rotation loops back around to sanya. Loops forever, day and
- * night — no schedule window.
+ * the whole rotation loops back around to vijay. One blog each, one by one,
+ * round and round — no person ever hogs the ChatGPT box for a 5-blog batch.
+ * Loops forever, day and night — no schedule window.
  *
  * Deliberately no "starts at midnight" gate: this process is meant to run
  * continuously 24/7 (see the self-healing watchdog below) — a hard start-time
@@ -31,7 +33,7 @@
  * cron: every 15 min a `flock -n` starts it only if not already running.
  *
  * Config (env):
- *   BLOG_LIMIT          blogs per person before the break (default 5)
+ *   BLOG_LIMIT          blogs per person per turn (default 1)
  *   BLOG_BREAK_MIN      break between people (default 30)
  *   BLOG_PERSON_MAX_MIN safety cap: kill a person's run if it hangs beyond this (default 150)
  *
@@ -43,8 +45,8 @@ import { spawn, spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-const AGENTS = ['sanya', 'hritika', 'meenakshi', 'vijay', 'vansh', 'sameeksha'];
-const BLOGS_PER_PERSON = Number(process.env.BLOG_LIMIT || 5);           // blogs each person generates before the break
+const AGENTS = ['vijay', 'hritika', 'sanya', 'meenakshi', 'vansh', 'sameeksha'];
+const BLOGS_PER_PERSON = Number(process.env.BLOG_LIMIT || 1);           // blogs each person generates per turn (1 = strict one-by-one rotation)
 const BREAK_MIN = Number(process.env.BLOG_BREAK_MIN || 10);             // break between one person finishing and the next starting
 const CYCLE_BREAK_MIN = Number(process.env.BLOG_CYCLE_BREAK_MIN || 60); // longer break after the LAST person in a full pass, before looping back to the first
 const PERSON_MAX_MIN = Number(process.env.BLOG_PERSON_MAX_MIN || 150);  // safety cap per person (hang guard)
@@ -82,8 +84,8 @@ function sweepBlogGeneration(): void {
   }
 }
 
-/** Generate up to BLOGS_PER_PERSON blogs for one agent; exits when done (5 blogs
- * or out of URLs) or when the safety cap trips. Sweeps every leftover
+/** Generate up to BLOGS_PER_PERSON blogs for one agent; exits when done (the
+ * blog(s) written, or out of URLs) or when the safety cap trips. Sweeps every leftover
  * generation/Chrome PID on exit so the next person starts clean. */
 function generateForPerson(agent: string, maxMs: number): Promise<void> {
   return new Promise((resolve) => {

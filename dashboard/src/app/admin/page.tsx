@@ -42,7 +42,9 @@ interface FeedbackRow {
   [k: string]: unknown;
 }
 interface RunState { lastCompleted: string | null; lastStarted: string | null; state: 'ok' | 'running' | 'missed'; }
-interface ScheduledHealth { checkedAt: string; istDay: string; posting: RunState; blog: RunState; }
+// `social` is optional so an older rotation-health.json (written before the
+// social/blog-platform posting split) still renders instead of crashing.
+interface ScheduledHealth { checkedAt: string; istDay: string; social?: RunState; posting: RunState; blog: RunState; }
 
 export default function AdminPage() {
   const [token, setToken] = useState<string | null>(null);
@@ -138,11 +140,12 @@ export default function AdminPage() {
         <button onClick={clearToken} className="text-xs text-slate-400 hover:text-white">Log out</button>
       </div>
 
-      {/* Scheduled-run health (cron: posting 08:00 IST, blog 00:00 IST) */}
+      {/* Scheduled-run health (social posting 08:00 IST, blog-platform posting 08:30 IST, blog generation continuous) */}
       {health && (
-        <div className={`rounded-xl p-3 border flex flex-wrap items-center gap-3 ${(health.posting.state === 'missed' || health.blog.state === 'missed') ? 'border-red-800/60 bg-red-950/30' : 'border-border bg-card'}`}>
+        <div className={`rounded-xl p-3 border flex flex-wrap items-center gap-3 ${(health.social?.state === 'missed' || health.posting.state === 'missed' || health.blog.state === 'missed') ? 'border-red-800/60 bg-red-950/30' : 'border-border bg-card'}`}>
           <span className="text-sm font-medium text-white">Scheduled runs</span>
-          {healthPill('Posting', health.posting)}
+          {health.social && healthPill('Social posting', health.social)}
+          {healthPill('Blog posting', health.posting)}
           {healthPill('Blog gen', health.blog)}
           <span className="text-xs text-slate-500 ml-auto">as of {new Date(health.checkedAt).toLocaleString()}</span>
         </div>

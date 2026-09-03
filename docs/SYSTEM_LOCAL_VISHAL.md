@@ -12,10 +12,10 @@ One worker (`WORKER_NAME=vishal`) reads **one sheet tab** whose **Name column li
 | | **Local (Vishal)** | VPS |
 |---|---|---|
 | Machine | this Windows laptop | Hostinger `srv1828409` |
-| Started by | `npm run schedule` (a PowerShell window) | PM2 apps `post-rotation` + `blog-rotation` |
-| Orchestrator | `scheduler-new.ts` — **5-stage narrowing** | `nightly-post-rotation.ts` — **per-agent rotation** |
-| Schedule | **11:00 & 23:00 IST** | Post **08:00 IST** (2 rounds), Blog **00:00 IST** |
-| Worker(s) | **1** (`vishal`) | **6** (sanya→meenakshi→vansh→sameeksha→hritika→vijay) |
+| Started by | `npm run schedule` (a PowerShell window) | PM2 apps `social-rotation` + `blogpost-rotation`, cron watchdog for blog generation |
+| Orchestrator | `scheduler-new.ts` — **5-stage narrowing** | `nightly-social-rotation.ts` / `nightly-blogpost-rotation.ts` / `nightly-blog-rotation.ts` — **per-agent rotation** |
+| Schedule | **11:00 & 23:00 IST** | Social **08:00 IST** (per-account passes), Blog-platform **08:30 IST** (2 rounds), Blog gen continuous |
+| Worker(s) | **1** (`vishal`) | **6** (vijay→hritika→sanya→meenakshi→vansh→sameeksha) |
 | `PREFER_ROW_NAME` | **`true`** → the row's Name wins | **unset** → `WORKER_NAME` wins |
 | Account picked | **bare name from the row** (`avdhesh`, `vansh`, …) | **numbered worker slot** (`sanya 1`, `sanya 2`, …) |
 | Session path | **`.sessions/x/{name}`** (flat, per person) | `.sessions-{agent}/{platform}-{N}` |

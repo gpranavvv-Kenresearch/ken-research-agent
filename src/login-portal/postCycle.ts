@@ -70,14 +70,19 @@ export function postCycleStatus(agent: string): {
   return { running: true, agent: state.agent, startedAt: state.startedAt, log, detail };
 }
 
+const ALREADY_RUNNING = 'Post cycle already running for';
+
 /** Start a one-off post cycle for an agent. Throws if this SAME agent already has one running.
  * `counts`, if given, switches this run from the fixed 5-stage sequence to the
  * counted, round-based cycle (see scheduler-new.ts's runCountedPostCycle) —
- * a per-platform post count for this cycle only. Omit for the old behavior. */
-export function startPostCycle(agent: string, counts?: Record<string, number>): void {
+ * a per-platform post count for this cycle only. Omit for the old behavior.
+ * `extraEnv` is merged into the child's environment (e.g. POST_ACCOUNT_INDEX
+ * from nightly-social-rotation.ts); it cannot override the identity/plumbing
+ * keys set below (WORKER_NAME, POST_CYCLE_*). */
+export function startPostCycle(agent: string, counts?: Record<string, number>, extraEnv?: Record<string, string>): void {
   const existing = readState(agent);
   if (existing) {
-    throw new Error(`Post cycle already running for "${existing.agent}" — stop it first, or wait for it to finish.`);
+    throw new Error(`${ALREADY_RUNNING} "${existing.agent}" — stop it first, or wait for it to finish.`);
   }
 
   const logFile = LOG_FILE_FOR(agent);
@@ -91,6 +96,7 @@ export function startPostCycle(agent: string, counts?: Record<string, number>): 
     cwd: process.cwd(),
     env: {
       ...process.env,
+      ...(extraEnv ?? {}),
       DISPLAY: process.env.DISPLAY || ':99',
       WORKER_NAME: agent,
       POST_CYCLE_LOG: logFile,
@@ -109,6 +115,45 @@ export function startPostCycle(agent: string, counts?: Record<string, number>): 
     const current = readState(agent);
     if (current?.pid === child.pid) writeState(agent, null);
   });
+}
+
+/** Block until this agent has no post cycle running (returns immediately if none). */
+export async function waitForPostCycle(agent: string, pollMs = 15_000): Promise<void> {
+  while (postCycleStatus(agent).running) {
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+}
+
+/**
+ * Start a post cycle for `agent` and block until it has fully finished.
+ *
+ * If the agent already has a cycle running — the other rotation process
+ * (social vs blog-platform posting run independently), or a manual "Post Now"
+ * click — wait for THAT one to finish and then start ours. Never skip: the old
+ * nightly-post-rotation.ts caught the "already running" error, waited, and
+ * moved on WITHOUT running its own cycle, which silently dropped that agent's
+ * posts for the round whenever two things collided. Any other start failure is
+ * rethrown as-is.
+ */
+export async function runPostCycleToCompletion(
+  agent: string,
+  counts: Record<string, number>,
+  extraEnv?: Record<string, string>,
+  opts?: { pollMs?: number; onWait?: (reason: string) => void },
+): Promise<void> {
+  const pollMs = opts?.pollMs ?? 15_000;
+  for (;;) {
+    try {
+      startPostCycle(agent, counts, extraEnv);
+      break;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!msg.includes(ALREADY_RUNNING)) throw e;
+      opts?.onWait?.(msg);
+      await waitForPostCycle(agent, pollMs);
+    }
+  }
+  await waitForPostCycle(agent, pollMs);
 }
 
 /** Stop this agent's post cycle. No-op (not an error) if it isn't running. */
