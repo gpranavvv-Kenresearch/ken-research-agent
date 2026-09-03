@@ -14,7 +14,7 @@ A daily rotation that runs **6 separate agents one after another** (each as its 
 | Machine | Hostinger `srv1828409` (`root@200.97.170.123`) | the Windows laptop |
 | Started by | PM2 apps `social-rotation` + `blogpost-rotation` (daily, wait for their IST start) + cron/`flock` watchdog for `nightly-blog-rotation.ts` (continuous) | `npm run schedule` (a window) |
 | Orchestrator | `nightly-social-rotation.ts` / `nightly-blogpost-rotation.ts` / `nightly-blog-rotation.ts` — **per-agent rotation** | `scheduler-new.ts` — 5-stage narrowing |
-| Schedule | Social **08:00 IST** (per-account passes); Blog-platform posting **08:30 IST** (2 rounds, 1 h gap); Blog generation **continuous**, 1 blog per person per turn | 11:00 & 23:00 IST |
+| Schedule | Social **08:00 IST** (per-account passes, 4 batches); Blog-platform posting **08:30 IST** (per-account passes, 2 batches); Blog generation **continuous**, 1 blog per person per turn | 11:00 & 23:00 IST |
 | Worker(s) | **6**: vijay → hritika → sanya → meenakshi → vansh → sameeksha (each rotation walks them in this order; the two posting rotations run as independent processes but their cycles serialize through the box-wide post-cycle job slot) | 1 (`vishal`) |
 | `PREFER_ROW_NAME` | **unset** → `WORKER_NAME` wins | `true` → row's Name wins |
 | Account picked | **numbered worker slot** (`sanya 1`, `sanya 2`): social rotation pins it per pass via `POST_ACCOUNT_INDEX`; blog-platform posting and "Post Now" round-robin | bare name from the row |
@@ -29,14 +29,14 @@ The PM2 app **`scheduler`** (`scheduler-new.ts`, the 5-stage cycle) is **stopped
 | Process | Runs as | What |
 |---|---|---|
 | `scripts/nightly-social-rotation.ts` | PM2 `social-rotation` (`bash -c "npx tsx scripts/nightly-social-rotation.ts"`) | X / FB / LinkedIn post / Mastodon / Tumblr, daily from **08:00 IST**, per-account passes |
-| `scripts/nightly-blogpost-rotation.ts` | PM2 `blogpost-rotation` | Medium / Pulse / WordPress / Notion / … , daily from **08:30 IST**, 2 rounds |
+| `scripts/nightly-blogpost-rotation.ts` | PM2 `blogpost-rotation` | Medium / Pulse / WordPress / Notion / … , daily from **08:30 IST**, per-account passes × 2 batches |
 | `scripts/nightly-blog-rotation.ts` | cron `*/15 * * * *` + `flock -n /tmp/blog-rotation.lock` watchdog (starts it only if not already running) | blog **generation**, continuous, 1 blog per person per turn |
 
 - The two posting processes never share state. Every child post cycle takes the **box-wide `post-cycle` job slot** (`run-post-cycle-once.ts` → `jobQueue.ts`), so cycles from the two processes interleave, never overlap. If both want the **same agent** at once, `runPostCycleToCompletion` (`postCycle.ts`) waits for the running one and then runs its own — never skips.
 - Headed browsers run on the **Xvfb `:99`** virtual display (PM2: `xvfb`/`fluxbox`/`x11vnc`), so Cloudflare-protected platforms work without a real screen. `login-api` is also PM2.
 - `scripts/rotation-health-check.ts` (cron, every 2 h) reads each process's log (`/tmp/nightly-social-rotation.log`, `/tmp/nightly-blogpost-rotation.log`, `/tmp/nightly-blog-rotation.log`) → `.sessions/rotation-health.json` → admin dashboard "Scheduled runs" pills.
 - **Manual single-agent run:** `DISPLAY=:99 WORKER_NAME=<agent> POST_CYCLE_COUNTS='{"x":1}' POST_ACCOUNT_INDEX=2 node --import=tsx scripts/run-post-cycle-once.ts` (post 1 on X from that agent's account #2) or `... scripts/run-blog-generator.ts --name <agent> --limit 1 --image-prompt 1` (one blog).
-- **Dry run of today's social plan (posts nothing):** `npx tsx scripts/nightly-social-rotation.ts --plan`.
+- **Dry run of today's plan (posts nothing):** `npx tsx scripts/nightly-social-rotation.ts --plan` / `npx tsx scripts/nightly-blogpost-rotation.ts --plan`. The pass/batch/step engine both share is `src/rotation/accountPasses.ts`.
 
 ## Social posting flow, step by step
 1. `nightly-social-rotation.ts` holds `AGENTS = [vijay, hritika, sanya, meenakshi, vansh, sameeksha]` and the quota **per account per day**: `x 4 · fb 4 · lipost 3 · mastodon 2 · tumblr 2` (same for everyone; `SOCIAL_DAILY_TARGET` overrides).
@@ -48,7 +48,7 @@ The PM2 app **`scheduler`** (`scheduler-new.ts`, the 5-stage cycle) is **stopped
 5. A row counts as "Posted" on a platform once, whichever account posted it — 2 X accounts need 8 fresh X-eligible rows a day. A dry sheet logs "No rows available" and the step just completes.
 
 ## Blog-platform posting flow
-`nightly-blogpost-rotation.ts`: same agents, **08:30 IST**, **2 rounds/day** (1 h apart), 1 post per blog platform per round; **Medium round 1 only, LinkedIn Pulse round 2 only**; blog platforms post in fixed pairs sharing a row (2-slot claim model, pair lead rotated via `.cache/blog-pair-rotation.json`). Account selection here (and for the dashboard's "Post Now") is the normal round-robin.
+`nightly-blogpost-rotation.ts`: same agents, **08:30 IST**, the same per-account-pass engine as social. Quota **per account per day: 2 on every blog platform, 1 on Medium and LinkedIn Pulse**. Each pass = **batch 1** (Medium lead: `medium, googlepost, <5 rotated pairs>`) then **batch 2** (Pulse lead: `lipulse, googlepost, <5 rotated pairs>`), each agent in order posting 1 per platform on which they declared an account #N. Medium and Pulse must stay in different batches: blog platforms claim a row's 2 slots in adjacent pairs (2-slot claim model, pair lead rotated via `.cache/blog-pair-rotation.json`), and both are paired with Google Sites. The account is pinned per pass with `POST_ACCOUNT_INDEX`; the dashboard's "Post Now" keeps using round-robin.
 
 ## Blog generation flow
 `nightly-blog-rotation.ts`: same agents in the same order, **continuous** — each person's turn generates **1 blog** (`run-blog-generator.ts --limit 1`, written to their own sheet immediately, using their own ChatGPT session), 10 min break, next person; 1 h break after a full lap. Sanity checks / preferred-source CTA / brand check run per blog before the sheet write.
@@ -81,7 +81,8 @@ Redis (idle), nginx (fronts login-api on :8080→:8090), Tailscale Funnel (`agen
 | File | Role |
 |---|---|
 | `scripts/nightly-social-rotation.ts` | the 6-agent SOCIAL posting rotation, per-account passes (08:00 IST) |
-| `scripts/nightly-blogpost-rotation.ts` | the 6-agent BLOG-PLATFORM posting rotation, 2 rounds (08:30 IST) |
+| `scripts/nightly-blogpost-rotation.ts` | the 6-agent BLOG-PLATFORM posting rotation, per-account passes × 2 batches (08:30 IST) |
+| `src/rotation/accountPasses.ts` | the shared pass → batch → agent → step engine (plan, `--plan` dump, run) |
 | `scripts/nightly-blog-rotation.ts` | the 6-agent blog GENERATION rotation (continuous, 1 blog/person/turn) |
 | `scripts/rotation-health-check.ts` | did each rotation run today? → `.sessions/rotation-health.json` |
 | `src/login-portal/postCycle.ts` | `startPostCycle` → spawns a run with `WORKER_NAME={agent}` |

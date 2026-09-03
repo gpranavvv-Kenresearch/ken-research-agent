@@ -19,23 +19,17 @@
  *   Account pass 3, 4, …  as far as the highest declared count goes
  *   → "Social day complete", then wait for tomorrow's SOCIAL_START.
  *
- * Batches are derived from DAILY_TARGET (batch k = every platform whose target
- * is >= k) and passes from .accounts/account-counts.json (the "Accounts" number
- * each member sets per platform on their dashboard page — see
- * accountRotation.ts), re-read at the start of every day — so declaring a new
- * account or changing a quota needs no code change.
- *
- * One "step" = one agent × one batch × one account: a counted post cycle with
- * count 1 per platform (postCycle.ts startPostCycle → run-post-cycle-once.ts →
- * runCountedPostCycle = exactly one round, no gap). The account is pinned with
- * POST_ACCOUNT_INDEX (accountRotation.ts explicit mode) — no round-robin — so
- * "sanya 1" gets all 4 of its X posts before "sanya 2" starts.
+ * Batch k = every platform whose target is >= k, so the batches derive from
+ * DAILY_TARGET; passes come from .accounts/account-counts.json (the "Accounts"
+ * number each member sets per platform on their dashboard page), re-read at
+ * the start of every day — declaring a new account or changing a quota needs
+ * no code change. The pass/batch/step engine itself is shared with the
+ * blog-platform rotation: src/rotation/accountPasses.ts.
  *
  * Blog-platform posting (Medium, WordPress, Notion, …) is a separate process —
  * scripts/nightly-blogpost-rotation.ts — with its own schedule. Their child
  * cycles serialize through the box-wide post-cycle job slot; a same-agent
- * collision is handled by runPostCycleToCompletion (wait for the other one,
- * then run ours — never skip).
+ * collision makes the later step wait, then run (never skip).
  *
  * Content supply: a row is "Posted" on X once, whichever account posted it —
  * so an agent with 2 X accounts needs 8 fresh X-eligible rows a day to hit the
@@ -57,8 +51,7 @@
  *   npx tsx scripts/nightly-social-rotation.ts --plan   # print today's full step list + per-agent totals; posts nothing
  */
 import fs from 'fs';
-import { runPostCycleToCompletion } from '../src/login-portal/postCycle.js';
-import { getAccountCount } from '../src/utils/accountRotation.js';
+import { buildDayPlan, formatDayPlan, msUntilNextIst, parseHHMM, runDay, type AccountPassConfig, type BatchSpec } from '../src/rotation/accountPasses.js';
 
 const DEFAULT_AGENTS = ['vijay', 'hritika', 'sanya', 'meenakshi', 'vansh', 'sameeksha'];
 const AGENTS: string[] = (() => {
@@ -94,6 +87,14 @@ const DAILY_TARGET: Record<string, number> = (() => {
 // Only LinkedIn differs: one login covers both LinkedIn posts (lipost) and Pulse.
 const DECL_KEY: Record<string, string> = { x: 'x', fb: 'fb', lipost: 'li', mastodon: 'mastodon', tumblr: 'tumblr' };
 
+const PLATFORMS = Object.keys(DAILY_TARGET);
+const MAX_BATCHES = Math.max(0, ...Object.values(DAILY_TARGET));
+/** Batch k = every platform still owed a post, i.e. whose daily target is >= k. */
+const BATCHES: BatchSpec[] = Array.from({ length: MAX_BATCHES }, (_, i) => ({
+  label: `batch ${i + 1}`,
+  platforms: PLATFORMS.filter((p) => DAILY_TARGET[p] >= i + 1).map((key) => ({ key, declKey: DECL_KEY[key] })),
+}));
+
 const PERSON_GAP_MS = Number(process.env.SOCIAL_PERSON_GAP_MIN || 2) * 60 * 1000;
 const BATCH_GAP_MS = Number(process.env.SOCIAL_BATCH_GAP_MIN || 10) * 60 * 1000;
 const PASS_GAP_MS = Number(process.env.SOCIAL_PASS_GAP_MIN || 15) * 60 * 1000;
@@ -110,144 +111,26 @@ function log(msg: string): void {
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function parseHHMM(s: string, fallback: [number, number]): [number, number] {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(s.trim());
-  if (!m) return fallback;
-  const h = Number(m[1]);
-  const mi = Number(m[2]);
-  return h >= 0 && h < 24 && mi >= 0 && mi < 60 ? [h, mi] : fallback;
-}
 const [START_H, START_M] = parseHHMM(process.env.SOCIAL_START || '', [8, 0]);
 const START_LABEL = `${String(START_H).padStart(2, '0')}:${String(START_M).padStart(2, '0')} IST`;
 
-/** Milliseconds until the next occurrence of hh:mm IST (tomorrow if it's already past today). */
-function msUntilNextIst(h: number, m: number): number {
-  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-  const nowIst = new Date(Date.now() + IST_OFFSET_MS);
-  const next = new Date(nowIst);
-  next.setUTCHours(h, m, 0, 0);
-  if (next.getTime() <= nowIst.getTime()) next.setUTCDate(next.getUTCDate() + 1);
-  return next.getTime() - nowIst.getTime();
-}
-
-// ── Day plan ────────────────────────────────────────────────────────────────
-const PLATFORMS = Object.keys(DAILY_TARGET);
-const MAX_BATCHES = Math.max(0, ...Object.values(DAILY_TARGET));
-
-/** Platforms still owed a post in batch k (1-based): those whose daily target is >= k. */
-function batchPlatforms(k: number): string[] {
-  return PLATFORMS.filter((p) => DAILY_TARGET[p] >= k);
-}
-
-/** Highest declared account count across every agent × social platform = number of passes today. */
-function accountPassesToday(): number {
-  let max = 1;
-  for (const agent of AGENTS) {
-    for (const p of PLATFORMS) max = Math.max(max, getAccountCount(agent, DECL_KEY[p]));
-  }
-  return max;
-}
-
-/** Counts for one step: 1 on each batch platform where this agent has declared an account #idx. */
-function stepCounts(agent: string, batch: number, idx: number): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const p of batchPlatforms(batch)) {
-    if (getAccountCount(agent, DECL_KEY[p]) >= idx) counts[p] = 1;
-  }
-  return counts;
-}
-
-interface Step { pass: number; batch: number; agent: string; counts: Record<string, number>; }
-
-/** The whole day's step list, in run order — account pass → batch → agent. */
-function buildDayPlan(): { passes: number; steps: Step[] } {
-  const passes = accountPassesToday();
-  const steps: Step[] = [];
-  for (let idx = 1; idx <= passes; idx++) {
-    for (let k = 1; k <= MAX_BATCHES; k++) {
-      for (const agent of AGENTS) {
-        const counts = stepCounts(agent, k, idx);
-        if (Object.keys(counts).length) steps.push({ pass: idx, batch: k, agent, counts });
-      }
-    }
-  }
-  return { passes, steps };
-}
-
-function printPlan(): void {
-  const { passes, steps } = buildDayPlan();
-  const batchList = Array.from({ length: MAX_BATCHES }, (_, i) => `[${batchPlatforms(i + 1).join(' ')}]`).join(' ');
-  console.log(`Agents: ${AGENTS.join(' → ')}`);
-  console.log(`Daily target per account: ${JSON.stringify(DAILY_TARGET)} → ${MAX_BATCHES} batches: ${batchList}`);
-  console.log(`Account passes today: ${passes} (from .accounts/account-counts.json)\n`);
-  let lastKey = '';
-  for (const s of steps) {
-    const key = `${s.pass}:${s.batch}`;
-    if (key !== lastKey) {
-      console.log(`— pass ${s.pass} (account #${s.pass}) · batch ${s.batch} · ${batchPlatforms(s.batch).join(', ')}`);
-      lastKey = key;
-    }
-    console.log(`    ${s.agent.padEnd(10)} ${Object.keys(s.counts).join(' ')}`);
-  }
-  console.log('\nPer-agent totals for today (must equal declared accounts × target):');
-  for (const agent of AGENTS) {
-    const totals: Record<string, number> = {};
-    const expected: Record<string, number> = {};
-    for (const p of PLATFORMS) {
-      totals[p] = steps.filter((s) => s.agent === agent).reduce((n, s) => n + (s.counts[p] ?? 0), 0);
-      expected[p] = getAccountCount(agent, DECL_KEY[p]) * DAILY_TARGET[p];
-    }
-    const ok = PLATFORMS.every((p) => totals[p] === expected[p]);
-    console.log(`  ${agent.padEnd(10)} ${PLATFORMS.map((p) => `${p}:${totals[p]}`).join(' ')}   ${ok ? '✓' : `✗ expected ${JSON.stringify(expected)}`}`);
-  }
-  const posts = steps.reduce((n, s) => n + Object.keys(s.counts).length, 0);
-  console.log(`\nTotal: ${steps.length} steps, ${posts} posts.`);
-}
-
-// ── Run ─────────────────────────────────────────────────────────────────────
-async function runStep(s: Step): Promise<void> {
-  log(`=== ${s.agent} · account #${s.pass} · batch ${s.batch}: ${Object.keys(s.counts).join(' ')} ===`);
-  await runPostCycleToCompletion(s.agent, s.counts, { POST_ACCOUNT_INDEX: String(s.pass) }, {
-    pollMs: POLL_MS,
-    onWait: (why) => log(`⏸ ${s.agent}: ${why} — waiting for it to finish, then running this step.`),
-  });
-  log(`${s.agent} · account #${s.pass} · batch ${s.batch} complete.`);
-}
-
-async function runDay(): Promise<void> {
-  const { passes, steps } = buildDayPlan();
-  log(`Social day starting. Agents: ${AGENTS.join(' → ')} | target/account ${JSON.stringify(DAILY_TARGET)} | ${passes} account pass(es) | ${steps.length} steps`);
-  for (let idx = 1; idx <= passes; idx++) {
-    log(`--- Account pass ${idx} starting ---`);
-    for (let k = 1; k <= MAX_BATCHES; k++) {
-      const batchSteps = steps.filter((s) => s.pass === idx && s.batch === k);
-      const who = batchSteps.map((s) => s.agent).join(' → ') || `nobody has an account #${idx} here`;
-      log(`--- Pass ${idx} · batch ${k} (${batchPlatforms(k).join(', ')}): ${who} ---`);
-      for (const agent of AGENTS) {
-        const step = batchSteps.find((s) => s.agent === agent);
-        if (!step) {
-          if (idx > 1) log(`${agent}: no account #${idx} on ${batchPlatforms(k).join('/')} — skipping.`);
-          continue;
-        }
-        await runStep(step);
-        await sleep(PERSON_GAP_MS);
-      }
-      if (k < MAX_BATCHES) {
-        log(`--- batch ${k} done — ${Math.round(BATCH_GAP_MS / 60000)} min break before batch ${k + 1} ---`);
-        await sleep(BATCH_GAP_MS);
-      }
-    }
-    log(`--- Account pass ${idx} complete ---`);
-    if (idx < passes) {
-      log(`--- ${Math.round(PASS_GAP_MS / 60000)} min break before account pass ${idx + 1} ---`);
-      await sleep(PASS_GAP_MS);
-    }
-  }
-  log(`Social day complete — ${steps.length} steps run.`);
-}
+const CONFIG: AccountPassConfig = {
+  name: 'Social',
+  agents: AGENTS,
+  batches: BATCHES,
+  personGapMs: PERSON_GAP_MS,
+  batchGapMs: BATCH_GAP_MS,
+  passGapMs: PASS_GAP_MS,
+  pollMs: POLL_MS,
+  log,
+};
 
 async function main() {
-  if (PLAN_ONLY) { printPlan(); return; }
+  if (PLAN_ONLY) {
+    console.log(`Daily target per account: ${JSON.stringify(DAILY_TARGET)}`);
+    console.log(formatDayPlan(CONFIG, buildDayPlan(CONFIG)));
+    return;
+  }
   log(`Social rotation starting. Order: ${AGENTS.join(' → ')} | daily at ${START_LABEL} | target/account ${JSON.stringify(DAILY_TARGET)} | ${SKIP_WAIT ? '[--now: run once now]' : '[daily]'}`);
   for (;;) {
     if (!SKIP_WAIT) {
@@ -255,7 +138,7 @@ async function main() {
       log(`Waiting ${Math.round(waitMs / 60000)} min for next ${START_LABEL}...`);
       await sleep(waitMs);
     }
-    await runDay();
+    await runDay(CONFIG);
     // --now is a one-shot manual run; don't loop forever waiting for a "tomorrow" that isn't real.
     if (SKIP_WAIT) break;
   }

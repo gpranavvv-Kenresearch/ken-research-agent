@@ -52,7 +52,7 @@ const health = {
   checkedAt: new Date().toISOString(),
   istDay: istDay(),
   social: status(SOCIAL_LOG, /Social day complete/i, /Social day starting/i),
-  posting: status(POST_LOG, /Both rounds done/i, /Round \d+ starting/i),
+  posting: status(POST_LOG, /Blog-platform day complete/i, /Blog-platform day starting/i),
   blog: status(BLOG_LOG, /Both cycles done/i, /Cycle \d+ starting/i),
 };
 
