@@ -1142,6 +1142,23 @@ async function main() {
     await page.waitForTimeout(4000);
     progress('Opened ChatGPT.');
     if (!(await isLoggedIn(page))) {
+      // Unattended run (spawned by run-blog-generator.ts from the rotation or a
+      // dashboard click — stdin is not a terminal): nobody can log in or press
+      // Enter, so waiting would only hang this row until the rotation's
+      // 150-min kill. Fail fast with a message that says WHICH problem it is
+      // — a Cloudflare "Just a moment..." interstitial (headless Chrome never
+      // clears it) vs a genuinely expired session — and leave the row for the
+      // next turn.
+      if (!process.stdin.isTTY) {
+        const pageTitle = await page.title().catch(() => '');
+        const cloudflare = /just a moment|attention required|verify you are human/i.test(pageTitle);
+        const why = cloudflare
+          ? `ChatGPT is stuck on the Cloudflare challenge ("${pageTitle}") — this happens in headless Chrome; run headed (DISPLAY set, GEN_HEADLESS unset/false)`
+          : `ChatGPT session for "${agent || 'abhinav'}" is not logged in (page: "${pageTitle || page.url()}") — re-login via the dashboard login portal`;
+        progress(`✗ ${why}`);
+        await context.close().catch(() => {});
+        out({ status: 'error', message: why });
+      }
       // isLoggedIn()'s own 40s poll isn't a real login window — a first-time
       // ChatGPT login (email, password, verification) almost never finishes
       // that fast. Give the human an actual chance: wait here for Enter instead

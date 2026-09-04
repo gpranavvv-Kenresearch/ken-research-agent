@@ -53,7 +53,11 @@ const health = {
   istDay: istDay(),
   social: status(SOCIAL_LOG, /Social day complete/i, /Social day starting/i),
   posting: status(POST_LOG, /Blog-platform day complete/i, /Blog-platform day starting/i),
-  blog: status(BLOG_LOG, /Both cycles done/i, /Cycle \d+ starting/i),
+  // Blog generation is a continuous loop (no "day"): "started" = a person's
+  // turn began today, "ok" = a turn actually finished today (with or without
+  // output — it's the loop being alive that this checks; per-turn yield is
+  // in the log itself).
+  blog: status(BLOG_LOG, /generated this turn|no fresh URLs/i, /generating up to \d+ blog/i),
 };
 
 fs.mkdirSync(path.dirname(OUT), { recursive: true });

@@ -30,10 +30,23 @@ const PREFERRED_SOURCE_MODE: PreferredSourceMode = 'tracked';
 // This script is only ever used for actual generation (scheduled or a
 // dashboard "generate now" click) — never for a manual ChatGPT login, which
 // is its own separate standalone invocation of generate_blog_chatgpt.ts /
-// generate_image.ts directly. So it's always safe to run the ChatGPT windows
-// headless here; set on process.env so it flows through the existing
-// spawnTsx(args, process.env) calls below without touching each call site.
-process.env.GEN_HEADLESS = 'true';
+// generate_image.ts directly.
+//
+// Headed vs headless for the ChatGPT windows: HEADED whenever a display is
+// available, headless only when there is none. chatgpt.com sits behind a
+// Cloudflare challenge that never clears in headless Chrome — the page just
+// stays on "Just a moment..." — so a headless run reads every profile as
+// "not logged in" even when the session is perfectly valid (this took blog
+// generation to zero for every agent from 2026-09-02 until it was caught).
+// The VPS runs everything on the Xvfb :99 virtual display (DISPLAY is set by
+// the rotation / cron), so it stays headed there; a machine with no display
+// at all (a Windows box running this unattended) gets headless as the only
+// option. An explicit GEN_HEADLESS in the environment always wins. Set on
+// process.env so it flows through the existing spawnTsx(args, process.env)
+// calls below without touching each call site.
+if (!process.env.GEN_HEADLESS) {
+  process.env.GEN_HEADLESS = process.env.DISPLAY ? 'false' : 'true';
+}
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -107,7 +120,14 @@ function looksLikeHtml(s: string): boolean {
 }
 function rowTitle(row: BlogRow): string {
   // Input report title lives in "Report Title"; fall back to older columns.
-  return String(row['Report Title'] || row.title || row['Blog Title'] || '').trim();
+  const t = String(row['Report Title'] || row.title || row['Blog Title'] || '').trim();
+  if (t) return t;
+  // No title in the sheet at all — derive one from the report URL's slug
+  // ("…/oman-physiotherapy-equipment-market" → "Oman Physiotherapy Equipment
+  // Market") rather than failing the row outright with "--title is required"
+  // on every turn until someone notices.
+  const slug = String(row.targetUrl || '').split('?')[0].replace(/\/+$/, '').split('/').pop() || '';
+  return slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();
 }
 function wordCount(html: string): number {
   return html.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length;
