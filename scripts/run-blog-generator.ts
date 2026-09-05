@@ -270,6 +270,12 @@ async function generateWithRetry(row: BlogRow): Promise<{ title: string; descrip
       console.log('⏭ ChatGPT rate-limited for this account — not retrying this turn; the row stays for a later run.');
       return null;
     }
+    if (!res && /RESEARCH BLOCKED|LINK VALIDATION BLOCKED/i.test(lastGenError)) {
+      // ChatGPT refused (could not open/verify the report on this account) —
+      // a second identical prompt gets the same answer; leave the row for a later run.
+      console.log('⏭ ChatGPT refused (see reason above) — not retrying this turn; the row stays for a later run.');
+      return null;
+    }
     if (res && /RESEARCH\s*BLOCKED/i.test(res.html || '')) {
       console.log('⏭ RESEARCH BLOCKED — ChatGPT can\'t verify this report; marking blocked + skipping to the next row.');
       const dr = Number((row as { _dataRow?: number })._dataRow);

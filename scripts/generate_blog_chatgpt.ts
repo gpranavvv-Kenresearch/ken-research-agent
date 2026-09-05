@@ -1004,8 +1004,16 @@ async function waitForCompletion(page: Page, baseline: number): Promise<void> {
     // (~50-80 chars) — anything under 300 chars is not an article. Fail now
     // rather than burning the remaining timeout; the caller does not retry a
     // rate-limited row (that would just spend another prompt on a limited account).
+    // A short reply that is one of the prompt's own refusal sentences is NOT a
+    // rate limit — name it, so the turn log says what ChatGPT actually said.
+    if (/RESEARCH BLOCKED/i.test(text)) {
+      throw new Error(`RESEARCH BLOCKED: ChatGPT could not open/verify the report page for this account — reply: "${text.trim().slice(0, 120)}"`);
+    }
+    if (/LINK VALIDATION BLOCKED/i.test(text)) {
+      throw new Error(`LINK VALIDATION BLOCKED: ChatGPT refused over link count — reply: "${text.trim().slice(0, 120)}"`);
+    }
     if (rateLimitHits >= 2 && text.length < 300 && !stopping) {
-      throw new Error(`RATE_LIMITED: ChatGPT rate limit hit and no reply produced (${text.length} chars) — giving up on this row for now`);
+      throw new Error(`RATE_LIMITED: ChatGPT rate limit hit and no reply produced (${text.length} chars: "${text.trim().slice(0, 80)}") — giving up on this row for now`);
     }
     if (!stopping && text.length > 500) {
       goneChecks++;
