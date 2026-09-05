@@ -998,11 +998,14 @@ async function waitForCompletion(page: Page, baseline: number): Promise<void> {
       .first().isVisible({ timeout: 2000 }).catch(() => false);
     const text = await lastAssistantText(page, baseline);
     progress(`  …checked at ${Math.round((Date.now() - start) / 60000)} min: ${stopping ? 'still writing' : 'looks finished'} (${text.length} characters so far)`);
-    // Rate-limited and still no reply at all after two popups → ChatGPT is
-    // not going to answer this prompt. Fail now rather than burning the
-    // remaining timeout (the caller retries once, then leaves the row).
-    if (rateLimitHits >= 2 && text.length === 0 && !stopping) {
-      throw new Error('ChatGPT rate limit hit and no reply produced — giving up on this row for now');
+    // Rate-limited and still no real reply after two popups → ChatGPT is not
+    // going to answer this prompt. "No real reply" includes the short
+    // rate-limit notice ChatGPT sometimes posts AS the assistant message
+    // (~50-80 chars) — anything under 300 chars is not an article. Fail now
+    // rather than burning the remaining timeout; the caller does not retry a
+    // rate-limited row (that would just spend another prompt on a limited account).
+    if (rateLimitHits >= 2 && text.length < 300 && !stopping) {
+      throw new Error(`RATE_LIMITED: ChatGPT rate limit hit and no reply produced (${text.length} chars) — giving up on this row for now`);
     }
     if (!stopping && text.length > 500) {
       goneChecks++;

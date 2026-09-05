@@ -184,11 +184,14 @@ function generate(row: BlogRow): Promise<{ title: string; description: string; h
       clearTimeout(to);
       if (tmpToClean) { try { fs.rmSync(tmpToClean, { force: true }); } catch { /* noop */ } }
       const lastLine = stdout.trim().split('\n').filter(Boolean).pop() || '';
+      lastGenError = '';
       try {
         const out = JSON.parse(lastLine);
         if (out.status === 'success') { resolve({ title: out.title, description: out.description, html: out.html }); return; }
+        lastGenError = String(out.message || '');
         console.log(`✗ Couldn't generate this blog: ${out.message}`);
       } catch {
+        lastGenError = 'no finished blog returned';
         console.log('✗ ChatGPT did not return a finished blog (it may have timed out or the page changed).');
       }
       resolve(null);
@@ -248,14 +251,25 @@ function markBlocked(dataRow: number): void {
 
 const MAX_GEN_ATTEMPTS = 2;
 
+/** Why the last generate() call failed (the child's error message), so the
+ * retry loop can tell a transient failure from one that will repeat. */
+let lastGenError = '';
+
 /** Generate the article. If ChatGPT refuses with RESEARCH BLOCKED (it can't
  * verify this report), that's deterministic — don't retry: mark the row blocked
- * so it's never re-picked, and skip to the next row. Only a non-refusal invalid
- * (cut-off / transient) is retried. Never saves a refusal as the blog. */
+ * so it's never re-picked, and skip to the next row. A rate-limited account is
+ * also not retried this turn — a second attempt is just another wasted prompt
+ * against a quota that only recovers with time; the row is picked up again on
+ * a later turn. Only a non-refusal invalid (cut-off / transient) is retried.
+ * Never saves a refusal as the blog. */
 async function generateWithRetry(row: BlogRow): Promise<{ title: string; description: string; html: string } | null> {
   for (let attempt = 1; attempt <= MAX_GEN_ATTEMPTS; attempt++) {
     const res = await generate(row);
     if (res && isValidBlog(res.html, res.title)) return res;
+    if (!res && /RATE_LIMITED|rate limit/i.test(lastGenError)) {
+      console.log('⏭ ChatGPT rate-limited for this account — not retrying this turn; the row stays for a later run.');
+      return null;
+    }
     if (res && /RESEARCH\s*BLOCKED/i.test(res.html || '')) {
       console.log('⏭ RESEARCH BLOCKED — ChatGPT can\'t verify this report; marking blocked + skipping to the next row.');
       const dr = Number((row as { _dataRow?: number })._dataRow);
