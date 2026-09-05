@@ -1,13 +1,13 @@
 /**
  * nightly-blog-rotation.ts — CONTINUOUS blog-generation loop, ONE blog per person per turn.
  *
- * Round-robin, in order vijay → hritika → sanya → meenakshi → vansh → sameeksha
+ * Round-robin, in order meenakshi → vijay → hritika → sanya → vansh → sameeksha
  * (each with their OWN ChatGPT account: .sessions-cookies/chatgpt-profile-{agent}).
  * Each person generates BLOGS_PER_PERSON (default 1) blog — generated and
  * written into their own sheet immediately — then a BREAK_MIN (10 min) break
  * before the next person — except after the LAST person in a pass
  * (sameeksha), which gets the longer CYCLE_BREAK_MIN (1 hour) instead, before
- * the whole rotation loops back around to vijay. One blog each, one by one,
+ * the whole rotation loops back around to meenakshi. One blog each, one by one,
  * round and round — no person ever hogs the ChatGPT box for a 5-blog batch.
  * Loops forever, day and night — no schedule window.
  *
@@ -45,7 +45,7 @@ import { spawn, spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-const AGENTS = ['vijay', 'hritika', 'sanya', 'meenakshi', 'vansh', 'sameeksha'];
+const AGENTS = ['meenakshi', 'vijay', 'hritika', 'sanya', 'vansh', 'sameeksha'];
 const BLOGS_PER_PERSON = Number(process.env.BLOG_LIMIT || 1);           // blogs each person generates per turn (1 = strict one-by-one rotation)
 const BREAK_MIN = Number(process.env.BLOG_BREAK_MIN || 10);             // break between one person finishing and the next starting
 const CYCLE_BREAK_MIN = Number(process.env.BLOG_CYCLE_BREAK_MIN || 60); // longer break after the LAST person in a full pass, before looping back to the first
