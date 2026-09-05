@@ -969,18 +969,23 @@ async function isLoggedIn(page: Page): Promise<boolean> {
   return false;
 }
 
-/** Wait until the assistant response finished streaming (send re-enabled, text stable). */
-async function waitForCompletion(page: Page): Promise<void> {
+/** Wait until the assistant response finished streaming (send re-enabled, text stable).
+ * `baseline` = assistant message count before our prompt was sent: only a NEWER
+ * reply counts as progress, so an old reply (or the prompt itself) can never
+ * read as "finished". */
+async function waitForCompletion(page: Page, baseline: number): Promise<void> {
   const start = Date.now();
   let goneChecks = 0;
   let lastLength = -1;
   let unchangedChecks = 0;
+  let rateLimitHits = 0;
   await page.waitForTimeout(5 * 60 * 1000); // let generation get underway (5 min) before the first check
   while (Date.now() - start < RESPONSE_TIMEOUT_MS) {
     // Always check for the rate-limit popup first — it silently stalls
     // generation, so clear it (via Enter, its default button) before reading
     // any completion signal below.
     if (await dismissRateLimitModalByEnter(page)) {
+      rateLimitHits++;
       progress('  …cleared a rate-limit popup, continuing to wait.');
     }
     // Check every 1 min: ChatGPT shows a Stop button while streaming. When the
@@ -989,8 +994,14 @@ async function waitForCompletion(page: Page): Promise<void> {
     const stopping = await page
       .locator('button[data-testid="stop-button"], button[aria-label*="Stop streaming"], button[aria-label*="Stop"]')
       .first().isVisible({ timeout: 2000 }).catch(() => false);
-    const text = await lastAssistantText(page);
+    const text = await lastAssistantText(page, baseline);
     progress(`  …checked at ${Math.round((Date.now() - start) / 60000)} min: ${stopping ? 'still writing' : 'looks finished'} (${text.length} characters so far)`);
+    // Rate-limited and still no reply at all after two popups → ChatGPT is
+    // not going to answer this prompt. Fail now rather than burning the
+    // remaining timeout (the caller retries once, then leaves the row).
+    if (rateLimitHits >= 2 && text.length === 0 && !stopping) {
+      throw new Error('ChatGPT rate limit hit and no reply produced — giving up on this row for now');
+    }
     if (!stopping && text.length > 500) {
       goneChecks++;
       if (goneChecks >= 2) return; // Stop button gone for ~2 checks → done
@@ -1019,37 +1030,57 @@ async function waitForCompletion(page: Page): Promise<void> {
   }
 }
 
-async function lastAssistantText(page: Page): Promise<string> {
-  return page.evaluate(() => {
-    // Prefer the assistant message element; fall back to page text from the last
-    // "Title:" (the response marker) so extraction survives ChatGPT DOM changes.
-    const msgs = document.querySelectorAll('[data-message-author-role="assistant"]');
-    let text = msgs.length ? ((msgs[msgs.length - 1] as HTMLElement).innerText || '') : '';
-    if (text.replace(/\s/g, '').length < 100) {
-      const body = (document.body as HTMLElement).innerText || '';
-      const idx = body.lastIndexOf('Title:');
-      if (idx >= 0) text = body.slice(idx);
-    }
-    return text;
-  });
+// Phrases that occur only in the master prompt, never in a real article. Any
+// text containing one of them is the PROMPT (our own message, or the page's
+// text after ChatGPT silently rate-limited and never answered) — not a reply.
+// Before this guard, the "Title:" page-text fallback below happily picked up
+// the prompt's own "Title: the H1 title must naturally contain..." rule line
+// and returned the rest of the prompt as the article; 165 of those got
+// published between 2026-08-26 and 2026-09-05.
+const PROMPT_ECHO_MARKERS = [
+  'COMPLETION LOCK', 'FINAL QA GATE', 'LINK ARCHITECTURE', 'NEW ARTICLE ARCHITECTURE',
+  '<INPUTS>', 'OUTPUT_MODE:', 'LINK_STYLE_MODE', 'IMAGE_MODE:', 'DATA_SPINE', 'CLAIM_LEDGER',
+  'KEN RESEARCH BRAND AUTHORITY RULES', 'MASTER BLOG PROMPT', 'must naturally contain the words',
+];
+function looksLikePromptEcho(s: string): boolean {
+  const u = s.toUpperCase();
+  return PROMPT_ECHO_MARKERS.some((m) => u.includes(m.toUpperCase()));
 }
 
-/** Extract Title / Description / HTML from the last assistant message (both shapes). */
-async function extract(page: Page): Promise<{ title: string; description: string; html: string }> {
-  const data = await page.evaluate(() => {
+/** Number of assistant messages on the page — captured BEFORE we send the
+ * prompt so extraction can insist on a NEW reply rather than an old one. */
+async function assistantMessageCount(page: Page): Promise<number> {
+  return page.locator('[data-message-author-role="assistant"]').count().catch(() => 0);
+}
+
+/** The newest assistant reply's text — ONLY if it is newer than `baseline`
+ * (the count before our prompt was sent). Empty string when ChatGPT has not
+ * answered. No page-text fallback: that is how the prompt itself got saved. */
+async function lastAssistantText(page: Page, baseline: number): Promise<string> {
+  const text = await page.evaluate((base) => {
     const msgs = document.querySelectorAll('[data-message-author-role="assistant"]');
-    const last = msgs.length ? (msgs[msgs.length - 1] as HTMLElement) : null;
-    let code = '';
-    let text = last ? (last.innerText || '') : '';
-    if (last) { const c = last.querySelector('pre code, pre'); code = c ? (c.textContent || '') : ''; }
-    // Fallback: page text from the last "Title:" (works regardless of DOM structure).
-    if (text.replace(/\s/g, '').length < 100) {
-      const body = (document.body as HTMLElement).innerText || '';
-      const idx = body.lastIndexOf('Title:');
-      if (idx >= 0) text = body.slice(idx);
-    }
-    return { code, text };
-  });
+    if (msgs.length <= base) return '';
+    return (msgs[msgs.length - 1] as HTMLElement).innerText || '';
+  }, baseline).catch(() => '');
+  return looksLikePromptEcho(text) ? '' : text;
+}
+
+/** Extract Title / Description / HTML from the newest assistant reply (both shapes). */
+async function extract(page: Page, baseline: number): Promise<{ title: string; description: string; html: string }> {
+  const data = await page.evaluate((base) => {
+    const msgs = document.querySelectorAll('[data-message-author-role="assistant"]');
+    if (msgs.length <= base) return { code: '', text: '' };
+    const last = msgs[msgs.length - 1] as HTMLElement;
+    const c = last.querySelector('pre code, pre');
+    return { code: c ? (c.textContent || '') : '', text: last.innerText || '' };
+  }, baseline);
+
+  if (looksLikePromptEcho(data.text) || looksLikePromptEcho(data.code)) {
+    throw new Error('ChatGPT returned the prompt instead of an article (no real reply — rate limit?)');
+  }
+  if (!data.text.trim() && !data.code.trim()) {
+    throw new Error('ChatGPT produced no reply to extract (rate limit / no response)');
+  }
 
   const text = data.text || '';
   const titleMatch = text.match(/^\s*Title:\s*(.+)$/im);
@@ -1191,6 +1222,8 @@ async function main() {
     await dismissBlockingModals(page); // e.g. the "conversation history rate limit" overlay
     const input = page.locator('#prompt-textarea, div[contenteditable="true"]').first();
     await input.waitFor({ state: 'visible', timeout: 20000 });
+    // How many assistant replies exist BEFORE we send — extraction must see one more.
+    const baseline = await assistantMessageCount(page);
     progress('Logged in. Sending the prompt to ChatGPT…');
     await input.click();
     await page.keyboard.insertText(prompt); // reliable for ChatGPT's contenteditable + large text
@@ -1218,12 +1251,13 @@ async function main() {
     }
     progress('Prompt sent — ChatGPT is writing the blog now (about 12-15 minutes)…');
 
-    await waitForCompletion(page);
+    await waitForCompletion(page, baseline);
     progress('ChatGPT finished writing — extracting and saving the blog…');
-    const { title: bTitle, description, html } = await extract(page);
+    const { title: bTitle, description, html } = await extract(page, baseline);
     await context.close();
 
     if (!html || html.length < 100) out({ status: 'error', message: 'no HTML content extracted from ChatGPT response' });
+    if (looksLikePromptEcho(html) || looksLikePromptEcho(bTitle)) out({ status: 'error', message: 'extracted content is the prompt, not an article — discarded' });
     out({ status: 'success', title: bTitle, description, html: injectUtm(sanitizeHtml(html)) });
   } catch (err) {
     await context.close().catch(() => {});

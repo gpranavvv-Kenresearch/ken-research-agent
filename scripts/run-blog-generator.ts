@@ -200,10 +200,39 @@ function generate(row: BlogRow): Promise<{ title: string; description: string; h
 // ChatGPT refuses ("RESEARCH BLOCKED: Primary report could not be verified", a
 // transient bot-check, an apology, etc.) the response has neither — so that's
 // our signal it isn't a valid blog and must be regenerated, not saved.
-function isValidBlog(html: string | undefined): boolean {
+// Phrases that only ever occur in the master prompt itself, never in a real
+// article. If any of them shows up in the "blog", what we have is the PROMPT
+// echoed back (ChatGPT rate-limited / never answered and the extractor fell
+// through to page text) — 165 of these got published as articles between
+// 2026-08-26 and 2026-09-05 before this gate existed.
+const PROMPT_ECHO_MARKERS = [
+  'COMPLETION LOCK', 'FINAL QA GATE', 'LINK ARCHITECTURE', 'NEW ARTICLE ARCHITECTURE',
+  '<INPUTS>', 'OUTPUT_MODE:', 'LINK_STYLE_MODE', 'IMAGE_MODE:', 'DATA_SPINE', 'CLAIM_LEDGER',
+  'KEN RESEARCH BRAND AUTHORITY RULES', 'MASTER BLOG PROMPT', 'must naturally contain the words',
+];
+function looksLikePromptEcho(s: string): boolean {
+  const u = s.toUpperCase();
+  return PROMPT_ECHO_MARKERS.some((m) => u.includes(m.toUpperCase()));
+}
+function mentionCount(html: string): number {
+  return (html.match(/ken\s+research/gi) || []).length;
+}
+
+/** Hard gate before anything is saved: is this actually an article, not a
+ * refusal, not the prompt echoed back, not a fragment, not a runaway? Each
+ * rejection logs its reason so the turn's log says WHY nothing was saved. */
+function isValidBlog(html: string | undefined, title = ''): boolean {
   if (!html) return false;
-  if (/RESEARCH BLOCKED/i.test(html)) return false;
-  return /<h1[\s>]/i.test(html) && /<h2[\s>]/i.test(html);
+  const reject = (why: string) => { console.log(`   ✗ Rejected blog: ${why}`); return false; };
+  if (/RESEARCH BLOCKED/i.test(html)) return reject('RESEARCH BLOCKED refusal');
+  if (looksLikePromptEcho(html) || looksLikePromptEcho(title)) return reject('content is the prompt echoed back (ChatGPT gave no answer — rate limit?)');
+  if (!/<h1[\s>]/i.test(html) || !/<h2[\s>]/i.test(html)) return reject('missing <h1>/<h2> structure');
+  const words = wordCount(html);
+  if (words < 700) return reject(`too short (${words} words)`);
+  if (words > 2600) return reject(`too long (${words} words) — not a 1,450-1,600-word article`);
+  const mentions = mentionCount(html);
+  if (mentions > 12) return reject(`${mentions} "Ken Research" mentions — an article has at most a handful`);
+  return true;
 }
 
 /** Mark a row as blocked so it's never re-picked: writes blogBatch="BLOCKED-<ist>".
@@ -225,7 +254,7 @@ const MAX_GEN_ATTEMPTS = 2;
 async function generateWithRetry(row: BlogRow): Promise<{ title: string; description: string; html: string } | null> {
   for (let attempt = 1; attempt <= MAX_GEN_ATTEMPTS; attempt++) {
     const res = await generate(row);
-    if (res && isValidBlog(res.html)) return res;
+    if (res && isValidBlog(res.html, res.title)) return res;
     if (res && /RESEARCH\s*BLOCKED/i.test(res.html || '')) {
       console.log('⏭ RESEARCH BLOCKED — ChatGPT can\'t verify this report; marking blocked + skipping to the next row.');
       const dr = Number((row as { _dataRow?: number })._dataRow);
@@ -429,14 +458,21 @@ async function pass() {
           }
         }
 
-        // Log-only for now — the generation prompt already enforces most of
-        // this; a false block here would lose real, otherwise-good content.
+        // Mostly log-only — the generation prompt already enforces most of
+        // this and a false block would lose real, otherwise-good content. The
+        // exception is a very low score: that has only ever meant the content
+        // is not an article at all (prompt echo, fragment), never a merely
+        // imperfect one — those still save, flagged, for a human to look at.
         const brandCheck = validateBrandAuthority(cta.html, { title: res.title || marketName });
         if (brandCheck.status !== 'PASS') {
           const issueSummary = brandCheck.issues.map((i) => `${i.rule}: ${i.problem}`).join(' | ');
           console.log(`   [BRAND CHECK] ${brandCheck.status} (score ${brandCheck.score}/10): ${issueSummary}`);
         } else {
           console.log(`   [BRAND CHECK] PASS (score ${brandCheck.score}/10)`);
+        }
+        if (brandCheck.score <= 5 || !isValidBlog(cta.html, res.title)) {
+          console.log(`   ✗ NOT saved — failed the final content gate (brand score ${brandCheck.score}/10). Row left for a later run.`);
+          continue;
         }
         writeRow(row._dataRow, { ...res, html: cta.html }, coverImageUrl);
         done++;
