@@ -121,7 +121,8 @@ If a material claim cannot be verified, omit it or use narrower qualitative word
 Before concluding the primary report cannot be accessed, retry opening REPORT_URL at least 3 times across a few seconds apart — a single failed load is very often a transient network hiccup, a slow first response, or a temporary bot-check, not a real block. Also try opening the bare domain (kenresearch.com) and re-navigating from there if the direct URL fails. Only after multiple genuine, consistent failures to load ANY page on the domain — or after successfully loading the page and finding its content genuinely does not match the requested market/report — is this a real block.
 If, after exhausting those retries, the primary report truly cannot be accessed or its core market identity cannot be verified, do not stop or refuse. Instead, search the open web for the same market (REPORT_TITLE, its geography, and its core scope) and assemble the DATA_SPINE from other reputable, live sources — industry associations, government/regulatory statistics, company filings, reputable trade press. Still write and frame the article as Ken Research's own market intelligence throughout (e.g. "Ken Research estimates...", "According to Ken Research..."), exactly as if the primary report page had loaded normally, using the best-verified web-sourced figures as that estimate. Never name or link to a competing market-research firm (Mordor Intelligence, IMARC, MarketsandMarkets, Technavio, Precedence Research, Future Market Insights, Renub Research, or similar) as a source — if a figure's only available attribution is one of those firms, use the figure without naming its source, or omit that specific claim rather than invent a number. Only return RESEARCH BLOCKED: Primary report could not be verified if the web search itself also fails to turn up any usable, verifiable data for this market — this should be rare.
 If REPORT_URL or REPORT_TITLE is a survey, feedback study, methodology page, or service offering rather than a standard market-sizing report, this DOES NOT reduce the requirement for verified market data — widen the web search instead: find verified market-size, CAGR, or forecast data for the closest adjacent, verifiable market or industry (e.g. for a patient feedback survey, search for the patient experience management market, healthcare CX market, or hospital patient satisfaction software market; for any other survey/service page, identify and search the market category it operationally belongs to). Present that verified adjacent-market data exactly as Ken Research's own market intelligence throughout (e.g. "Ken Research estimates...", "According to Ken Research..."), the same as for a standard report. Every figure must still come from a real, verifiable source — never invent one. Only return RESEARCH BLOCKED if this widened search also fails to turn up any usable, verifiable data for the market or its closest adjacent category.
-KEN RESEARCH BRAND AUTHORITY RULES (MANDATORY — the finished article is run through an automated code validator that checks these exact rules and rejects the article if any fail)
+GENERAL FALLBACK (applies to every rule in this prompt): if any source, page or link cannot be opened or verified — the report page, a Ken Research cluster page, an official external source — that never stops the article. Write with what you could verify, omit or soften what you could not, never invent a figure or a URL, and never return a refusal message of any kind. The only acceptable non-article output is RESEARCH BLOCKED, and only when even the widened web search finds no usable data at all.
+KEN RESEARCH BRAND AUTHORITY RULES (MANDATORY — the finished article is run through an automated code validator that checks these exact rules and flags the article for review if any are missed, so follow them closely; never withhold the article over them)
 Title: the H1 title must naturally contain the words "Ken Research".
 Opening paragraph: paragraph 1 must (a) mention "Ken Research", (b) use an approved authority-context phrase from the approved list below in the same sentence, and (c) hyperlink that first Ken Research mention to a kenresearch.com destination (homepage or the primary report).
 Approved expressions — use only these when referring to Ken Research as a source: "According to Ken Research analysis", "Ken Research market assessment indicates", "The Ken Research study highlights", "Ken Research estimates".
@@ -318,17 +319,17 @@ The final non-whitespace characters in ARTICLE_HTML mode must be </p>.
 Count opening and closing <p>, <h1>, <h2>, <h3>, <ul>, <li>, <a>, <strong>, and <em> tags. Every opened tag must close.
 Do not return a partial article under any circumstance.
 LINK ARCHITECTURE
-The finished article must contain 12-14 Ken Research link placements, separate from official external citations.
+The finished article should contain 12-14 Ken Research link placements when enough destinations can be verified, separate from official external citations. Fewer verified links is acceptable; invented links never are.
 Required Ken Research distribution:
 Ken Research homepage: exactly one placement in the opening
 Canonical primary report: exactly three placements in the opening, CTA 1, and Sources paragraph
 Ken Research Talk to Us: exactly one placement in CTA 2, using either https://www.kenresearch.com/book-a-discovery-call or https://www.kenresearch.com/custom-form (with UTM) — never any other "talk to us"/"contact"/"custom form" URL
 Frequently Asked Questions: exactly two placements, one each inside two different FAQ answers
-Relevant Ken Research cluster pages: five to seven placements using five to seven unique destinations
-Total Ken Research placements: exactly 12-14
-Total unique Ken Research destinations: at least eight
+Relevant Ken Research cluster pages: target five to seven placements using five to seven unique destinations — use as many as can actually be verified
+Total Ken Research placements: target 12-14
+Total unique Ken Research destinations: target at least eight
 Use one or two unique official government, regulator, national-statistics, or public-agency links, with two preferred when two strong and directly relevant sources exist. Never use more than two official external citations. These external citations do not count toward the 12-14 Ken Research placements.
-After drafting, count all official external <a> tags. The article passes only when the count is one or two; zero or more than two fails validation.
+Aim for one or two official external citations and never more than two. If no official government, regulator or national-statistics page can be verified for this market, write the article with zero external citations rather than inventing one or refusing — attribute the relevant claims to Ken Research analysis instead.
 Distribute internal links across the article:
 Opening: homepage and primary report
 Market Definition and Evidence Snapshot: one relevant cluster page
@@ -339,7 +340,7 @@ Decision Framework and Market Outlook: one or two relevant cluster pages plus Ta
 Frequently Asked Questions: two links, one each inside two different FAQ answers (primary report or a relevant cluster page)
 Methodology and Sources: primary report
 Prioritize actual related Ken Research report pages. A verified sector, service, report-store category, or Competition Benchmarking page may be used only when it directly fits the surrounding discussion. Never use a generic page merely to reach the count.
-If five unique relevant cluster destinations cannot be verified, continue researching. Never guess a URL or silently publish below the internal-link target. If the minimum cannot be satisfied, return only: LINK VALIDATION BLOCKED: Fewer than 12 verified Ken Research link placements.
+If five unique relevant cluster destinations cannot be verified after a genuine search, do not stop and do not refuse. Write the complete article using every Ken Research destination you COULD verify — the homepage, the primary report and the Talk to Us URL are always available, so at minimum those three appear — and simply include fewer cluster links. Never guess or invent a URL to reach a count. Never return "LINK VALIDATION BLOCKED" or any other refusal because of link count: a complete article with fewer verified links is always the correct output; a refusal never is.
 Competitor market-research domains are prohibited.
 Link quality
 Use concise descriptive anchor text, not "click here," "read more," naked URLs, or repeated exact-match anchors.
@@ -393,7 +394,7 @@ Do not JSON-escape the HTML.
 Allowed tags:
 <img>, <h1>, <h2>, <h3>, <p>, <ul>, <li>, <a>, <strong>, <em>
 Do not output Markdown, code fences, full HTML document wrappers, meta tags, CSS blocks, JavaScript, schema, comments, tables, footnotes, internal ledgers, or commentary.
-The response must begin with < and end with the final </p> from the completed Disclaimer paragraph.
+After the single "Description:" line (see FINAL RESPONSE), the HTML fragment must begin with < and end with the final </p> from the completed Disclaimer paragraph.
 CMS_PACKAGE
 Return one valid JSON object with exactly these keys:
 seo
@@ -455,9 +456,9 @@ Visible article length is 1,450-1,600 words.
 Links and images
 Every link loads, matches its destination, and uses descriptive anchor text.
 No competitor market-research link exists.
-The article contains exactly 12-14 Ken Research link placements (including exactly two inside the FAQ section) and at least eight unique Ken Research destinations.
+The article contains every Ken Research link that could be verified, up to 12-14 placements (the two FAQ links included), and no invented URLs.
 The primary report appears exactly three times; homepage and Talk to Us appear exactly once each.
-Five to seven unique verified Ken Research cluster destinations are used contextually.
+Verified Ken Research cluster destinations (ideally five to seven) are used contextually.
 One or two unique official external citations are present and counted separately; the count never exceeds two.
 Every Ken Research href ends with exactly ?utm_source=linkedin-pulse&utm_medium=Referral&utm_campaign=Automation — no &amp; entities, no extra "?" or "&", no casing changes.
 Official external links contain no UTM parameters.
@@ -536,7 +537,8 @@ If a material claim cannot be verified, omit it or use narrower qualitative word
 Before concluding the primary report cannot be accessed, retry opening REPORT_URL at least 3 times across a few seconds apart — a single failed load is very often a transient network hiccup, a slow first response, or a temporary bot-check, not a real block. Also try opening the bare domain (kenresearch.com) and re-navigating from there if the direct URL fails. Only after multiple genuine, consistent failures to load ANY page on the domain — or after successfully loading the page and finding its content genuinely does not match the requested market/report — is this a real block.
 If, after exhausting those retries, the primary report truly cannot be accessed or its core market identity cannot be verified, do not stop or refuse. Instead, search the open web for the same market (REPORT_TITLE, its geography, and its core scope) and assemble the DATA_SPINE from other reputable, live sources — industry associations, government/regulatory statistics, company filings, reputable trade press. Still write and frame the article as Ken Research's own market intelligence throughout (e.g. "Ken Research estimates...", "According to Ken Research..."), exactly as if the primary report page had loaded normally, using the best-verified web-sourced figures as that estimate. Never name or link to a competing market-research firm (Mordor Intelligence, IMARC, MarketsandMarkets, Technavio, Precedence Research, Future Market Insights, Renub Research, or similar) as a source — if a figure's only available attribution is one of those firms, use the figure without naming its source, or omit that specific claim rather than invent a number. Only return RESEARCH BLOCKED: Primary report could not be verified if the web search itself also fails to turn up any usable, verifiable data for this market — this should be rare.
 If REPORT_URL or REPORT_TITLE is a survey, feedback study, methodology page, or service offering rather than a standard market-sizing report, this DOES NOT reduce the requirement for verified market data — widen the web search instead: find verified market-size, CAGR, or forecast data for the closest adjacent, verifiable market or industry (e.g. for a patient feedback survey, search for the patient experience management market, healthcare CX market, or hospital patient satisfaction software market; for any other survey/service page, identify and search the market category it operationally belongs to). Present that verified adjacent-market data exactly as Ken Research's own market intelligence throughout (e.g. "Ken Research estimates...", "According to Ken Research..."), the same as for a standard report. Every figure must still come from a real, verifiable source — never invent one. Only return RESEARCH BLOCKED if this widened search also fails to turn up any usable, verifiable data for the market or its closest adjacent category.
-KEN RESEARCH BRAND AUTHORITY RULES (MANDATORY — the finished article is run through an automated code validator that checks these exact rules and rejects the article if any fail)
+GENERAL FALLBACK (applies to every rule in this prompt): if any source, page or link cannot be opened or verified — the report page, a Ken Research cluster page, an official external source — that never stops the article. Write with what you could verify, omit or soften what you could not, never invent a figure or a URL, and never return a refusal message of any kind. The only acceptable non-article output is RESEARCH BLOCKED, and only when even the widened web search finds no usable data at all.
+KEN RESEARCH BRAND AUTHORITY RULES (MANDATORY — the finished article is run through an automated code validator that checks these exact rules and flags the article for review if any are missed, so follow them closely; never withhold the article over them)
 Title: the H1 title must naturally contain the words "Ken Research".
 Opening paragraph: paragraph 1 must (a) mention "Ken Research", (b) use an approved authority-context phrase from the approved list below in the same sentence, and (c) hyperlink that first Ken Research mention to a kenresearch.com destination (homepage or the primary report).
 Approved expressions — use only these when referring to Ken Research as a source: "According to Ken Research analysis", "Ken Research market assessment indicates", "The Ken Research study highlights", "Ken Research estimates".
@@ -733,17 +735,17 @@ The final non-whitespace characters in ARTICLE_HTML mode must be </p>.
 Count opening and closing <p>, <h1>, <h2>, <h3>, <ul>, <li>, <a>, <strong>, and <em> tags. Every opened tag must close.
 Do not return a partial article under any circumstance.
 LINK ARCHITECTURE
-The finished article must contain 12-14 Ken Research link placements, separate from official external citations.
+The finished article should contain 12-14 Ken Research link placements when enough destinations can be verified, separate from official external citations. Fewer verified links is acceptable; invented links never are.
 Required Ken Research distribution:
 Ken Research homepage: exactly one placement in the opening
 Canonical primary report: exactly three placements in the opening, CTA 1, and Sources paragraph
 Ken Research Talk to Us: exactly one placement in CTA 2, using either https://www.kenresearch.com/book-a-discovery-call or https://www.kenresearch.com/custom-form (with UTM) — never any other "talk to us"/"contact"/"custom form" URL
 Frequently Asked Questions: exactly two placements, one each inside two different FAQ answers
-Relevant Ken Research cluster pages: five to seven placements using five to seven unique destinations
-Total Ken Research placements: exactly 12-14
-Total unique Ken Research destinations: at least eight
+Relevant Ken Research cluster pages: target five to seven placements using five to seven unique destinations — use as many as can actually be verified
+Total Ken Research placements: target 12-14
+Total unique Ken Research destinations: target at least eight
 Use one or two unique official government, regulator, national-statistics, or public-agency links, with two preferred when two strong and directly relevant sources exist. Never use more than two official external citations. These external citations do not count toward the 12-14 Ken Research placements.
-After drafting, count all official external <a> tags. The article passes only when the count is one or two; zero or more than two fails validation.
+Aim for one or two official external citations and never more than two. If no official government, regulator or national-statistics page can be verified for this market, write the article with zero external citations rather than inventing one or refusing — attribute the relevant claims to Ken Research analysis instead.
 Distribute internal links across the article:
 Opening: homepage and primary report
 Market Definition and Evidence Snapshot: one relevant cluster page
@@ -754,7 +756,7 @@ Decision Framework and Market Outlook: one or two relevant cluster pages plus Ta
 Frequently Asked Questions: two links, one each inside two different FAQ answers (primary report or a relevant cluster page)
 Methodology and Sources: primary report
 Prioritize actual related Ken Research report pages. A verified sector, service, report-store category, or Competition Benchmarking page may be used only when it directly fits the surrounding discussion. Never use a generic page merely to reach the count.
-If five unique relevant cluster destinations cannot be verified, continue researching. Never guess a URL or silently publish below the internal-link target. If the minimum cannot be satisfied, return only: LINK VALIDATION BLOCKED: Fewer than 12 verified Ken Research link placements.
+If five unique relevant cluster destinations cannot be verified after a genuine search, do not stop and do not refuse. Write the complete article using every Ken Research destination you COULD verify — the homepage, the primary report and the Talk to Us URL are always available, so at minimum those three appear — and simply include fewer cluster links. Never guess or invent a URL to reach a count. Never return "LINK VALIDATION BLOCKED" or any other refusal because of link count: a complete article with fewer verified links is always the correct output; a refusal never is.
 Competitor market-research domains are prohibited.
 Link quality
 Use concise descriptive anchor text, not "click here," "read more," naked URLs, or repeated exact-match anchors.
@@ -808,7 +810,7 @@ Do not JSON-escape the HTML.
 Allowed tags:
 <img>, <h1>, <h2>, <h3>, <p>, <ul>, <li>, <a>, <strong>, <em>
 Do not output Markdown, code fences, full HTML document wrappers, meta tags, CSS blocks, JavaScript, schema, comments, tables, footnotes, internal ledgers, or commentary.
-The response must begin with < and end with the final </p> from the completed Disclaimer paragraph.
+After the single "Description:" line (see FINAL RESPONSE), the HTML fragment must begin with < and end with the final </p> from the completed Disclaimer paragraph.
 CMS_PACKAGE
 Return one valid JSON object with exactly these keys:
 seo
@@ -871,9 +873,9 @@ Visible article length is 1,450-1,600 words.
 Links and images
 Every link loads, matches its destination, and uses descriptive anchor text.
 No competitor market-research link exists.
-The article contains exactly 12-14 Ken Research link placements (including exactly two inside the FAQ section) and at least eight unique Ken Research destinations.
+The article contains every Ken Research link that could be verified, up to 12-14 placements (the two FAQ links included), and no invented URLs.
 The primary report appears exactly three times; homepage and Talk to Us appear exactly once each.
-Five to seven unique verified Ken Research cluster destinations are used contextually.
+Verified Ken Research cluster destinations (ideally five to seven) are used contextually.
 One or two unique official external citations are present and counted separately; the count never exceeds two.
 Every Ken Research href ends with exactly ?utm_source=linkedin-pulse&utm_medium=Referral&utm_campaign=Automation — no &amp; entities, no extra "?" or "&", no casing changes.
 Official external links contain no UTM parameters.
@@ -1139,6 +1141,14 @@ function injectUtm(html: string): string {
 }
 
 async function main() {
+  // --print-prompt: render the master prompt for --url/--title and exit, no
+  // browser. For testing the prompt by hand in ChatGPT. --prompt-version v1|v2 (default v1).
+  if (process.argv.includes('--print-prompt')) {
+    const v = (arg('--prompt-version') || 'v1').toLowerCase();
+    process.stdout.write((v === 'v2' ? buildMasterPromptV2(title, url) : buildMasterPrompt(title, url)) + '\n');
+    return;
+  }
+
   const dir = sessionDir();
   fs.mkdirSync(dir, { recursive: true });
 

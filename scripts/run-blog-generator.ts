@@ -225,6 +225,7 @@ function isValidBlog(html: string | undefined, title = ''): boolean {
   if (!html) return false;
   const reject = (why: string) => { console.log(`   ✗ Rejected blog: ${why}`); return false; };
   if (/RESEARCH BLOCKED/i.test(html)) return reject('RESEARCH BLOCKED refusal');
+  if (/LINK VALIDATION BLOCKED/i.test(html)) return reject('LINK VALIDATION BLOCKED refusal (ChatGPT could not verify enough Ken Research links)');
   if (looksLikePromptEcho(html) || looksLikePromptEcho(title)) return reject('content is the prompt echoed back (ChatGPT gave no answer — rate limit?)');
   if (!/<h1[\s>]/i.test(html) || !/<h2[\s>]/i.test(html)) return reject('missing <h1>/<h2> structure');
   const words = wordCount(html);
