@@ -44,6 +44,15 @@ const PLATFORM_ACCOUNTS_FILE: Record<string, string> = {
   linkmate: '.accounts/accounts-linkmate.json',
   note: '.accounts/accounts-note.json',
   articlescad: '.accounts/accounts-articlescad.json',
+  // Added 2026-09-07: missing from this map meant selectAccountForPlatform
+  // could never confirm "{agent} 1" was registered for these two, so it fell
+  // back to the bare agent name -- which the platform's own login.ts couldn't
+  // find either, so IT fell back to whatever account happened to be first
+  // with active:true in the registry (a legacy bare account, unrelated to the
+  // agent actually posting). Confirmed live: vijay's Mastodon attempt silently
+  // logged into sanya's saved session instead of his own.
+  mastodon: '.accounts/accounts-mastodon.json',
+  tumblr: '.accounts/accounts-tumblr.json',
 };
 
 /** Nicknames actually registered for this platform, lowercased. Empty if the registry is unreadable. */
