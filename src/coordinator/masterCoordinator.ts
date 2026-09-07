@@ -65,6 +65,7 @@ import { retryOnSelectorTimeout } from '../utils/retry.js';
 import { record as healthRecord } from '../health/accountHealth.js';
 import { proxyDispatcher } from '../health/proxyPool.js';
 import { listAgentStatus } from '../login-portal/sessionResolver.js';
+import { recordSessionState } from '../login-portal/sessionVerification.js';
 import { selectAccountForPlatform } from '../utils/accountRotation.js';
 
 /**
@@ -669,9 +670,21 @@ async function postToMastodonAccount(accountName: string, postText: string): Pro
   try {
     const loginResult = await executeBrowserTool('login_mastodon', { nickname: accountName });
     if (!loginResult.success) {
+      // A real login attempt just failed — this is a far more reliable
+      // signal than the dashboard's cookie-presence guess (see
+      // sessionVerification.ts), so record it and stop showing this account
+      // as logged in until it's actually fixed.
+      recordSessionState('mastodon', accountName, false, loginResult.error);
       return { success: false, error: loginResult.error || 'Mastodon login failed' };
     }
     const postResult = await executeBrowserTool('post_mastodon', { postText });
+    if (postResult.success) {
+      recordSessionState('mastodon', accountName, true);
+    } else if (/compose textarea not found|not logged in|sign[_ ]?in/i.test(String(postResult.error || ''))) {
+      // The login step said "success" (cookie present) but posting hit a
+      // logged-out page anyway — the real signal wins.
+      recordSessionState('mastodon', accountName, false, postResult.error);
+    }
     return {
       success: postResult.success ?? false,
       postUrl: postResult.postUrl,

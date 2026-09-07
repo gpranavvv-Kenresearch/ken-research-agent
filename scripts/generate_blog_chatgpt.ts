@@ -25,6 +25,7 @@ import path from 'path';
 import os from 'os';
 import { injectUTM, UTM_PARAMS } from '../src/utils/utm.js';
 import { dismissBlockingModals, dismissRateLimitModalByEnter } from './chatgpt_composer.js';
+import { recordSessionState } from '../src/login-portal/sessionVerification.js';
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -1208,6 +1209,10 @@ async function main() {
           ? `ChatGPT is stuck on the Cloudflare challenge ("${pageTitle}") — this happens in headless Chrome; run headed (DISPLAY set, GEN_HEADLESS unset/false)`
           : `ChatGPT session for "${agent || 'abhinav'}" is not logged in (page: "${pageTitle || page.url()}") — re-login via the dashboard login portal`;
         progress(`✗ ${why}`);
+        // Only a genuine logged-out session is a real "not logged in" signal —
+        // the Cloudflare case is a headless-only artifact of THIS run, not
+        // evidence the account needs a re-login, so don't record it as such.
+        if (!cloudflare) recordSessionState('chatgpt', agent || 'abhinav', false, why);
         await context.close().catch(() => {});
         out({ status: 'error', message: why });
       }
@@ -1226,11 +1231,13 @@ async function main() {
         console.error('[dbg] NOT-LOGGED-IN url=', page.url(), 'loginBtnVisible=', loginBtn, 'bodyPeek=', JSON.stringify(bodyPeek));
         await page.screenshot({ path: path.join(os.tmpdir(), 'blog-debug.png'), fullPage: false }).catch((e) => console.error('[dbg] shot failed', e?.message));
         await context.close();
+        recordSessionState('chatgpt', agent || 'abhinav', false, 'still not logged in after waiting for manual login');
         out({ status: 'error', message: 'Still not logged in to ChatGPT after waiting — try again and make sure the login fully completes before pressing Enter.' });
         return;
       }
       progress('Logged in — continuing.');
     }
+    recordSessionState('chatgpt', agent || 'abhinav', true);
 
     // Randomly rotate V1 (buildMasterPrompt) / V2 (keyword-focused
     // buildMasterPromptV2) per row for non-custom formats — the two prompts

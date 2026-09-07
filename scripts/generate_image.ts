@@ -39,6 +39,7 @@ import https from 'https';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { pasteIntoChatGPTComposer, dismissBlockingModals } from './chatgpt_composer.js';
+import { recordSessionState } from '../src/login-portal/sessionVerification.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -699,6 +700,7 @@ async function main() {
 
     if (await isLoggedIn()) {
       console.error('[generate_image] Already logged in ✓');
+      recordSessionState('chatgpt-image', agentArg || 'abhinav', true);
     } else {
       console.error('[generate_image] Not logged in — restore the minimized Chrome window from the taskbar and log in manually. Waiting up to 5 min...');
       const deadline = Date.now() + 5 * 60 * 1000;
@@ -708,7 +710,11 @@ async function main() {
         if (await isLoggedIn()) { ok = true; break; }
         console.error(`[generate_image] Waiting for login... ${Math.round((deadline - Date.now()) / 1000)}s left`);
       }
-      if (!ok) throw new Error('Login timeout — please log in to ChatGPT (image profile) via the dashboard login portal');
+      if (!ok) {
+        recordSessionState('chatgpt-image', agentArg || 'abhinav', false, 'login timeout waiting for manual login');
+        throw new Error('Login timeout — please log in to ChatGPT (image profile) via the dashboard login portal');
+      }
+      recordSessionState('chatgpt-image', agentArg || 'abhinav', true);
     }
 
     // ── Submit prompt (Lexical-safe paste — .fill() truncates multi-paragraph prompts) ──

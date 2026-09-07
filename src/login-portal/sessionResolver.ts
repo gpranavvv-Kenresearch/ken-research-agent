@@ -17,6 +17,7 @@ import { execFileSync } from 'child_process';
 import { PLATFORMS, PLATFORM_KEYS } from './config.js';
 import { isDevtoLoggedInCached } from './devtoDeepCheck.js';
 import { isMediumLoggedInCached } from './mediumDeepCheck.js';
+import { isKnownLoggedOut } from './sessionVerification.js';
 
 /**
  * ChatGPT (and the image-gen variant) get one profile PER AGENT, not per-index —
@@ -166,12 +167,15 @@ export function listAgentStatus(agent: string): AgentStatus {
       if (!PLATFORMS[platform]) continue;
       const dir = path.join(root, entry);
       if (!fs.statSync(dir).isDirectory()) continue;
+      const nickname = fleetNickname(a, index);
       platforms[platform].push({
         platform,
         index,
-        nickname: fleetNickname(a, index),
+        nickname,
         sessionDir: dir,
-        ready: isLoggedIn(dir, platform),
+        // A recent real "not logged in" from an actual posting/login attempt
+        // overrides the cookie-based guess — see sessionVerification.ts.
+        ready: isKnownLoggedOut(platform, nickname) ? false : isLoggedIn(dir, platform),
       });
     }
   }
@@ -184,14 +188,14 @@ export function listAgentStatus(agent: string): AgentStatus {
     const dir = chatgptProfileDir(a, 'chatgpt-profile');
     platforms['chatgpt'] = [{
       platform: 'chatgpt', index: 1, nickname: a,
-      sessionDir: dir, ready: isLoggedIn(dir, 'chatgpt'),
+      sessionDir: dir, ready: isKnownLoggedOut('chatgpt', a) ? false : isLoggedIn(dir, 'chatgpt'),
     }];
   }
   if (PLATFORMS['chatgpt-image']) {
     const dir = chatgptProfileDir(a, 'chatgpt-image-profile');
     platforms['chatgpt-image'] = [{
       platform: 'chatgpt-image', index: 1, nickname: a,
-      sessionDir: dir, ready: isLoggedIn(dir, 'chatgpt-image'),
+      sessionDir: dir, ready: isKnownLoggedOut('chatgpt-image', a) ? false : isLoggedIn(dir, 'chatgpt-image'),
     }];
   }
 
