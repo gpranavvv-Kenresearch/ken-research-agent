@@ -145,7 +145,15 @@ export async function postToFacebook(
           (href.includes('/posts/') || href.includes('story_fbid') || href.includes('/permalink/')) &&
           href.includes('facebook.com')
         ) {
-          return href.split('?')[0]; // strip query params
+          // permalink.php links carry the actual post identifier in the QUERY
+          // STRING (?story_fbid=...&id=...), not the path -- blindly stripping
+          // everything after "?" (safe for /posts/<id> and /permalink/<id>,
+          // where the id lives in the path) left a bare, useless
+          // "facebook.com/permalink.php" for every permalink.php post.
+          // Confirmed live (hritika, 2026-09-07): posted successfully, saved
+          // URL was just "https://www.facebook.com/permalink.php".
+          if (href.includes('permalink.php')) return href;
+          return href.split('?')[0]; // strip tracking params on /posts/ and /permalink/ paths
         }
       }
       return '';
