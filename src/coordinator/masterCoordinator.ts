@@ -1987,6 +1987,17 @@ async function postToCalisthenicsAccount(
       htmlContent,
       seedKeyword
     });
+    if (postResult.success) {
+      recordSessionState('calisthenics', accountName, true);
+    } else if (/timeout|title.*(not found|not writable)|not logged in|sign_?in/i.test(String(postResult.error || ''))) {
+      // login.ts's own "already logged in" check is a homepage URL/cookie
+      // heuristic -- it can say yes while the account has actually lost
+      // access to this specific space, which only shows up here: the
+      // composer never loads and every selector wait times out. That is a
+      // far more reliable "not really logged in" signal than the heuristic,
+      // so it overrides the dashboard's cookie-based guess.
+      recordSessionState('calisthenics', accountName, false, postResult.error);
+    }
     return {
       success: postResult.success ?? false,
       postUrl: postResult.postUrl,
