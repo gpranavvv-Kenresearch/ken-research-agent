@@ -924,12 +924,23 @@ export async function claimNextBlogSlot(platformKey: string): Promise<SheetRow |
 }
 
 /** Loops claimNextBlogSlot up to `limit` times, stopping early once no slot is available.
- * Every platform goes through the shared 2-slot model: claim a row, take one of
- * its 2 open slots, move to the next row once both are taken. Over many platform
- * calls this spreads posting across rows (2 platforms/row) instead of every
- * platform converging on the same row — this is the deliberate design, not a
- * per-platform independent picker. */
+ * Schema-aware per sheet: sheets that HAVE "Blog Platform 1"/"Blog Platform 2"
+ * columns use the shared 2-slot model (claim a row, take one of its 2 open
+ * slots — spreads posting across rows instead of every platform converging on
+ * the same row). Sheets that don't have those columns but DO have this
+ * platform's own Status/URL columns (e.g. "Notion Status") fall back to the
+ * column-wise picker instead — forcing the shared model onto a sheet that
+ * never had those columns silently breaks every platform ("no content to
+ * post" even with real content sitting in its own columns), which is exactly
+ * what happened to the local Vishal sheet after this was made shared-only. */
 async function claimNextBlogSlots(platformKey: string, limit: number): Promise<SheetRow[]> {
+  const sheets = await getSheetsClient();
+  const cfg = getSheetConfig('blog');
+  const colMap = await getColumnMap(sheets, cfg.id, cfg.name);
+  const hasSharedSlotCols = col(colMap, ...BLOG_PLATFORM1_NAMES) !== undefined && col(colMap, ...BLOG_PLATFORM2_NAMES) !== undefined;
+  if (!hasSharedSlotCols && BLOG_PLATFORM_COLS[platformKey] && col(colMap, ...BLOG_PLATFORM_COLS[platformKey].status) !== undefined) {
+    return pickBlogRowsForPlatform(platformKey, limit);
+  }
   const results: SheetRow[] = [];
   for (let i = 0; i < limit; i++) {
     const claimed = await claimNextBlogSlot(platformKey);
