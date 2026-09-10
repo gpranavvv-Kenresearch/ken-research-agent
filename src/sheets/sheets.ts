@@ -421,7 +421,7 @@ function mapRow(row: string[], colMap: ColMap, rowIndex: number, sheetType: Shee
     blogStatus:     g(colMap, 'Blog Status', 'blog status'),
     blogError:      g(colMap, 'Blog Error', 'blog error'),
     blogBatch:      g(colMap, 'Blog Batch', 'blog batch'),
-    lastPostedBlog: g(colMap, 'Last Posted Blog', 'lastPostedBlog', 'lastpostedblog'),
+    lastPostedBlog: g(colMap, 'Last Posted Blog Platform 1', 'Last Posted Blog', 'lastPostedBlog', 'lastpostedblog'),
     // Result columns
     messageStatus:   g(colMap, 'Message Status', 'message status'),
     sanityIssues:    g(colMap, 'Sanity Issues', 'sanity issues'),
@@ -745,7 +745,11 @@ const BLOG_URL2_NAMES = ['Blog URL 2', 'blog url 2'];
 const BLOG_STATUS_NAMES = ['Blog Status', 'blog status'];
 const BLOG_ERROR_NAMES = ['Blog Error', 'blog error'];
 const BLOG_BATCH_NAMES = ['Blog Batch', 'blog batch'];
-const BLOG_LASTPOSTED_NAMES = ['Last Posted Blog', 'lastPostedBlog', 'lastpostedblog'];
+// Per-slot last-posted columns — the live sheet has "Last Posted Blog Platform 1/2",
+// NOT a plain "Last Posted Blog" column, so that generic name never matched and this
+// timestamp silently never got written for the shared-slot model.
+const BLOG_LASTPOSTED1_NAMES = ['Last Posted Blog Platform 1', 'Last Posted Blog', 'lastPostedBlog', 'lastpostedblog'];
+const BLOG_LASTPOSTED2_NAMES = ['Last Posted Blog Platform 2', 'Last Posted Blog', 'lastPostedBlog', 'lastpostedblog'];
 
 // ── Column-wise blog posting (per-platform Status/URL columns) ──────────────
 // The 2-slot model below shares two columns per row across all platforms. This
@@ -1002,6 +1006,7 @@ async function saveBlogSlotResult(
   const today = nowStamp();
 
   let liveStatus = '', liveError = '', liveLastPosted = '';
+  const lastPostedNames = slot === 1 ? BLOG_LASTPOSTED1_NAMES : BLOG_LASTPOSTED2_NAMES;
   try {
     const liveRes = await sheets.spreadsheets.values.get({
       spreadsheetId: sheetConfig.id,
@@ -1010,7 +1015,7 @@ async function saveBlogSlotResult(
     const liveRow: string[] = liveRes.data.values?.[0] ?? [];
     const statusIdx = col(colMap, ...BLOG_STATUS_NAMES);
     const errorIdx = col(colMap, ...BLOG_ERROR_NAMES);
-    const lastPostedIdx = col(colMap, ...BLOG_LASTPOSTED_NAMES);
+    const lastPostedIdx = col(colMap, ...lastPostedNames);
     if (statusIdx !== undefined) liveStatus = (liveRow[statusIdx] ?? '').trim();
     if (errorIdx !== undefined) liveError = (liveRow[errorIdx] ?? '').trim();
     if (lastPostedIdx !== undefined) liveLastPosted = (liveRow[lastPostedIdx] ?? '').trim();
@@ -1030,7 +1035,7 @@ async function saveBlogSlotResult(
     { names: BLOG_STATUS_NAMES, value: formatSlotState(statusState) },
     { names: BLOG_ERROR_NAMES, value: formatSlotState(errorState) },
     { names: BLOG_BATCH_NAMES, value: result.batch ?? '' },
-    { names: BLOG_LASTPOSTED_NAMES, value: newLastPosted },
+    { names: lastPostedNames, value: newLastPosted },
   ], sheetConfig.name);
 
   await batchWrite(sheets, data, sheetConfig.id);

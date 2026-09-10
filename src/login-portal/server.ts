@@ -156,7 +156,11 @@ app.post('/api/agent/:agent/login', requireAgentToken, async (req: Request, res:
       return;
     }
     if (err?.message === 'BOX_BUSY') {
-      res.status(503).json({ error: 'a posting session is running right now — try again in a few minutes' });
+      // Box-wide slot cap (MAX_BROWSERS) is shared by posting AND concurrent
+      // logins — it's just as likely to be several people logging in at once
+      // as it is an actual posting run. The old message named only the posting
+      // case, which was actively misleading during bulk onboarding.
+      res.status(503).json({ error: `too many logins/posting sessions running at once (max ${process.env.MAX_BROWSERS || 1}) — wait for one to finish and try again` });
       return;
     }
     console.error('[login-api] start-login failed:', err);

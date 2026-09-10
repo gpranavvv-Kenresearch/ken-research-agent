@@ -10,7 +10,10 @@
  *
  * Usage:
  *   DISPLAY=:99 npx tsx scripts/run-blog-generator.ts --name abhinav --limit 3
- *   [--loop] [--interval 300] [--format-override seo-li|custom] [--sample-file path] [--image-prompt 1|2]
+ *   [--format-override seo-li|custom] [--sample-file path] [--image-prompt 1|2]
+ *
+ * Runs one pass and exits — no built-in loop. For continuous generation, an
+ * external process re-invokes this on a schedule (see nightly-blog-rotation.ts).
  */
 
 import { spawn, spawnSync } from 'child_process';
@@ -53,8 +56,6 @@ function arg(flag: string): string | undefined {
   return i !== -1 ? process.argv[i + 1] : undefined;
 }
 const NAME = (arg('--name') || process.env.WORKER_NAME || '').toLowerCase();
-const LOOP = process.argv.includes('--loop');
-const INTERVAL_S = Number(arg('--interval') || 300);
 const LIMIT = Number(arg('--limit') || 3);
 // Use the repo's venv Python (has google-auth/requests); fall back to system python3,
 // or plain "python" on Windows, where "python3" is often just a broken Microsoft
@@ -507,11 +508,8 @@ async function pass() {
 }
 
 async function main() {
-  console.log(`Starting blog generation for "${NAME}"${LOOP ? ` (checking every ${INTERVAL_S}s)` : ''}…`);
-  do {
-    try { await pass(); } catch (e) { console.log('⚠ Something went wrong this run:', e instanceof Error ? e.message : e); }
-    if (LOOP) await new Promise((r) => setTimeout(r, INTERVAL_S * 1000));
-  } while (LOOP);
+  console.log(`Starting blog generation for "${NAME}"…`);
+  await pass();
 }
 
 main();

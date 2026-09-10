@@ -1,4 +1,9 @@
-﻿import { chromium } from 'playwright';
+﻿/**
+ * Usage:
+ *   npx tsx src/tools/checkFbAccounts.ts          # all accounts
+ *   npx tsx src/tools/checkFbAccounts.ts vishal    # one nickname
+ */
+import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 
@@ -6,10 +11,17 @@ const accounts = JSON.parse(fs.readFileSync('.accounts/facebook-accounts.json', 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const CHROME_PATH = process.env.CHROME_PATH || (process.platform === 'win32' ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : undefined);
 
+const filterName = (process.argv[2] || '').trim().toLowerCase();
+const toCheck = filterName ? accounts.filter((a: any) => a.nickname?.toLowerCase() === filterName) : accounts;
+if (filterName && toCheck.length === 0) {
+  console.log(`No account found with nickname "${filterName}"`);
+  process.exit(1);
+}
+
 (async () => {
   const results: { nickname: string; email: string; status: string }[] = [];
 
-  for (const acc of accounts) {
+  for (const acc of toCheck) {
     const sessionDir = path.resolve(acc.sessionDir);
     const hasSession = fs.existsSync(sessionDir) && fs.readdirSync(sessionDir).length > 0;
 
@@ -55,9 +67,11 @@ const CHROME_PATH = process.env.CHROME_PATH || (process.platform === 'win32' ? '
     }
   }
 
-  console.log('\n--- SUMMARY ---');
-  const active = results.filter(r => r.status.includes('Active'));
-  const bad = results.filter(r => !r.status.includes('Active'));
-  console.log(`✅ Active (${active.length}): ${active.map(r => r.nickname).join(', ')}`);
-  console.log(`❌ Issues (${bad.length}): ${bad.map(r => `${r.nickname}(${r.status.trim()})`).join(', ')}`);
+  if (!filterName) {
+    console.log('\n--- SUMMARY ---');
+    const active = results.filter(r => r.status.includes('Active'));
+    const bad = results.filter(r => !r.status.includes('Active'));
+    console.log(`✅ Active (${active.length}): ${active.map(r => r.nickname).join(', ')}`);
+    console.log(`❌ Issues (${bad.length}): ${bad.map(r => `${r.nickname}(${r.status.trim()})`).join(', ')}`);
+  }
 })();
