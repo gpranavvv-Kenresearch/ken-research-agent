@@ -17,6 +17,7 @@ import { execFileSync } from 'child_process';
 import { PLATFORMS, PLATFORM_KEYS } from './config.js';
 import { isDevtoLoggedInCached } from './devtoDeepCheck.js';
 import { isMediumLoggedInCached } from './mediumDeepCheck.js';
+import { isPdfhostLoggedInCached } from './pdfhostDeepCheck.js';
 import { isKnownLoggedOut } from './sessionVerification.js';
 
 /**
@@ -127,6 +128,7 @@ export function isLoggedIn(dir: string, platform: string): boolean {
   const cookieResult = cookieBasedLoggedIn(dir, platform);
   if (platform === 'devto') return isDevtoLoggedInCached(dir, cookieResult);
   if (platform === 'medium') return isMediumLoggedInCached(dir, cookieResult);
+  if (platform === 'pdfhost') return isPdfhostLoggedInCached(dir, cookieResult);
   return cookieResult;
 }
 

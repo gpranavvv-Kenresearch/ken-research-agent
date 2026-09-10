@@ -52,10 +52,10 @@ export const PLATFORMS: Record<string, PortalPlatform> = {
   note:         { key: 'note',         label: 'Note',         group: 'blog', loginUrl: 'https://note.com/login',         homeUrl: 'https://note.com/',                        registryFile: '.accounts/accounts-note.json',         authCookies: ['_note_session_v5', 'note_gql_web_session'] },
   calisthenics: { key: 'calisthenics', label: 'Calisthenics', group: 'blog', loginUrl: 'https://calisthenics.mn.co/',    homeUrl: 'https://calisthenics.mn.co/',              registryFile: '.accounts/accounts-calisthenics.json', authCookies: ['_session_id'] },
   linkmate:     { key: 'linkmate',     label: 'Linkmate',     group: 'blog', loginUrl: 'https://linkmate.mn.co/',        homeUrl: 'https://linkmate.mn.co/',                  registryFile: '.accounts/accounts-linkmate.json',     authCookies: ['_session_id'] },
-  // authCookies unconfirmed (coda.io's actual session cookie name hasn't been
-  // inspected live yet) — login itself works regardless per this file's own
-  // note above; only the "ready" badge accuracy is approximate until confirmed.
-  coda:         { key: 'coda',         label: 'Coda',         group: 'blog', loginUrl: 'https://coda.io/login',          homeUrl: 'https://coda.io/docs',                     registryFile: '.accounts/accounts-coda.json',         authCookies: ['coda_session', 'session'] },
+  // Confirmed live against 3 real logged-in meenakshi Coda profiles — the
+  // guessed 'coda_session'/'session' never matched anything real, so the
+  // badge always read "not logged in" regardless of true state.
+  coda:         { key: 'coda',         label: 'Coda',         group: 'blog', loginUrl: 'https://coda.io/login',          homeUrl: 'https://coda.io/docs',                     registryFile: '.accounts/accounts-coda.json',         authCookies: ['new_session', 'prod_origin_session', 'session_data'] },
 
   // ── SBM (social bookmarking — SBM/PPT integration, 2026-08-20) ──
   // authCookies are unconfirmed best guesses (no live cookie-DB inspection yet
@@ -63,16 +63,23 @@ export const PLATFORMS: Record<string, PortalPlatform> = {
   // always works regardless of badge accuracy, only the "ready" badge may lag
   // until someone confirms the real cookie name live.
   pearltrees: { key: 'pearltrees', label: 'Pearltrees', group: 'sbm', loginUrl: 'https://www.pearltrees.com/', homeUrl: 'https://www.pearltrees.com/', registryFile: '.accounts/accounts-pearltrees.json', authCookies: ['PHPSESSID'] },
-  raindrop:   { key: 'raindrop',   label: 'Raindrop',   group: 'sbm', loginUrl: 'https://app.raindrop.io/login', homeUrl: 'https://app.raindrop.io/my/0', registryFile: '.accounts/accounts-raindrop.json', authCookies: ['_raindrop_session', 'session'] },
+  // Confirmed live: Raindrop's real session cookie is Express's default
+  // 'connect.sid' — the guessed '_raindrop_session' never existed.
+  raindrop:   { key: 'raindrop',   label: 'Raindrop',   group: 'sbm', loginUrl: 'https://app.raindrop.io/login', homeUrl: 'https://app.raindrop.io/my/0', registryFile: '.accounts/accounts-raindrop.json', authCookies: ['connect.sid'] },
   hatena:     { key: 'hatena',     label: 'Hatena',      group: 'sbm', loginUrl: 'https://www.hatena.ne.jp/login?location=https%3A%2F%2Fb.hatena.ne.jp%2F', homeUrl: 'https://b.hatena.ne.jp/', registryFile: '.accounts/accounts-hatena.json', authCookies: ['rk', 'b_ck1'] },
 
   // ── Document / PPT-PDF (SBM/PPT integration, 2026-08-20) ──
   // Content is generated from blogContent (PDF) or the blog's slide outline
   // (PPTX for SlideShare) rather than typed by hand — see contentConverter.ts /
   // pptGenerator.ts. authCookies unconfirmed, same caveat as above.
+  // PDFHost issues NO distinguishing first-party session cookie at all — a real
+  // logged-in profile's cookie DB has only _ga/_ga_* analytics for .pdfhost.io.
+  // No cookie name can ever fix this; routed through pdfhostDeepCheck.ts (real
+  // page-load check) in sessionResolver.ts instead, same as Medium/Dev.to.
   pdfhost:     { key: 'pdfhost',     label: 'PdfHost',     group: 'document', loginUrl: 'https://pdfhost.io/login',         homeUrl: 'https://pdfhost.io/dashboard',        registryFile: '.accounts/accounts-pdfhost.json',     authCookies: ['pdfhost_session', 'laravel_session'] },
   fliphtml5:   { key: 'fliphtml5',   label: 'FlipHTML5',   group: 'document', loginUrl: 'https://fliphtml5.com/login.php', homeUrl: 'https://fliphtml5.com/app/',          registryFile: '.accounts/accounts-fliphtml5.json',   authCookies: ['PHPSESSID'] },
-  fourshared:  { key: 'fourshared',  label: '4shared',     group: 'document', loginUrl: 'https://www.4shared.com/web/login', homeUrl: 'https://www.4shared.com/web/account/myFiles', registryFile: '.accounts/accounts-fourshared.json', authCookies: ['JSESSIONID'] },
+  // Confirmed live: the real cookie is 'WWW_JSESSIONID', not plain 'JSESSIONID'.
+  fourshared:  { key: 'fourshared',  label: '4shared',     group: 'document', loginUrl: 'https://www.4shared.com/web/login', homeUrl: 'https://www.4shared.com/web/account/myFiles', registryFile: '.accounts/accounts-fourshared.json', authCookies: ['WWW_JSESSIONID'] },
   issuu:       { key: 'issuu',       label: 'Issuu',       group: 'document', loginUrl: 'https://issuu.com/home/login',    homeUrl: 'https://issuu.com/publish',           registryFile: '.accounts/accounts-issuu.json',       authCookies: ['connect.sid'] },
 
   // ── Engine (blog generation, not a posting target) ──
