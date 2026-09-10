@@ -409,10 +409,38 @@ ${pastTweetsSection}`;
     finalTweet = fixed.includes(utmUrl) ? fixed : `${finalTweet}\n${utmUrl}`;
   }
 
+  // Hard limit: the prompt asks for <=230 chars of text (X's URLs
+  // collapse to a fixed t.co length, so the URL itself is excluded), but
+  // the LLM doesn't always comply -- confirmed live (vijay, 2026-09-07): a
+  // generated tweet came back 25 chars over X's real composer limit and
+  // the whole post just failed with TWEET_OVER_LIMIT, no regeneration,
+  // wasting that row's only attempt. This truncates the TEXT PORTION ONLY
+  // (never the URL) as a last-resort safety net so a tweet can never be
+  // sent over limit, cutting at the nearest word boundary.
+  finalTweet = hardCapTweetText(finalTweet, utmUrl);
+
   // Save to history so future calls for the same URL avoid this angle
   saveTweetToHistory(params.url, finalTweet);
 
   return finalTweet;
+}
+
+/** Hard-cap the non-URL text of a tweet so the total can never exceed X's
+ * real limit, regardless of what the LLM produced. Never touches the URL
+ * itself (X collapses any link to a fixed-length t.co URL, so shortening
+ * it would be pointless and would break the tracked link). Cuts at the
+ * last whitespace before the limit so a word is never split mid-way. */
+const TWEET_TEXT_HARD_LIMIT = 220; // stays comfortably under 280 alongside a URL + 2 hashtags
+function hardCapTweetText(tweet: string, url: string): string {
+  if (!tweet.includes(url)) return tweet; // URL missing entirely -- leave for the caller's own checks
+  const idx = tweet.indexOf(url);
+  const before = tweet.slice(0, idx);
+  const after = tweet.slice(idx + url.length);
+  if (before.length <= TWEET_TEXT_HARD_LIMIT) return tweet;
+  let cut = before.slice(0, TWEET_TEXT_HARD_LIMIT);
+  const lastSpace = cut.lastIndexOf(' ');
+  if (lastSpace > TWEET_TEXT_HARD_LIMIT * 0.6) cut = cut.slice(0, lastSpace);
+  return `${cut.trimEnd()} ${url}${after}`;
 }
 
 /**

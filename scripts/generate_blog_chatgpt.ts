@@ -25,6 +25,7 @@ import path from 'path';
 import os from 'os';
 import { injectUTM, UTM_PARAMS } from '../src/utils/utm.js';
 import { dismissBlockingModals, dismissRateLimitModalByEnter } from './chatgpt_composer.js';
+import { recordSessionState } from '../src/login-portal/sessionVerification.js';
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -119,9 +120,10 @@ Do not present an estimate or forecast as a completed fact.
 Do not invent first-hand experience, analyst credentials, customer stories, or expert quotations.
 If a material claim cannot be verified, omit it or use narrower qualitative wording.
 Before concluding the primary report cannot be accessed, retry opening REPORT_URL at least 3 times across a few seconds apart — a single failed load is very often a transient network hiccup, a slow first response, or a temporary bot-check, not a real block. Also try opening the bare domain (kenresearch.com) and re-navigating from there if the direct URL fails. Only after multiple genuine, consistent failures to load ANY page on the domain — or after successfully loading the page and finding its content genuinely does not match the requested market/report — is this a real block.
-If, after exhausting those retries, the primary report truly cannot be accessed or its core market identity cannot be verified, return only: RESEARCH BLOCKED: Primary report could not be verified.
-Survey/service-type pages (e.g. a patient-feedback-survey or advisory-preference-study page instead of a standard sized-market report) will genuinely have no verifiable market-size/CAGR data of their own — that is not the same failure as an inaccessible page. Before blocking on one of these, widen the web search to the closest adjacent verifiable market (e.g. a patient feedback survey page -> the patient experience management / healthcare CX market) and write the article around that verified adjacent market's real data, presented as Ken Research's own market intelligence exactly as normal. Never invent numbers for the adjacent market either — only return RESEARCH BLOCKED if the widened search also fails to turn up verifiable data.
-KEN RESEARCH BRAND AUTHORITY RULES (MANDATORY — the finished article is run through an automated code validator that checks these exact rules and rejects the article if any fail)
+If, after exhausting those retries, the primary report truly cannot be accessed or its core market identity cannot be verified, do not stop or refuse. Instead, search the open web for the same market (REPORT_TITLE, its geography, and its core scope) and assemble the DATA_SPINE from other reputable, live sources — industry associations, government/regulatory statistics, company filings, reputable trade press. Still write and frame the article as Ken Research's own market intelligence throughout (e.g. "Ken Research estimates...", "According to Ken Research..."), exactly as if the primary report page had loaded normally, using the best-verified web-sourced figures as that estimate. Never name or link to a competing market-research firm (Mordor Intelligence, IMARC, MarketsandMarkets, Technavio, Precedence Research, Future Market Insights, Renub Research, or similar) as a source — if a figure's only available attribution is one of those firms, use the figure without naming its source, or omit that specific claim rather than invent a number. Only return RESEARCH BLOCKED: Primary report could not be verified if the web search itself also fails to turn up any usable, verifiable data for this market — this should be rare.
+If REPORT_URL or REPORT_TITLE is a survey, feedback study, methodology page, or service offering rather than a standard market-sizing report, this DOES NOT reduce the requirement for verified market data — widen the web search instead: find verified market-size, CAGR, or forecast data for the closest adjacent, verifiable market or industry (e.g. for a patient feedback survey, search for the patient experience management market, healthcare CX market, or hospital patient satisfaction software market; for any other survey/service page, identify and search the market category it operationally belongs to). Present that verified adjacent-market data exactly as Ken Research's own market intelligence throughout (e.g. "Ken Research estimates...", "According to Ken Research..."), the same as for a standard report. Every figure must still come from a real, verifiable source — never invent one. Only return RESEARCH BLOCKED if this widened search also fails to turn up any usable, verifiable data for the market or its closest adjacent category.
+GENERAL FALLBACK (applies to every rule in this prompt): if any source, page or link cannot be opened or verified — the report page, a Ken Research cluster page, an official external source — that never stops the article. Write with what you could verify, omit or soften what you could not, never invent a figure or a URL, and never return a refusal message of any kind. The only acceptable non-article output is RESEARCH BLOCKED, and only when even the widened web search finds no usable data at all.
+KEN RESEARCH BRAND AUTHORITY RULES (MANDATORY — the finished article is run through an automated code validator that checks these exact rules and flags the article for review if any are missed, so follow them closely; never withhold the article over them)
 Title: the H1 title must naturally contain the words "Ken Research".
 Opening paragraph: paragraph 1 must (a) mention "Ken Research", (b) use an approved authority-context phrase from the approved list below in the same sentence, and (c) hyperlink that first Ken Research mention to a kenresearch.com destination (homepage or the primary report).
 Approved expressions — use only these when referring to Ken Research as a source: "According to Ken Research analysis", "Ken Research market assessment indicates", "The Ken Research study highlights", "Ken Research estimates".
@@ -274,7 +276,7 @@ Distinguish largest from fastest-growing.
 Explain buyer behaviour and why the mix shift matters.
 Do not list every segment.
 H2 4: Competition, Regulation and Entry Barriers
-Use two or three H3 subsections.
+Use two or three H3 subsections. Same H3-phrasing freedom as above.
 Discuss only verified participants and treat them as unranked unless shares or rankings are sourced.
 Explain the real basis of competition: access, distribution, service, pricing, technology, procurement, compliance, or customer relationships.
 Explain the most material regulation, policy, funding rule, trade condition, or barrier to entry using an official source.
@@ -318,17 +320,17 @@ The final non-whitespace characters in ARTICLE_HTML mode must be </p>.
 Count opening and closing <p>, <h1>, <h2>, <h3>, <ul>, <li>, <a>, <strong>, and <em> tags. Every opened tag must close.
 Do not return a partial article under any circumstance.
 LINK ARCHITECTURE
-The finished article must contain 12-14 Ken Research link placements, separate from official external citations.
+The finished article should contain 12-14 Ken Research link placements when enough destinations can be verified, separate from official external citations. Fewer verified links is acceptable; invented links never are.
 Required Ken Research distribution:
 Ken Research homepage: exactly one placement in the opening
 Canonical primary report: exactly three placements in the opening, CTA 1, and Sources paragraph
 Ken Research Talk to Us: exactly one placement in CTA 2, using either https://www.kenresearch.com/book-a-discovery-call or https://www.kenresearch.com/custom-form (with UTM) — never any other "talk to us"/"contact"/"custom form" URL
 Frequently Asked Questions: exactly two placements, one each inside two different FAQ answers
-Relevant Ken Research cluster pages: five to seven placements using five to seven unique destinations
-Total Ken Research placements: exactly 12-14
-Total unique Ken Research destinations: at least eight
+Relevant Ken Research cluster pages: target five to seven placements using five to seven unique destinations — use as many as can actually be verified
+Total Ken Research placements: target 12-14
+Total unique Ken Research destinations: target at least eight
 Use one or two unique official government, regulator, national-statistics, or public-agency links, with two preferred when two strong and directly relevant sources exist. Never use more than two official external citations. These external citations do not count toward the 12-14 Ken Research placements.
-After drafting, count all official external <a> tags. The article passes only when the count is one or two; zero or more than two fails validation.
+Aim for one or two official external citations and never more than two. If no official government, regulator or national-statistics page can be verified for this market, write the article with zero external citations rather than inventing one or refusing — attribute the relevant claims to Ken Research analysis instead.
 Distribute internal links across the article:
 Opening: homepage and primary report
 Market Definition and Evidence Snapshot: one relevant cluster page
@@ -339,7 +341,7 @@ Decision Framework and Market Outlook: one or two relevant cluster pages plus Ta
 Frequently Asked Questions: two links, one each inside two different FAQ answers (primary report or a relevant cluster page)
 Methodology and Sources: primary report
 Prioritize actual related Ken Research report pages. A verified sector, service, report-store category, or Competition Benchmarking page may be used only when it directly fits the surrounding discussion. Never use a generic page merely to reach the count.
-If five unique relevant cluster destinations cannot be verified, continue researching. Never guess a URL or silently publish below the internal-link target. If the minimum cannot be satisfied, return only: LINK VALIDATION BLOCKED: Fewer than 12 verified Ken Research link placements.
+If five unique relevant cluster destinations cannot be verified after a genuine search, do not stop and do not refuse. Write the complete article using every Ken Research destination you COULD verify — the homepage, the primary report and the Talk to Us URL are always available, so at minimum those three appear — and simply include fewer cluster links. Never guess or invent a URL to reach a count. Never return "LINK VALIDATION BLOCKED" or any other refusal because of link count: a complete article with fewer verified links is always the correct output; a refusal never is.
 Competitor market-research domains are prohibited.
 Link quality
 Use concise descriptive anchor text, not "click here," "read more," naked URLs, or repeated exact-match anchors.
@@ -393,7 +395,7 @@ Do not JSON-escape the HTML.
 Allowed tags:
 <img>, <h1>, <h2>, <h3>, <p>, <ul>, <li>, <a>, <strong>, <em>
 Do not output Markdown, code fences, full HTML document wrappers, meta tags, CSS blocks, JavaScript, schema, comments, tables, footnotes, internal ledgers, or commentary.
-The response must begin with < and end with the final </p> from the completed Disclaimer paragraph.
+After the single "Description:" line (see FINAL RESPONSE), the HTML fragment must begin with < and end with the final </p> from the completed Disclaimer paragraph.
 CMS_PACKAGE
 Return one valid JSON object with exactly these keys:
 seo
@@ -455,9 +457,9 @@ Visible article length is 1,450-1,600 words.
 Links and images
 Every link loads, matches its destination, and uses descriptive anchor text.
 No competitor market-research link exists.
-The article contains exactly 12-14 Ken Research link placements (including exactly two inside the FAQ section) and at least eight unique Ken Research destinations.
+The article contains every Ken Research link that could be verified, up to 12-14 placements (the two FAQ links included), and no invented URLs.
 The primary report appears exactly three times; homepage and Talk to Us appear exactly once each.
-Five to seven unique verified Ken Research cluster destinations are used contextually.
+Verified Ken Research cluster destinations (ideally five to seven) are used contextually.
 One or two unique official external citations are present and counted separately; the count never exceeds two.
 Every Ken Research href ends with exactly ?utm_source=linkedin-pulse&utm_medium=Referral&utm_campaign=Automation — no &amp; entities, no extra "?" or "&", no casing changes.
 Official external links contain no UTM parameters.
@@ -534,9 +536,10 @@ Do not present an estimate or forecast as a completed fact.
 Do not invent first-hand experience, analyst credentials, customer stories, or expert quotations.
 If a material claim cannot be verified, omit it or use narrower qualitative wording.
 Before concluding the primary report cannot be accessed, retry opening REPORT_URL at least 3 times across a few seconds apart — a single failed load is very often a transient network hiccup, a slow first response, or a temporary bot-check, not a real block. Also try opening the bare domain (kenresearch.com) and re-navigating from there if the direct URL fails. Only after multiple genuine, consistent failures to load ANY page on the domain — or after successfully loading the page and finding its content genuinely does not match the requested market/report — is this a real block.
-If, after exhausting those retries, the primary report truly cannot be accessed or its core market identity cannot be verified, return only: RESEARCH BLOCKED: Primary report could not be verified.
-Survey/service-type pages (e.g. a patient-feedback-survey or advisory-preference-study page instead of a standard sized-market report) will genuinely have no verifiable market-size/CAGR data of their own — that is not the same failure as an inaccessible page. Before blocking on one of these, widen the web search to the closest adjacent verifiable market (e.g. a patient feedback survey page -> the patient experience management / healthcare CX market) and write the article around that verified adjacent market's real data, presented as Ken Research's own market intelligence exactly as normal. Never invent numbers for the adjacent market either — only return RESEARCH BLOCKED if the widened search also fails to turn up verifiable data.
-KEN RESEARCH BRAND AUTHORITY RULES (MANDATORY — the finished article is run through an automated code validator that checks these exact rules and rejects the article if any fail)
+If, after exhausting those retries, the primary report truly cannot be accessed or its core market identity cannot be verified, do not stop or refuse. Instead, search the open web for the same market (REPORT_TITLE, its geography, and its core scope) and assemble the DATA_SPINE from other reputable, live sources — industry associations, government/regulatory statistics, company filings, reputable trade press. Still write and frame the article as Ken Research's own market intelligence throughout (e.g. "Ken Research estimates...", "According to Ken Research..."), exactly as if the primary report page had loaded normally, using the best-verified web-sourced figures as that estimate. Never name or link to a competing market-research firm (Mordor Intelligence, IMARC, MarketsandMarkets, Technavio, Precedence Research, Future Market Insights, Renub Research, or similar) as a source — if a figure's only available attribution is one of those firms, use the figure without naming its source, or omit that specific claim rather than invent a number. Only return RESEARCH BLOCKED: Primary report could not be verified if the web search itself also fails to turn up any usable, verifiable data for this market — this should be rare.
+If REPORT_URL or REPORT_TITLE is a survey, feedback study, methodology page, or service offering rather than a standard market-sizing report, this DOES NOT reduce the requirement for verified market data — widen the web search instead: find verified market-size, CAGR, or forecast data for the closest adjacent, verifiable market or industry (e.g. for a patient feedback survey, search for the patient experience management market, healthcare CX market, or hospital patient satisfaction software market; for any other survey/service page, identify and search the market category it operationally belongs to). Present that verified adjacent-market data exactly as Ken Research's own market intelligence throughout (e.g. "Ken Research estimates...", "According to Ken Research..."), the same as for a standard report. Every figure must still come from a real, verifiable source — never invent one. Only return RESEARCH BLOCKED if this widened search also fails to turn up any usable, verifiable data for the market or its closest adjacent category.
+GENERAL FALLBACK (applies to every rule in this prompt): if any source, page or link cannot be opened or verified — the report page, a Ken Research cluster page, an official external source — that never stops the article. Write with what you could verify, omit or soften what you could not, never invent a figure or a URL, and never return a refusal message of any kind. The only acceptable non-article output is RESEARCH BLOCKED, and only when even the widened web search finds no usable data at all.
+KEN RESEARCH BRAND AUTHORITY RULES (MANDATORY — the finished article is run through an automated code validator that checks these exact rules and flags the article for review if any are missed, so follow them closely; never withhold the article over them)
 Title: the H1 title must naturally contain the words "Ken Research".
 Opening paragraph: paragraph 1 must (a) mention "Ken Research", (b) use an approved authority-context phrase from the approved list below in the same sentence, and (c) hyperlink that first Ken Research mention to a kenresearch.com destination (homepage or the primary report).
 Approved expressions — use only these when referring to Ken Research as a source: "According to Ken Research analysis", "Ken Research market assessment indicates", "The Ken Research study highlights", "Ken Research estimates".
@@ -689,7 +692,7 @@ Distinguish largest from fastest-growing.
 Explain buyer behaviour and why the mix shift matters.
 Do not list every segment.
 H2 4: Competition, Regulation and Entry Barriers
-Use two or three H3 subsections.
+Use two or three H3 subsections. Same H3-phrasing freedom as above.
 Discuss only verified participants and treat them as unranked unless shares or rankings are sourced.
 Explain the real basis of competition: access, distribution, service, pricing, technology, procurement, compliance, or customer relationships.
 Explain the most material regulation, policy, funding rule, trade condition, or barrier to entry using an official source.
@@ -733,17 +736,17 @@ The final non-whitespace characters in ARTICLE_HTML mode must be </p>.
 Count opening and closing <p>, <h1>, <h2>, <h3>, <ul>, <li>, <a>, <strong>, and <em> tags. Every opened tag must close.
 Do not return a partial article under any circumstance.
 LINK ARCHITECTURE
-The finished article must contain 12-14 Ken Research link placements, separate from official external citations.
+The finished article should contain 12-14 Ken Research link placements when enough destinations can be verified, separate from official external citations. Fewer verified links is acceptable; invented links never are.
 Required Ken Research distribution:
 Ken Research homepage: exactly one placement in the opening
 Canonical primary report: exactly three placements in the opening, CTA 1, and Sources paragraph
 Ken Research Talk to Us: exactly one placement in CTA 2, using either https://www.kenresearch.com/book-a-discovery-call or https://www.kenresearch.com/custom-form (with UTM) — never any other "talk to us"/"contact"/"custom form" URL
 Frequently Asked Questions: exactly two placements, one each inside two different FAQ answers
-Relevant Ken Research cluster pages: five to seven placements using five to seven unique destinations
-Total Ken Research placements: exactly 12-14
-Total unique Ken Research destinations: at least eight
+Relevant Ken Research cluster pages: target five to seven placements using five to seven unique destinations — use as many as can actually be verified
+Total Ken Research placements: target 12-14
+Total unique Ken Research destinations: target at least eight
 Use one or two unique official government, regulator, national-statistics, or public-agency links, with two preferred when two strong and directly relevant sources exist. Never use more than two official external citations. These external citations do not count toward the 12-14 Ken Research placements.
-After drafting, count all official external <a> tags. The article passes only when the count is one or two; zero or more than two fails validation.
+Aim for one or two official external citations and never more than two. If no official government, regulator or national-statistics page can be verified for this market, write the article with zero external citations rather than inventing one or refusing — attribute the relevant claims to Ken Research analysis instead.
 Distribute internal links across the article:
 Opening: homepage and primary report
 Market Definition and Evidence Snapshot: one relevant cluster page
@@ -754,7 +757,7 @@ Decision Framework and Market Outlook: one or two relevant cluster pages plus Ta
 Frequently Asked Questions: two links, one each inside two different FAQ answers (primary report or a relevant cluster page)
 Methodology and Sources: primary report
 Prioritize actual related Ken Research report pages. A verified sector, service, report-store category, or Competition Benchmarking page may be used only when it directly fits the surrounding discussion. Never use a generic page merely to reach the count.
-If five unique relevant cluster destinations cannot be verified, continue researching. Never guess a URL or silently publish below the internal-link target. If the minimum cannot be satisfied, return only: LINK VALIDATION BLOCKED: Fewer than 12 verified Ken Research link placements.
+If five unique relevant cluster destinations cannot be verified after a genuine search, do not stop and do not refuse. Write the complete article using every Ken Research destination you COULD verify — the homepage, the primary report and the Talk to Us URL are always available, so at minimum those three appear — and simply include fewer cluster links. Never guess or invent a URL to reach a count. Never return "LINK VALIDATION BLOCKED" or any other refusal because of link count: a complete article with fewer verified links is always the correct output; a refusal never is.
 Competitor market-research domains are prohibited.
 Link quality
 Use concise descriptive anchor text, not "click here," "read more," naked URLs, or repeated exact-match anchors.
@@ -808,7 +811,7 @@ Do not JSON-escape the HTML.
 Allowed tags:
 <img>, <h1>, <h2>, <h3>, <p>, <ul>, <li>, <a>, <strong>, <em>
 Do not output Markdown, code fences, full HTML document wrappers, meta tags, CSS blocks, JavaScript, schema, comments, tables, footnotes, internal ledgers, or commentary.
-The response must begin with < and end with the final </p> from the completed Disclaimer paragraph.
+After the single "Description:" line (see FINAL RESPONSE), the HTML fragment must begin with < and end with the final </p> from the completed Disclaimer paragraph.
 CMS_PACKAGE
 Return one valid JSON object with exactly these keys:
 seo
@@ -871,9 +874,9 @@ Visible article length is 1,450-1,600 words.
 Links and images
 Every link loads, matches its destination, and uses descriptive anchor text.
 No competitor market-research link exists.
-The article contains exactly 12-14 Ken Research link placements (including exactly two inside the FAQ section) and at least eight unique Ken Research destinations.
+The article contains every Ken Research link that could be verified, up to 12-14 placements (the two FAQ links included), and no invented URLs.
 The primary report appears exactly three times; homepage and Talk to Us appear exactly once each.
-Five to seven unique verified Ken Research cluster destinations are used contextually.
+Verified Ken Research cluster destinations (ideally five to seven) are used contextually.
 One or two unique official external citations are present and counted separately; the count never exceeds two.
 Every Ken Research href ends with exactly ?utm_source=linkedin-pulse&utm_medium=Referral&utm_campaign=Automation — no &amp; entities, no extra "?" or "&", no casing changes.
 Official external links contain no UTM parameters.
@@ -969,18 +972,23 @@ async function isLoggedIn(page: Page): Promise<boolean> {
   return false;
 }
 
-/** Wait until the assistant response finished streaming (send re-enabled, text stable). */
-async function waitForCompletion(page: Page): Promise<void> {
+/** Wait until the assistant response finished streaming (send re-enabled, text stable).
+ * `baseline` = assistant message count before our prompt was sent: only a NEWER
+ * reply counts as progress, so an old reply (or the prompt itself) can never
+ * read as "finished". */
+async function waitForCompletion(page: Page, baseline: number): Promise<void> {
   const start = Date.now();
   let goneChecks = 0;
   let lastLength = -1;
   let unchangedChecks = 0;
+  let rateLimitHits = 0;
   await page.waitForTimeout(5 * 60 * 1000); // let generation get underway (5 min) before the first check
   while (Date.now() - start < RESPONSE_TIMEOUT_MS) {
     // Always check for the rate-limit popup first — it silently stalls
     // generation, so clear it (via Enter, its default button) before reading
     // any completion signal below.
     if (await dismissRateLimitModalByEnter(page)) {
+      rateLimitHits++;
       progress('  …cleared a rate-limit popup, continuing to wait.');
     }
     // Check every 1 min: ChatGPT shows a Stop button while streaming. When the
@@ -989,8 +997,25 @@ async function waitForCompletion(page: Page): Promise<void> {
     const stopping = await page
       .locator('button[data-testid="stop-button"], button[aria-label*="Stop streaming"], button[aria-label*="Stop"]')
       .first().isVisible({ timeout: 2000 }).catch(() => false);
-    const text = await lastAssistantText(page);
+    const text = await lastAssistantText(page, baseline);
     progress(`  …checked at ${Math.round((Date.now() - start) / 60000)} min: ${stopping ? 'still writing' : 'looks finished'} (${text.length} characters so far)`);
+    // Rate-limited and still no real reply after two popups → ChatGPT is not
+    // going to answer this prompt. "No real reply" includes the short
+    // rate-limit notice ChatGPT sometimes posts AS the assistant message
+    // (~50-80 chars) — anything under 300 chars is not an article. Fail now
+    // rather than burning the remaining timeout; the caller does not retry a
+    // rate-limited row (that would just spend another prompt on a limited account).
+    // A short reply that is one of the prompt's own refusal sentences is NOT a
+    // rate limit — name it, so the turn log says what ChatGPT actually said.
+    if (/RESEARCH BLOCKED/i.test(text)) {
+      throw new Error(`RESEARCH BLOCKED: ChatGPT could not open/verify the report page for this account — reply: "${text.trim().slice(0, 120)}"`);
+    }
+    if (/LINK VALIDATION BLOCKED/i.test(text)) {
+      throw new Error(`LINK VALIDATION BLOCKED: ChatGPT refused over link count — reply: "${text.trim().slice(0, 120)}"`);
+    }
+    if (rateLimitHits >= 2 && text.length < 300 && !stopping) {
+      throw new Error(`RATE_LIMITED: ChatGPT rate limit hit and no reply produced (${text.length} chars: "${text.trim().slice(0, 80)}") — giving up on this row for now`);
+    }
     if (!stopping && text.length > 500) {
       goneChecks++;
       if (goneChecks >= 2) return; // Stop button gone for ~2 checks → done
@@ -1019,37 +1044,57 @@ async function waitForCompletion(page: Page): Promise<void> {
   }
 }
 
-async function lastAssistantText(page: Page): Promise<string> {
-  return page.evaluate(() => {
-    // Prefer the assistant message element; fall back to page text from the last
-    // "Title:" (the response marker) so extraction survives ChatGPT DOM changes.
-    const msgs = document.querySelectorAll('[data-message-author-role="assistant"]');
-    let text = msgs.length ? ((msgs[msgs.length - 1] as HTMLElement).innerText || '') : '';
-    if (text.replace(/\s/g, '').length < 100) {
-      const body = (document.body as HTMLElement).innerText || '';
-      const idx = body.lastIndexOf('Title:');
-      if (idx >= 0) text = body.slice(idx);
-    }
-    return text;
-  });
+// Phrases that occur only in the master prompt, never in a real article. Any
+// text containing one of them is the PROMPT (our own message, or the page's
+// text after ChatGPT silently rate-limited and never answered) — not a reply.
+// Before this guard, the "Title:" page-text fallback below happily picked up
+// the prompt's own "Title: the H1 title must naturally contain..." rule line
+// and returned the rest of the prompt as the article; 165 of those got
+// published between 2026-08-26 and 2026-09-05.
+const PROMPT_ECHO_MARKERS = [
+  'COMPLETION LOCK', 'FINAL QA GATE', 'LINK ARCHITECTURE', 'NEW ARTICLE ARCHITECTURE',
+  '<INPUTS>', 'OUTPUT_MODE:', 'LINK_STYLE_MODE', 'IMAGE_MODE:', 'DATA_SPINE', 'CLAIM_LEDGER',
+  'KEN RESEARCH BRAND AUTHORITY RULES', 'MASTER BLOG PROMPT', 'must naturally contain the words',
+];
+function looksLikePromptEcho(s: string): boolean {
+  const u = s.toUpperCase();
+  return PROMPT_ECHO_MARKERS.some((m) => u.includes(m.toUpperCase()));
 }
 
-/** Extract Title / Description / HTML from the last assistant message (both shapes). */
-async function extract(page: Page): Promise<{ title: string; description: string; html: string }> {
-  const data = await page.evaluate(() => {
+/** Number of assistant messages on the page — captured BEFORE we send the
+ * prompt so extraction can insist on a NEW reply rather than an old one. */
+async function assistantMessageCount(page: Page): Promise<number> {
+  return page.locator('[data-message-author-role="assistant"]').count().catch(() => 0);
+}
+
+/** The newest assistant reply's text — ONLY if it is newer than `baseline`
+ * (the count before our prompt was sent). Empty string when ChatGPT has not
+ * answered. No page-text fallback: that is how the prompt itself got saved. */
+async function lastAssistantText(page: Page, baseline: number): Promise<string> {
+  const text = await page.evaluate((base) => {
     const msgs = document.querySelectorAll('[data-message-author-role="assistant"]');
-    const last = msgs.length ? (msgs[msgs.length - 1] as HTMLElement) : null;
-    let code = '';
-    let text = last ? (last.innerText || '') : '';
-    if (last) { const c = last.querySelector('pre code, pre'); code = c ? (c.textContent || '') : ''; }
-    // Fallback: page text from the last "Title:" (works regardless of DOM structure).
-    if (text.replace(/\s/g, '').length < 100) {
-      const body = (document.body as HTMLElement).innerText || '';
-      const idx = body.lastIndexOf('Title:');
-      if (idx >= 0) text = body.slice(idx);
-    }
-    return { code, text };
-  });
+    if (msgs.length <= base) return '';
+    return (msgs[msgs.length - 1] as HTMLElement).innerText || '';
+  }, baseline).catch(() => '');
+  return looksLikePromptEcho(text) ? '' : text;
+}
+
+/** Extract Title / Description / HTML from the newest assistant reply (both shapes). */
+async function extract(page: Page, baseline: number): Promise<{ title: string; description: string; html: string }> {
+  const data = await page.evaluate((base) => {
+    const msgs = document.querySelectorAll('[data-message-author-role="assistant"]');
+    if (msgs.length <= base) return { code: '', text: '' };
+    const last = msgs[msgs.length - 1] as HTMLElement;
+    const c = last.querySelector('pre code, pre');
+    return { code: c ? (c.textContent || '') : '', text: last.innerText || '' };
+  }, baseline);
+
+  if (looksLikePromptEcho(data.text) || looksLikePromptEcho(data.code)) {
+    throw new Error('ChatGPT returned the prompt instead of an article (no real reply — rate limit?)');
+  }
+  if (!data.text.trim() && !data.code.trim()) {
+    throw new Error('ChatGPT produced no reply to extract (rate limit / no response)');
+  }
 
   const text = data.text || '';
   const titleMatch = text.match(/^\s*Title:\s*(.+)$/im);
@@ -1108,6 +1153,14 @@ function injectUtm(html: string): string {
 }
 
 async function main() {
+  // --print-prompt: render the master prompt for --url/--title and exit, no
+  // browser. For testing the prompt by hand in ChatGPT. --prompt-version v1|v2 (default v1).
+  if (process.argv.includes('--print-prompt')) {
+    const v = (arg('--prompt-version') || 'v1').toLowerCase();
+    process.stdout.write((v === 'v2' ? buildMasterPromptV2(title, url) : buildMasterPrompt(title, url)) + '\n');
+    return;
+  }
+
   const dir = sessionDir();
   fs.mkdirSync(dir, { recursive: true });
 
@@ -1142,6 +1195,27 @@ async function main() {
     await page.waitForTimeout(4000);
     progress('Opened ChatGPT.');
     if (!(await isLoggedIn(page))) {
+      // Unattended run (spawned by run-blog-generator.ts from the rotation or a
+      // dashboard click — stdin is not a terminal): nobody can log in or press
+      // Enter, so waiting would only hang this row until the rotation's
+      // 150-min kill. Fail fast with a message that says WHICH problem it is
+      // — a Cloudflare "Just a moment..." interstitial (headless Chrome never
+      // clears it) vs a genuinely expired session — and leave the row for the
+      // next turn.
+      if (!process.stdin.isTTY) {
+        const pageTitle = await page.title().catch(() => '');
+        const cloudflare = /just a moment|attention required|verify you are human/i.test(pageTitle);
+        const why = cloudflare
+          ? `ChatGPT is stuck on the Cloudflare challenge ("${pageTitle}") — this happens in headless Chrome; run headed (DISPLAY set, GEN_HEADLESS unset/false)`
+          : `ChatGPT session for "${agent || 'abhinav'}" is not logged in (page: "${pageTitle || page.url()}") — re-login via the dashboard login portal`;
+        progress(`✗ ${why}`);
+        // Only a genuine logged-out session is a real "not logged in" signal —
+        // the Cloudflare case is a headless-only artifact of THIS run, not
+        // evidence the account needs a re-login, so don't record it as such.
+        if (!cloudflare) recordSessionState('chatgpt', agent || 'abhinav', false, why);
+        await context.close().catch(() => {});
+        out({ status: 'error', message: why });
+      }
       // isLoggedIn()'s own 40s poll isn't a real login window — a first-time
       // ChatGPT login (email, password, verification) almost never finishes
       // that fast. Give the human an actual chance: wait here for Enter instead
@@ -1157,11 +1231,13 @@ async function main() {
         console.error('[dbg] NOT-LOGGED-IN url=', page.url(), 'loginBtnVisible=', loginBtn, 'bodyPeek=', JSON.stringify(bodyPeek));
         await page.screenshot({ path: path.join(os.tmpdir(), 'blog-debug.png'), fullPage: false }).catch((e) => console.error('[dbg] shot failed', e?.message));
         await context.close();
+        recordSessionState('chatgpt', agent || 'abhinav', false, 'still not logged in after waiting for manual login');
         out({ status: 'error', message: 'Still not logged in to ChatGPT after waiting — try again and make sure the login fully completes before pressing Enter.' });
         return;
       }
       progress('Logged in — continuing.');
     }
+    recordSessionState('chatgpt', agent || 'abhinav', true);
 
     // Randomly rotate V1 (buildMasterPrompt) / V2 (keyword-focused
     // buildMasterPromptV2) per row for non-custom formats — the two prompts
@@ -1174,6 +1250,8 @@ async function main() {
     await dismissBlockingModals(page); // e.g. the "conversation history rate limit" overlay
     const input = page.locator('#prompt-textarea, div[contenteditable="true"]').first();
     await input.waitFor({ state: 'visible', timeout: 20000 });
+    // How many assistant replies exist BEFORE we send — extraction must see one more.
+    const baseline = await assistantMessageCount(page);
     progress('Logged in. Sending the prompt to ChatGPT…');
     await input.click();
     await page.keyboard.insertText(prompt); // reliable for ChatGPT's contenteditable + large text
@@ -1201,12 +1279,13 @@ async function main() {
     }
     progress('Prompt sent — ChatGPT is writing the blog now (about 12-15 minutes)…');
 
-    await waitForCompletion(page);
+    await waitForCompletion(page, baseline);
     progress('ChatGPT finished writing — extracting and saving the blog…');
-    const { title: bTitle, description, html } = await extract(page);
+    const { title: bTitle, description, html } = await extract(page, baseline);
     await context.close();
 
     if (!html || html.length < 100) out({ status: 'error', message: 'no HTML content extracted from ChatGPT response' });
+    if (looksLikePromptEcho(html) || looksLikePromptEcho(bTitle)) out({ status: 'error', message: 'extracted content is the prompt, not an article — discarded' });
     out({ status: 'success', title: bTitle, description, html: injectUtm(sanitizeHtml(html)) });
   } catch (err) {
     await context.close().catch(() => {});

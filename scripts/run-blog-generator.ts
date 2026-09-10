@@ -30,10 +30,23 @@ const PREFERRED_SOURCE_MODE: PreferredSourceMode = 'tracked';
 // This script is only ever used for actual generation (scheduled or a
 // dashboard "generate now" click) — never for a manual ChatGPT login, which
 // is its own separate standalone invocation of generate_blog_chatgpt.ts /
-// generate_image.ts directly. So it's always safe to run the ChatGPT windows
-// headless here; set on process.env so it flows through the existing
-// spawnTsx(args, process.env) calls below without touching each call site.
-process.env.GEN_HEADLESS = 'true';
+// generate_image.ts directly.
+//
+// Headed vs headless for the ChatGPT windows: HEADED whenever a display is
+// available, headless only when there is none. chatgpt.com sits behind a
+// Cloudflare challenge that never clears in headless Chrome — the page just
+// stays on "Just a moment..." — so a headless run reads every profile as
+// "not logged in" even when the session is perfectly valid (this took blog
+// generation to zero for every agent from 2026-09-02 until it was caught).
+// The VPS runs everything on the Xvfb :99 virtual display (DISPLAY is set by
+// the rotation / cron), so it stays headed there; a machine with no display
+// at all (a Windows box running this unattended) gets headless as the only
+// option. An explicit GEN_HEADLESS in the environment always wins. Set on
+// process.env so it flows through the existing spawnTsx(args, process.env)
+// calls below without touching each call site.
+if (!process.env.GEN_HEADLESS) {
+  process.env.GEN_HEADLESS = process.env.DISPLAY ? 'false' : 'true';
+}
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -107,7 +120,14 @@ function looksLikeHtml(s: string): boolean {
 }
 function rowTitle(row: BlogRow): string {
   // Input report title lives in "Report Title"; fall back to older columns.
-  return String(row['Report Title'] || row.title || row['Blog Title'] || '').trim();
+  const t = String(row['Report Title'] || row.title || row['Blog Title'] || '').trim();
+  if (t) return t;
+  // No title in the sheet at all — derive one from the report URL's slug
+  // ("…/oman-physiotherapy-equipment-market" → "Oman Physiotherapy Equipment
+  // Market") rather than failing the row outright with "--title is required"
+  // on every turn until someone notices.
+  const slug = String(row.targetUrl || '').split('?')[0].replace(/\/+$/, '').split('/').pop() || '';
+  return slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();
 }
 function wordCount(html: string): number {
   return html.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length;
@@ -164,11 +184,14 @@ function generate(row: BlogRow): Promise<{ title: string; description: string; h
       clearTimeout(to);
       if (tmpToClean) { try { fs.rmSync(tmpToClean, { force: true }); } catch { /* noop */ } }
       const lastLine = stdout.trim().split('\n').filter(Boolean).pop() || '';
+      lastGenError = '';
       try {
         const out = JSON.parse(lastLine);
         if (out.status === 'success') { resolve({ title: out.title, description: out.description, html: out.html }); return; }
+        lastGenError = String(out.message || '');
         console.log(`✗ Couldn't generate this blog: ${out.message}`);
       } catch {
+        lastGenError = 'no finished blog returned';
         console.log('✗ ChatGPT did not return a finished blog (it may have timed out or the page changed).');
       }
       resolve(null);
@@ -180,10 +203,40 @@ function generate(row: BlogRow): Promise<{ title: string; description: string; h
 // ChatGPT refuses ("RESEARCH BLOCKED: Primary report could not be verified", a
 // transient bot-check, an apology, etc.) the response has neither — so that's
 // our signal it isn't a valid blog and must be regenerated, not saved.
-function isValidBlog(html: string | undefined): boolean {
+// Phrases that only ever occur in the master prompt itself, never in a real
+// article. If any of them shows up in the "blog", what we have is the PROMPT
+// echoed back (ChatGPT rate-limited / never answered and the extractor fell
+// through to page text) — 165 of these got published as articles between
+// 2026-08-26 and 2026-09-05 before this gate existed.
+const PROMPT_ECHO_MARKERS = [
+  'COMPLETION LOCK', 'FINAL QA GATE', 'LINK ARCHITECTURE', 'NEW ARTICLE ARCHITECTURE',
+  '<INPUTS>', 'OUTPUT_MODE:', 'LINK_STYLE_MODE', 'IMAGE_MODE:', 'DATA_SPINE', 'CLAIM_LEDGER',
+  'KEN RESEARCH BRAND AUTHORITY RULES', 'MASTER BLOG PROMPT', 'must naturally contain the words',
+];
+function looksLikePromptEcho(s: string): boolean {
+  const u = s.toUpperCase();
+  return PROMPT_ECHO_MARKERS.some((m) => u.includes(m.toUpperCase()));
+}
+function mentionCount(html: string): number {
+  return (html.match(/ken\s+research/gi) || []).length;
+}
+
+/** Hard gate before anything is saved: is this actually an article, not a
+ * refusal, not the prompt echoed back, not a fragment, not a runaway? Each
+ * rejection logs its reason so the turn's log says WHY nothing was saved. */
+function isValidBlog(html: string | undefined, title = ''): boolean {
   if (!html) return false;
-  if (/RESEARCH BLOCKED/i.test(html)) return false;
-  return /<h1[\s>]/i.test(html) && /<h2[\s>]/i.test(html);
+  const reject = (why: string) => { console.log(`   ✗ Rejected blog: ${why}`); return false; };
+  if (/RESEARCH BLOCKED/i.test(html)) return reject('RESEARCH BLOCKED refusal');
+  if (/LINK VALIDATION BLOCKED/i.test(html)) return reject('LINK VALIDATION BLOCKED refusal (ChatGPT could not verify enough Ken Research links)');
+  if (looksLikePromptEcho(html) || looksLikePromptEcho(title)) return reject('content is the prompt echoed back (ChatGPT gave no answer — rate limit?)');
+  if (!/<h1[\s>]/i.test(html) || !/<h2[\s>]/i.test(html)) return reject('missing <h1>/<h2> structure');
+  const words = wordCount(html);
+  if (words < 700) return reject(`too short (${words} words)`);
+  if (words > 2600) return reject(`too long (${words} words) — not a 1,450-1,600-word article`);
+  const mentions = mentionCount(html);
+  if (mentions > 12) return reject(`${mentions} "Ken Research" mentions — an article has at most a handful`);
+  return true;
 }
 
 /** Mark a row as blocked so it's never re-picked: writes blogBatch="BLOCKED-<ist>".
@@ -198,14 +251,31 @@ function markBlocked(dataRow: number): void {
 
 const MAX_GEN_ATTEMPTS = 2;
 
+/** Why the last generate() call failed (the child's error message), so the
+ * retry loop can tell a transient failure from one that will repeat. */
+let lastGenError = '';
+
 /** Generate the article. If ChatGPT refuses with RESEARCH BLOCKED (it can't
  * verify this report), that's deterministic — don't retry: mark the row blocked
- * so it's never re-picked, and skip to the next row. Only a non-refusal invalid
- * (cut-off / transient) is retried. Never saves a refusal as the blog. */
+ * so it's never re-picked, and skip to the next row. A rate-limited account is
+ * also not retried this turn — a second attempt is just another wasted prompt
+ * against a quota that only recovers with time; the row is picked up again on
+ * a later turn. Only a non-refusal invalid (cut-off / transient) is retried.
+ * Never saves a refusal as the blog. */
 async function generateWithRetry(row: BlogRow): Promise<{ title: string; description: string; html: string } | null> {
   for (let attempt = 1; attempt <= MAX_GEN_ATTEMPTS; attempt++) {
     const res = await generate(row);
-    if (res && isValidBlog(res.html)) return res;
+    if (res && isValidBlog(res.html, res.title)) return res;
+    if (!res && /RATE_LIMITED|rate limit/i.test(lastGenError)) {
+      console.log('⏭ ChatGPT rate-limited for this account — not retrying this turn; the row stays for a later run.');
+      return null;
+    }
+    if (!res && /RESEARCH BLOCKED|LINK VALIDATION BLOCKED/i.test(lastGenError)) {
+      // ChatGPT refused (could not open/verify the report on this account) —
+      // a second identical prompt gets the same answer; leave the row for a later run.
+      console.log('⏭ ChatGPT refused (see reason above) — not retrying this turn; the row stays for a later run.');
+      return null;
+    }
     if (res && /RESEARCH\s*BLOCKED/i.test(res.html || '')) {
       console.log('⏭ RESEARCH BLOCKED — ChatGPT can\'t verify this report; marking blocked + skipping to the next row.');
       const dr = Number((row as { _dataRow?: number })._dataRow);
@@ -409,14 +479,21 @@ async function pass() {
           }
         }
 
-        // Log-only for now — the generation prompt already enforces most of
-        // this; a false block here would lose real, otherwise-good content.
+        // Mostly log-only — the generation prompt already enforces most of
+        // this and a false block would lose real, otherwise-good content. The
+        // exception is a very low score: that has only ever meant the content
+        // is not an article at all (prompt echo, fragment), never a merely
+        // imperfect one — those still save, flagged, for a human to look at.
         const brandCheck = validateBrandAuthority(cta.html, { title: res.title || marketName });
         if (brandCheck.status !== 'PASS') {
           const issueSummary = brandCheck.issues.map((i) => `${i.rule}: ${i.problem}`).join(' | ');
           console.log(`   [BRAND CHECK] ${brandCheck.status} (score ${brandCheck.score}/10): ${issueSummary}`);
         } else {
           console.log(`   [BRAND CHECK] PASS (score ${brandCheck.score}/10)`);
+        }
+        if (brandCheck.score <= 5 || !isValidBlog(cta.html, res.title)) {
+          console.log(`   ✗ NOT saved — failed the final content gate (brand score ${brandCheck.score}/10). Row left for a later run.`);
+          continue;
         }
         writeRow(row._dataRow, { ...res, html: cta.html }, coverImageUrl);
         done++;

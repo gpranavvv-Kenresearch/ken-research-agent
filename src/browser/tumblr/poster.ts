@@ -11,6 +11,9 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
  *   2. A Gutenberg-style "tumblr/link" block opens — type the URL into it.
  *   3. Click the empty body block below and type the caption.
  *   4. Click "Post now".
+ *   4b. A second confirmation button (aria-label="Post") appears — click it,
+ *      then wait 5s for the post to actually go out (added 2026-09-05; the
+ *      first click alone no longer submits).
  *   5. A green "Posted to {blog}" toast appears bottom-center — click it,
  *      which opens the published post; the URL bar then holds the permalink.
  */
@@ -131,6 +134,27 @@ export async function postToTumblr(
   if (!posted) {
     throw new Error('Tumblr: "Post now" button not found — post was not submitted.');
   }
+
+  // Step 4b: A second confirmation button appears after "Post now" — click it,
+  // then give Tumblr 5s to actually publish before looking for the toast.
+  console.log('   Clicking the Post confirmation button...');
+  const CONFIRM_BTN_SELECTORS = [
+    'button[aria-label="Post"]',
+  ];
+  let confirmed = false;
+  for (const sel of CONFIRM_BTN_SELECTORS) {
+    const el = page.locator(sel).first();
+    if (await el.isVisible({ timeout: 4000 }).catch(() => false)) {
+      await el.click({ timeout: 4000 }).catch(() => {});
+      confirmed = true;
+      console.log(`   ✅ Post confirmation clicked (${sel})`);
+      break;
+    }
+  }
+  if (!confirmed) {
+    console.warn('   ⚠️ Post confirmation button not found — continuing (the first click may have posted directly).');
+  }
+  await sleep(5000);
 
   // Step 5: Wait for the green "Posted to {blog}" toast, click it to open the
   // published post, then read the permalink off the address bar.

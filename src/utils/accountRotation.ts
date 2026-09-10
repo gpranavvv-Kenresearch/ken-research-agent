@@ -13,6 +13,11 @@
  * regardless of how the session was created). If a declared account was
  * never actually logged in, the platform's own login.ts fails loudly
  * ("account not found") — same behavior as today, not swallowed here.
+ *
+ * Explicit mode: when POST_ACCOUNT_INDEX=N is set in the environment (the
+ * nightly-social-rotation.ts account passes), selectAccountForPlatform returns
+ * account #N outright and does NOT touch the round-robin state — see the
+ * function for the exact rules.
  */
 import fs from 'fs';
 import path from 'path';
@@ -39,6 +44,15 @@ const PLATFORM_ACCOUNTS_FILE: Record<string, string> = {
   linkmate: '.accounts/accounts-linkmate.json',
   note: '.accounts/accounts-note.json',
   articlescad: '.accounts/accounts-articlescad.json',
+  // Added 2026-09-07: missing from this map meant selectAccountForPlatform
+  // could never confirm "{agent} 1" was registered for these two, so it fell
+  // back to the bare agent name -- which the platform's own login.ts couldn't
+  // find either, so IT fell back to whatever account happened to be first
+  // with active:true in the registry (a legacy bare account, unrelated to the
+  // agent actually posting). Confirmed live: vijay's Mastodon attempt silently
+  // logged into sanya's saved session instead of his own.
+  mastodon: '.accounts/accounts-mastodon.json',
+  tumblr: '.accounts/accounts-tumblr.json',
 };
 
 /** Nicknames actually registered for this platform, lowercased. Empty if the registry is unreadable. */
@@ -110,6 +124,16 @@ export function setAccountCount(agent: string, platformKey: string, count: numbe
  * - count >= 2 → strict round-robin across "{agent} 1".."{agent} {count}",
  *   persisted across process restarts so consecutive posting cycles keep
  *   advancing instead of always starting over at account 1.
+ * - POST_ACCOUNT_INDEX=N set (explicit account pass, nightly-social-rotation.ts):
+ *   N >= 2 → "{agent} N", full stop. N == 1 → "{agent} 1" when the agent has
+ *   2+ accounts declared (multi-account agents are always numbered), else the
+ *   normal single-account resolution above. Round-robin state is left
+ *   untouched either way, so the dashboard's "Post Now" (which never sets
+ *   this) keeps rotating from wherever it was. The rotation script only sets
+ *   N for (agent, platform) pairs whose declared count is >= N; if an
+ *   out-of-range N ever reaches here anyway, "{agent} N" isn't registered and
+ *   the platform's login.ts fails loudly — a failed post, never a silent
+ *   duplicate on account 1.
  */
 export function selectAccountForPlatform(agent: string, platformKey: string, fallbackNickname: string): string {
   // Local per-row-name mode: callers pass (WORKER_NAME || rowName, platform, rowName),
@@ -121,6 +145,18 @@ export function selectAccountForPlatform(agent: string, platformKey: string, fal
     agent = fallbackNickname;
   }
   const count = getAccountCount(agent, platformKey);
+
+  const forcedIndex = Math.floor(Number(process.env.POST_ACCOUNT_INDEX || 0));
+  if (forcedIndex >= 2) {
+    if (forcedIndex > count) {
+      console.warn(`   ⚠️ [accounts] POST_ACCOUNT_INDEX=${forcedIndex} but ${agent} has only ${count} ${platformKey} account(s) declared — trying "${agent} ${forcedIndex}" anyway`);
+    }
+    return `${agent} ${forcedIndex}`;
+  }
+  if (forcedIndex === 1 && count >= 2) {
+    return `${agent} 1`;
+  }
+
   if (count <= 1) {
     const bare = agent || fallbackNickname;
     const registered = registeredNicknames(platformKey);

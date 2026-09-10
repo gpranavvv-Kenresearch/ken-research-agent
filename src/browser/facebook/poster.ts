@@ -133,74 +133,82 @@ export async function postToFacebook(
 
   let postUrl = '';
 
-  // Strategy 1: find permalink from feed — timestamp <a> links to the post
-  console.log('   Extracting post URL from feed...');
-  try {
-    postUrl = await page.evaluate((): string => {
-      // Facebook post timestamps are <a> tags whose href is the post permalink
-      const links = Array.from(document.querySelectorAll('a[href]')) as HTMLAnchorElement[];
-      for (const a of links) {
-        const href = a.href || '';
-        if (
-          (href.includes('/posts/') || href.includes('story_fbid') || href.includes('/permalink/')) &&
-          href.includes('facebook.com')
-        ) {
-          return href.split('?')[0]; // strip query params
-        }
-      }
-      return '';
+  // PRIMARY: Share button -> Copy link (clipboard). This is Facebook's own
+  // canonical-link feature -- a clean, stable, externally-shareable URL
+  // (e.g. facebook.com/share/p/<id>/ or a clean /posts/<id> link), not the
+  // feed's raw internal href. Confirmed live (hritika, 2026-09-07): the DOM
+  // scrape below returns a real but tracking-laden internal link
+  // (permalink.php?story_fbid=...&__cft__[0]=...&__tn__=...) -- correct per
+  // se, but not what should be saved as THE post URL. Share -> Copy link is
+  // tried first now; the DOM scrape only runs as a fallback if this fails.
+  console.log('   Getting post URL via Share → Copy link...');
+  const getShareUrl = async (): Promise<string> => {
+    // Intercept clipboard.writeText before clicking — works headless on Linux
+    await page.evaluate(() => {
+      (window as any).__clipboardWritten = '';
+      const orig = navigator.clipboard.writeText.bind(navigator.clipboard);
+      navigator.clipboard.writeText = async (text: string) => {
+        (window as any).__clipboardWritten = text;
+        return orig(text).catch(() => {});
+      };
     });
-    if (postUrl) console.log(`   ✅ Permalink found in DOM: ${postUrl}`);
-  } catch { /* fall through */ }
 
-  // Strategy 2: Share button → Copy link (clipboard)
-  if (!postUrl) {
-    const getShareUrl = async (): Promise<string> => {
-      // Intercept clipboard.writeText before clicking — works headless on Linux
-      await page.evaluate(() => {
-        (window as any).__clipboardWritten = '';
-        const orig = navigator.clipboard.writeText.bind(navigator.clipboard);
-        navigator.clipboard.writeText = async (text: string) => {
-          (window as any).__clipboardWritten = text;
-          return orig(text).catch(() => {});
-        };
-      });
-
-      const shareSelectors = [
-        'div[aria-label="Send this to friends or post it on your profile."][role="button"]',
-        'div[aria-label*="Share"][role="button"]',
-        'span[aria-label*="Share"]',
-      ];
-      for (const sel of shareSelectors) {
-        try {
-          await page.locator(sel).first().click({ timeout: 3000 });
-          break;
-        } catch { /* try next */ }
-      }
-      await humanDelay(1000, 1500);
-      await page.locator('span:has-text("Copy link")').first().click({ timeout: 5000 });
-      await humanDelay(800, 1000);
-
-      const intercepted = await page.evaluate(() => (window as any).__clipboardWritten || '').catch(() => '');
-      if (intercepted) return intercepted;
-      return await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
-    };
-
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    const shareSelectors = [
+      'div[aria-label="Send this to friends or post it on your profile."][role="button"]',
+      'div[aria-label*="Share"][role="button"]',
+      'span[aria-label*="Share"]',
+    ];
+    for (const sel of shareSelectors) {
       try {
-        console.log(`   Trying Share → Copy link (attempt ${attempt}/3)...`);
-        const copied = await getShareUrl();
-        if (copied && (copied.includes('/posts/') || copied.includes('story_fbid') || copied.includes('facebook.com'))) {
-          postUrl = copied;
-          console.log(`   ✅ URL from clipboard: ${postUrl}`);
-          break;
-        }
-        await humanDelay(2000, 3000);
-      } catch (err: any) {
-        console.log(`   ⚠️ Attempt ${attempt} failed: ${err.message?.slice(0, 80)}`);
-        await humanDelay(2000, 3000);
-      }
+        await page.locator(sel).first().click({ timeout: 3000 });
+        break;
+      } catch { /* try next */ }
     }
+    await humanDelay(1000, 1500);
+    await page.locator('span:has-text("Copy link")').first().click({ timeout: 5000 });
+    await humanDelay(800, 1000);
+
+    const intercepted = await page.evaluate(() => (window as any).__clipboardWritten || '').catch(() => '');
+    if (intercepted) return intercepted;
+    return await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
+  };
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      console.log(`   Trying Share → Copy link (attempt ${attempt}/3)...`);
+      const copied = await getShareUrl();
+      if (copied && (copied.includes('/posts/') || copied.includes('story_fbid') || copied.includes('facebook.com'))) {
+        postUrl = copied;
+        console.log(`   ✅ URL from clipboard: ${postUrl}`);
+        break;
+      }
+      await humanDelay(2000, 3000);
+    } catch (err: any) {
+      console.log(`   ⚠️ Attempt ${attempt} failed: ${err.message?.slice(0, 80)}`);
+      await humanDelay(2000, 3000);
+    }
+  }
+
+  // FALLBACK: only if Share → Copy link produced nothing at all.
+  if (!postUrl) {
+    console.log('   Share → Copy link produced nothing — falling back to reading the feed DOM...');
+    try {
+      postUrl = await page.evaluate((): string => {
+        // Facebook post timestamps are <a> tags whose href is the post permalink
+        const links = Array.from(document.querySelectorAll('a[href]')) as HTMLAnchorElement[];
+        for (const a of links) {
+          const href = a.href || '';
+          if (
+            (href.includes('/posts/') || href.includes('story_fbid') || href.includes('/permalink/')) &&
+            href.includes('facebook.com')
+          ) {
+            return href; // exactly as found, no trimming
+          }
+        }
+        return '';
+      });
+      if (postUrl) console.log(`   ✅ Permalink found in DOM (fallback): ${postUrl}`);
+    } catch { /* give up — post already succeeded regardless */ }
   }
 
   console.log(`   Post URL: ${postUrl || '(not captured)'}`);
