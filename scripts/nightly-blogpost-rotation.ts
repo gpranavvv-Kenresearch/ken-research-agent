@@ -4,46 +4,33 @@
  * sameeksha), run in per-ACCOUNT passes exactly like the social rotation —
  * every blog account a member has gets the same daily quota:
  *
- *   2 posts per account per day on every blog platform,
- *   except Medium, LinkedIn Pulse and PdfHost: 1 post per account per day.
+ *   2 posts per account per day, uniformly, on all 14 blog platforms —
+ *   no platform gets special lead/partner treatment, including Medium,
+ *   LinkedIn Pulse and Google Sites.
  *
- * Blog platforms: Medium, LinkedIn Pulse, PdfHost, Google Sites, Linkmate,
- * Calisthenics, Note, Notion, Dev.to, Coda, Velog, Blogger, HackMD, WordPress.
- * PdfHost shares the same Blog Platform 1/2 · Blog URL 1/2 slot system as every
- * other platform here (see sheets.ts claimNextBlogSlot) — it is a 3rd rotating
- * lead alongside Medium/LinkedIn Pulse, always paired with Google Sites.
+ * Blog platforms, fixed 7/7 split by which slot they're allowed to claim
+ * (see sheets.ts claimNextBlogSlot — a platform's slot is a property of the
+ * platform, not "whichever slot happens to be open"):
+ *   Blog Platform 1 / Blog URL 1: Medium, PdfHost, Linkmate, Note, Dev.to, Velog, HackMD
+ *   Blog Platform 2 / Blog URL 2: LinkedIn Pulse, Google Sites, Calisthenics, Notion, Coda, Blogger, WordPress
  *
  * How one day runs:
  *
  *   Account pass 1  — everyone's account #1
- *     batch 1 (Medium lead):         each agent, in order, posts 1 on
- *                                    medium, googlepost, then the 5 rotated pairs
- *     batch 2 (LinkedIn Pulse lead): each agent posts 1 on
- *                                    lipulse, googlepost, then the 5 rotated pairs
- *     batch 3 (PdfHost lead):        each agent posts 1 on
- *                                    pdfhost, googlepost, then the 5 rotated pairs
+ *     run 1: each agent, in order, posts 1 on all 14 platforms
+ *     run 2: each agent posts 1 on all 14 platforms again
  *   Account pass 2  — account #2, ONLY for agents who declared one on that
  *                     platform; anyone without an account #2 is skipped (no post)
- *     batches 1–3 exactly as above
+ *     runs 1–2 exactly as above
  *   Account pass 3, …  as far as the highest declared count goes
  *   → "Blog-platform day complete", then wait for tomorrow's BLOGPOST_START.
  *
- * Every platform except Medium/Pulse/PdfHost appears in all three batches →
- * 3/account/day; each of those three only leads its own batch → 1/account/day
- * each. That split is not just the quota — it is required by the 2-slot claim
- * model (see sheets.ts claimNextBlogSlot): whichever 2 blog platforms run
- * back-to-back on a cycle claim that row's 2 slots together, so PAIR order
- * matters, and Medium/Pulse/PdfHost must never sit in the same batch or they
- * would pair with each other instead of with Google Sites. Fixed pairs, as
- * specified: (Medium|LinkedIn Pulse|PdfHost) + Google Sites, Linkmate +
- * Calisthenics, Note + Notion, Dev.to + Coda, Velog + Blogger, HackMD + WordPress.
- *
- * A fixed run order starves every pair after the first when only 1-2 fresh
- * rows exist that day — the leading pair always wins both slots on the only
- * available row, and everything after it sees "no open slot" forever, every
- * single day. So which pair leads is ROTATED and persisted across runs
- * (.cache/blog-pair-rotation.json) — advances by 1 every batch so each pair
- * gets a turn to go first before the cycle repeats.
+ * Every platform appears in both runs → 2/account/day, uniformly. No pair
+ * rotation needed any more: since each platform's slot is fixed by which
+ * group it's in (not by run order), any Group-1 platform can land on any row
+ * whose slot 1 is open, independent of which Group-2 platform ends up on
+ * that row's slot 2 — no more "starves every pair after the first" problem
+ * the old lead-rotation design had to work around.
  *
  * Passes come from .accounts/account-counts.json (the "Accounts" number each
  * member sets per platform on their dashboard page), re-read at the start of
@@ -60,7 +47,7 @@
  *   BLOGPOST_START            "HH:MM" IST (default 08:30 — offset from social's 08:00)
  *   BLOGPOST_AGENTS           comma-separated agent subset (testing), e.g. "vijay"
  *   BLOGPOST_PERSON_GAP_MIN   pause after each step (default 2)
- *   BLOGPOST_BATCH_GAP_MIN    pause between the two batches (default 30)
+ *   BLOGPOST_BATCH_GAP_MIN    pause between the two runs (default 30)
  *   BLOGPOST_PASS_GAP_MIN     pause between account passes (default 15)
  *   BLOGPOST_ROTATION_LOG     log file (default /tmp/nightly-blogpost-rotation.log)
  *
@@ -70,7 +57,6 @@
  *   npx tsx scripts/nightly-blogpost-rotation.ts --plan   # print today's full step list + per-agent totals; posts nothing
  */
 import fs from 'fs';
-import path from 'path';
 import { buildDayPlan, formatDayPlan, msUntilNextIst, parseHHMM, runDay, type AccountPassConfig, type BatchSpec } from '../src/rotation/accountPasses.js';
 
 const DEFAULT_AGENTS = ['vijay', 'hritika', 'sanya', 'meenakshi', 'vansh', 'sameeksha'];
@@ -89,40 +75,17 @@ const DECL_KEY: Record<string, string> = {
   pdfhost: 'pdfhost',
 };
 
-const PAIR_GROUPS: [string, string][] = [
-  ['linkmate', 'calisthenics'],
-  ['note', 'notion'],
-  ['devto', 'coda'],
-  ['velog', 'blogger'],
-  ['hackmd', 'wordpress'],
-];
-const ROTATION_FILE = path.join(process.cwd(), '.cache', 'blog-pair-rotation.json');
+// All 14 platforms, run flat in both daily runs — order doesn't matter any
+// more (each platform's slot is fixed by its own group, not by run order).
+const ALL_BLOG_PLATFORMS = Object.keys(DECL_KEY);
 
-/** Which pair leads this batch. `advance` = also move the pointer for next time (a --plan dry run does not). */
-function rotatedPairs(advance: boolean): string[] {
-  let pointer = 0;
-  try { pointer = JSON.parse(fs.readFileSync(ROTATION_FILE, 'utf-8')).pointer ?? 0; } catch { /* first run */ }
-  pointer = ((pointer % PAIR_GROUPS.length) + PAIR_GROUPS.length) % PAIR_GROUPS.length;
-  if (advance) {
-    try {
-      fs.mkdirSync(path.dirname(ROTATION_FILE), { recursive: true });
-      fs.writeFileSync(ROTATION_FILE, JSON.stringify({ pointer: (pointer + 1) % PAIR_GROUPS.length }));
-    } catch { /* a lost rotation tick just repeats today's order tomorrow — not fatal */ }
-  }
-  return [...PAIR_GROUPS.slice(pointer), ...PAIR_GROUPS.slice(0, pointer)].flat();
-}
-
-/** The three batches of one pass. Built once per day (pointer advances once per batch, as before). */
-function blogBatches(advance: boolean): BatchSpec[] {
-  const mk = (label: string, lead: string): BatchSpec => ({
+/** The two runs of one pass — identical platform list, just posts a 2nd time. */
+function blogBatches(): BatchSpec[] {
+  const mk = (label: string): BatchSpec => ({
     label,
-    platforms: [lead, 'googlepost', ...rotatedPairs(advance)].map((key) => ({ key, declKey: DECL_KEY[key] })),
+    platforms: ALL_BLOG_PLATFORMS.map((key) => ({ key, declKey: DECL_KEY[key] })),
   });
-  return [
-    mk('batch 1 (Medium lead)', 'medium'),
-    mk('batch 2 (LinkedIn Pulse lead)', 'lipulse'),
-    mk('batch 3 (PdfHost lead)', 'pdfhost'),
-  ];
+  return [mk('run 1'), mk('run 2')];
 }
 
 const PERSON_GAP_MS = Number(process.env.BLOGPOST_PERSON_GAP_MIN || 2) * 60 * 1000;
@@ -159,20 +122,18 @@ function configFor(batches: BatchSpec[]): AccountPassConfig {
 
 async function main() {
   if (PLAN_ONLY) {
-    const cfg = configFor(blogBatches(false));
+    const cfg = configFor(blogBatches());
     console.log(formatDayPlan(cfg, buildDayPlan(cfg)));
     return;
   }
-  log(`Blog-platform post rotation starting. Order: ${AGENTS.join(' → ')} | daily at ${START_LABEL} | 3 batches/pass (Medium lead, LinkedIn Pulse lead, PdfHost lead). Pair lead rotates each batch (see ${ROTATION_FILE}).`);
+  log(`Blog-platform post rotation starting. Order: ${AGENTS.join(' → ')} | daily at ${START_LABEL} | 2 runs/pass, all 14 platforms each run (fixed 7/7 slot split, no lead rotation).`);
   for (;;) {
     if (!SKIP_WAIT) {
       const waitMs = msUntilNextIst(START_H, START_M);
       log(`Waiting ${Math.round(waitMs / 60000)} min for next ${START_LABEL}...`);
       await sleep(waitMs);
     }
-    // Batches (and so the pair order) are fixed for the day; the pointer
-    // advances once per batch here, same cadence as the old 2-round design.
-    await runDay(configFor(blogBatches(true)));
+    await runDay(configFor(blogBatches()));
     // --now is a one-shot manual run; don't loop forever waiting for a "tomorrow" that isn't real.
     if (SKIP_WAIT) break;
   }

@@ -1,10 +1,10 @@
 /**
  * nightly-social-rotation.ts — daily SOCIAL posting rotation (X, Facebook,
- * LinkedIn post, Mastodon, Tumblr) across the 6 personal-sheet agents, run in
- * per-ACCOUNT passes so every account a member has gets the full daily quota
- * — the same quota for everyone:
+ * LinkedIn post, Mastodon, Tumblr, Pearltrees, Raindrop) across the 6
+ * personal-sheet agents, run in per-ACCOUNT passes so every account a member
+ * has gets the full daily quota — the same quota for everyone:
  *
- *   DAILY_TARGET (posts per ACCOUNT per day):  x 4 · fb 4 · lipost 3 · mastodon 2 · tumblr 2
+ *   DAILY_TARGET (posts per ACCOUNT per day):  x 4 · fb 4 · tumblr 4 · pearltrees 4 · raindrop 4 · lipost 3 · mastodon 2
  *
  * How one day runs (agent order vijay → hritika → sanya → meenakshi → vansh → sameeksha):
  *
@@ -62,7 +62,7 @@ const AGENTS: string[] = (() => {
 // Posts per ACCOUNT per day. Key = runCountedPostCycle platform key
 // (scheduler-new.ts COUNTED_PLATFORMS). Key ORDER = the order the platforms
 // run within one step.
-const DEFAULT_TARGET: Record<string, number> = { x: 4, fb: 4, lipost: 3, mastodon: 2, tumblr: 2, pearltrees: 2, raindrop: 2 };
+const DEFAULT_TARGET: Record<string, number> = { x: 4, fb: 4, lipost: 3, mastodon: 2, tumblr: 4, pearltrees: 4, raindrop: 4 };
 const DAILY_TARGET: Record<string, number> = (() => {
   const target = { ...DEFAULT_TARGET };
   const raw = process.env.SOCIAL_DAILY_TARGET;

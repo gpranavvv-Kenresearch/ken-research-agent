@@ -867,13 +867,21 @@ function formatSlotState(state: Record<1 | 2, string>): string {
   return `P1:${state[1]}|P2:${state[2]}`;
 }
 
+// Fixed 7/7 split of the 14 blog platforms: which slot a platform is allowed
+// to claim is a property of the PLATFORM, not "whichever slot happens to be
+// open" — Group 1 only ever claims "Blog Platform 1"/"Blog URL 1", Group 2
+// only "Blog Platform 2"/"Blog URL 2". No platform gets special lead/partner
+// treatment (including Google Sites) — every platform in both groups runs in
+// every batch, so all 14 reach the same daily count.
+const BLOG_SLOT1_PLATFORMS = new Set(['Medium', 'PdfHost', 'Linkmate', 'Note', 'Dev.to', 'Velog', 'HackMD']);
+const BLOG_SLOT2_PLATFORMS = new Set(['LinkedIn Pulse', 'Google Sites', 'Calisthenics', 'Notion', 'Coda', 'Blogger', 'WordPress']);
+
 /**
- * Claim the next open blog-posting slot for `platformKey` (max 2 platforms
- * per row). Scans rows with generated content in order; skips a row this
- * platform already claimed a slot on; writes the platform name into the
- * first open slot immediately (before posting), so a concurrent claim for a
- * different platform never lands on the same slot. Returns null when every
- * generated row currently has both slots taken (caller just no-ops this run).
+ * Claim this platform's fixed blog-posting slot (1 or 2, per its group above)
+ * on the next eligible row. Scans rows with generated content in order; skips
+ * a row this platform already claimed; writes the platform name into its
+ * slot immediately (before posting), so a concurrent claim never lands on the
+ * same slot. Returns null when no generated row still has that slot open.
  */
 export async function claimNextBlogSlot(platformKey: string): Promise<SheetRow | null> {
   const sheets = await getSheetsClient();
@@ -895,6 +903,9 @@ export async function claimNextBlogSlot(platformKey: string): Promise<SheetRow |
     return null;
   }
 
+  const slot: 1 | 2 = BLOG_SLOT1_PLATFORMS.has(platformKey) ? 1 : 2;
+  const slotIdx = slot === 1 ? p1Idx : p2Idx;
+
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     const title = titleIdx !== undefined ? (row[titleIdx] ?? '').trim() : '';
@@ -902,14 +913,7 @@ export async function claimNextBlogSlot(platformKey: string): Promise<SheetRow |
     const content = contentIdx !== undefined ? (row[contentIdx] ?? '').trim() : '';
     if (!title || !targetUrl || !content) continue;
 
-    const p1 = (row[p1Idx] ?? '').trim();
-    const p2 = (row[p2Idx] ?? '').trim();
-    if (p1 === platformKey || p2 === platformKey) continue; // already claimed on this row
-
-    let slot: 1 | 2 | undefined;
-    if (!p1) slot = 1;
-    else if (!p2) slot = 2;
-    if (!slot) continue; // both slots taken, keep scanning
+    if ((row[slotIdx] ?? '').trim()) continue; // this platform's slot already taken on this row
 
     const rowIndex = i + 1;
     const claimData = buildUpdates(colMap, rowIndex, [
