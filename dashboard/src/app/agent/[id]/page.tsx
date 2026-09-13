@@ -12,6 +12,8 @@ const PLATFORMS = [
   { key: 'li', label: 'LinkedIn', group: 'social', icon: 'in', color: 'bg-sky-700 text-white' },
   { key: 'tumblr', label: 'Tumblr', group: 'social', icon: 't', color: 'bg-slate-800 text-white' },
   { key: 'mastodon', label: 'Mastodon', group: 'social', icon: 'M', color: 'bg-indigo-600 text-white' },
+  { key: 'pearltrees', label: 'Pearltrees', group: 'social', icon: 'P', color: 'bg-lime-600 text-white' },
+  { key: 'raindrop', label: 'Raindrop', group: 'social', icon: 'R', color: 'bg-sky-600 text-white' },
   // Blog
   { key: 'medium', label: 'Medium', group: 'blog', icon: 'M', color: 'bg-neutral-800 text-white' },
   { key: 'notion', label: 'Notion', group: 'blog', icon: 'N', color: 'bg-slate-100 text-slate-900' },
@@ -25,15 +27,7 @@ const PLATFORMS = [
   { key: 'calisthenics', label: 'Calisthenics', group: 'blog', icon: 'C', color: 'bg-purple-600 text-white' },
   { key: 'linkmate', label: 'Linkmate', group: 'blog', icon: 'L', color: 'bg-teal-600 text-white' },
   { key: 'coda', label: 'Coda', group: 'blog', icon: 'C', color: 'bg-red-500 text-white' },
-  // SBM (social bookmarking)
-  { key: 'pearltrees', label: 'Pearltrees', group: 'sbm', icon: 'P', color: 'bg-lime-600 text-white' },
-  { key: 'raindrop', label: 'Raindrop', group: 'sbm', icon: 'R', color: 'bg-sky-600 text-white' },
-  { key: 'hatena', label: 'Hatena', group: 'sbm', icon: 'H', color: 'bg-cyan-700 text-white' },
-  // Document / PPT-PDF
-  { key: 'pdfhost', label: 'PdfHost', group: 'document', icon: 'PDF', color: 'bg-red-700 text-white' },
-  { key: 'fliphtml5', label: 'FlipHTML5', group: 'document', icon: 'F', color: 'bg-amber-600 text-white' },
-  { key: 'fourshared', label: '4shared', group: 'document', icon: '4', color: 'bg-blue-500 text-white' },
-  { key: 'issuu', label: 'Issuu', group: 'document', icon: 'I', color: 'bg-orange-500 text-white' },
+  { key: 'pdfhost', label: 'PdfHost', group: 'blog', icon: 'PDF', color: 'bg-red-700 text-white' },
   // Engine (blog writer, not a posting target)
   { key: 'chatgpt', label: 'ChatGPT (blog writer)', group: 'engine', icon: '✦', color: 'bg-emerald-700 text-white' },
   { key: 'chatgpt-image', label: 'ChatGPT (image gen)', group: 'engine', icon: '🖼', color: 'bg-fuchsia-700 text-white' },
@@ -522,10 +516,10 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
 
       {!isLoading && !data?.error && (
         <div className="space-y-8">
-          {(['engine', 'social', 'blog', 'sbm', 'document'] as const).map((grp) => (
+          {(['engine', 'social', 'blog'] as const).map((grp) => (
             <div key={grp}>
               <h2 className="text-xs uppercase tracking-wide text-slate-500 font-semibold mb-3">
-                {grp === 'social' ? 'Social platforms' : grp === 'blog' ? 'Blog platforms' : grp === 'sbm' ? 'SBM platforms' : grp === 'document' ? 'Document / PPT-PDF platforms' : 'Blog writer'}
+                {grp === 'social' ? 'Social platforms' : grp === 'blog' ? 'Blog platforms' : 'Blog writer'}
               </h2>
               <div className="space-y-4">
                 {PLATFORMS.filter((p) => p.group === grp).map((p) => {

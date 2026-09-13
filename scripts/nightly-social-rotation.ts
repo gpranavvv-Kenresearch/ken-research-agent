@@ -62,7 +62,7 @@ const AGENTS: string[] = (() => {
 // Posts per ACCOUNT per day. Key = runCountedPostCycle platform key
 // (scheduler-new.ts COUNTED_PLATFORMS). Key ORDER = the order the platforms
 // run within one step.
-const DEFAULT_TARGET: Record<string, number> = { x: 4, fb: 4, lipost: 3, mastodon: 2, tumblr: 2 };
+const DEFAULT_TARGET: Record<string, number> = { x: 4, fb: 4, lipost: 3, mastodon: 2, tumblr: 2, pearltrees: 2, raindrop: 2 };
 const DAILY_TARGET: Record<string, number> = (() => {
   const target = { ...DEFAULT_TARGET };
   const raw = process.env.SOCIAL_DAILY_TARGET;
@@ -85,7 +85,7 @@ const DAILY_TARGET: Record<string, number> = (() => {
 // Posting-cycle key → the key the account count is declared under
 // (.accounts/account-counts.json, i.e. selectAccountForPlatform's platformKey).
 // Only LinkedIn differs: one login covers both LinkedIn posts (lipost) and Pulse.
-const DECL_KEY: Record<string, string> = { x: 'x', fb: 'fb', lipost: 'li', mastodon: 'mastodon', tumblr: 'tumblr' };
+const DECL_KEY: Record<string, string> = { x: 'x', fb: 'fb', lipost: 'li', mastodon: 'mastodon', tumblr: 'tumblr', pearltrees: 'pearltrees', raindrop: 'raindrop' };
 
 const PLATFORMS = Object.keys(DAILY_TARGET);
 const MAX_BATCHES = Math.max(0, ...Object.values(DAILY_TARGET));

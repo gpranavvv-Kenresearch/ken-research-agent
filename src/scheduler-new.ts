@@ -44,6 +44,7 @@ import {
   runNotionBatch, runNoteBatch, runCodaBatch, runVelogBatch,
   runWeeklySerpRecheck, resetBatchCounters,
   runRetryRow,
+  runPdfhostBatch, runPearltreesBatch, runRaindropBatch,
 } from './coordinator/masterCoordinator.js';
 import { startCycle, stopCycle } from './login-portal/blogCycle.js';
 import { rebalanceFleetNames, getFailedSocialRows, assignPendingRowsToLiveAccounts, pinSessionDate } from './sheets/sheets.js';
@@ -83,6 +84,9 @@ const CODA:         PlatformDef = { label: 'Coda',           run: runCodaBatch }
 const TUMBLR:       PlatformDef = { label: 'Tumblr',         run: runTumblrBatch };
 const MASTODON:     PlatformDef = { label: 'Mastodon',       run: runMastodonBatch };
 const VELOG:        PlatformDef = { label: 'Velog',          run: runVelogBatch };
+const PDFHOST:      PlatformDef = { label: 'PdfHost',        run: runPdfhostBatch };
+const PEARLTREES:   PlatformDef = { label: 'Pearltrees',     run: runPearltreesBatch };
+const RAINDROP:     PlatformDef = { label: 'Raindrop',       run: runRaindropBatch };
 
 // Key map for the counted, round-based "Post Now" cycle (runCountedPostCycle) —
 // the dashboard form's platform keys to the PlatformDef objects above.
@@ -91,6 +95,7 @@ const COUNTED_PLATFORMS: Record<string, PlatformDef> = {
   wordpress: WORDPRESS, blogger: BLOGGER, googlepost: GOOGLESITE, note: NOTE,
   hackmd: HACKMD, linkmate: LINKMATE, calisthenics: CALISTHENICS, notion: NOTION, devto: DEVTO,
   coda: CODA, tumblr: TUMBLR, mastodon: MASTODON, velog: VELOG,
+  pdfhost: PDFHOST, pearltrees: PEARLTREES, raindrop: RAINDROP,
 };
 
 // ── The 5 stages, exactly as agreed ────────────────────────────────────────────

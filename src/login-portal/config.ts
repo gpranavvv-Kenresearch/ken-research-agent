@@ -12,7 +12,7 @@
 export interface PortalPlatform {
   key: string;           // short key used in the session-dir name (e.g. x, medium)
   label: string;         // human label for the dashboard
-  group: 'social' | 'blog' | 'sbm' | 'document' | 'engine';
+  group: 'social' | 'blog' | 'engine';
   loginUrl: string;      // URL Chrome opens for the login
   homeUrl?: string;      // logged-in landing page (reveals the stored account) for "View session";
                          // falls back to loginUrl, which usually redirects to home when logged in.
@@ -57,30 +57,25 @@ export const PLATFORMS: Record<string, PortalPlatform> = {
   // badge always read "not logged in" regardless of true state.
   coda:         { key: 'coda',         label: 'Coda',         group: 'blog', loginUrl: 'https://coda.io/login',          homeUrl: 'https://coda.io/docs',                     registryFile: '.accounts/accounts-coda.json',         authCookies: ['new_session', 'prod_origin_session', 'session_data'] },
 
-  // ── SBM (social bookmarking — SBM/PPT integration, 2026-08-20) ──
-  // authCookies are unconfirmed best guesses (no live cookie-DB inspection yet
-  // for these platforms) — same caveat as Mastodon/Coda above: the login itself
-  // always works regardless of badge accuracy, only the "ready" badge may lag
-  // until someone confirms the real cookie name live.
-  pearltrees: { key: 'pearltrees', label: 'Pearltrees', group: 'sbm', loginUrl: 'https://www.pearltrees.com/', homeUrl: 'https://www.pearltrees.com/', registryFile: '.accounts/accounts-pearltrees.json', authCookies: ['PHPSESSID'] },
+  // ── SBM (social bookmarking) — now run inside the SOCIAL rotation
+  // (nightly-social-rotation.ts), each with its own status column on the
+  // Social tab, not the shared X/FB/LI post-cycle. Grouped as 'social' here
+  // so they show on the same dashboard login page.
+  // authCookies unconfirmed best guess — login itself always works regardless
+  // of badge accuracy, only the "ready" badge may lag until confirmed live.
+  pearltrees: { key: 'pearltrees', label: 'Pearltrees', group: 'social', loginUrl: 'https://www.pearltrees.com/', homeUrl: 'https://www.pearltrees.com/', registryFile: '.accounts/accounts-pearltrees.json', authCookies: ['PHPSESSID'] },
   // Confirmed live: Raindrop's real session cookie is Express's default
   // 'connect.sid' — the guessed '_raindrop_session' never existed.
-  raindrop:   { key: 'raindrop',   label: 'Raindrop',   group: 'sbm', loginUrl: 'https://app.raindrop.io/login', homeUrl: 'https://app.raindrop.io/my/0', registryFile: '.accounts/accounts-raindrop.json', authCookies: ['connect.sid'] },
-  hatena:     { key: 'hatena',     label: 'Hatena',      group: 'sbm', loginUrl: 'https://www.hatena.ne.jp/login?location=https%3A%2F%2Fb.hatena.ne.jp%2F', homeUrl: 'https://b.hatena.ne.jp/', registryFile: '.accounts/accounts-hatena.json', authCookies: ['rk', 'b_ck1'] },
+  raindrop:   { key: 'raindrop',   label: 'Raindrop',   group: 'social', loginUrl: 'https://app.raindrop.io/login', homeUrl: 'https://app.raindrop.io/my/0', registryFile: '.accounts/accounts-raindrop.json', authCookies: ['connect.sid'] },
 
-  // ── Document / PPT-PDF (SBM/PPT integration, 2026-08-20) ──
-  // Content is generated from blogContent (PDF) or the blog's slide outline
-  // (PPTX for SlideShare) rather than typed by hand — see contentConverter.ts /
-  // pptGenerator.ts. authCookies unconfirmed, same caveat as above.
+  // ── Document (PDF) — now runs inside the BLOG rotation
+  // (nightly-blogpost-rotation.ts), reading from the New Logic tab with its
+  // own dedicated status column, not the shared Blog Platform 1/2 slot pair.
   // PDFHost issues NO distinguishing first-party session cookie at all — a real
   // logged-in profile's cookie DB has only _ga/_ga_* analytics for .pdfhost.io.
   // No cookie name can ever fix this; routed through pdfhostDeepCheck.ts (real
   // page-load check) in sessionResolver.ts instead, same as Medium/Dev.to.
-  pdfhost:     { key: 'pdfhost',     label: 'PdfHost',     group: 'document', loginUrl: 'https://pdfhost.io/login',         homeUrl: 'https://pdfhost.io/dashboard',        registryFile: '.accounts/accounts-pdfhost.json',     authCookies: ['pdfhost_session', 'laravel_session'] },
-  fliphtml5:   { key: 'fliphtml5',   label: 'FlipHTML5',   group: 'document', loginUrl: 'https://fliphtml5.com/login.php', homeUrl: 'https://fliphtml5.com/app/',          registryFile: '.accounts/accounts-fliphtml5.json',   authCookies: ['PHPSESSID'] },
-  // Confirmed live: the real cookie is 'WWW_JSESSIONID', not plain 'JSESSIONID'.
-  fourshared:  { key: 'fourshared',  label: '4shared',     group: 'document', loginUrl: 'https://www.4shared.com/web/login', homeUrl: 'https://www.4shared.com/web/account/myFiles', registryFile: '.accounts/accounts-fourshared.json', authCookies: ['WWW_JSESSIONID'] },
-  issuu:       { key: 'issuu',       label: 'Issuu',       group: 'document', loginUrl: 'https://issuu.com/home/login',    homeUrl: 'https://issuu.com/publish',           registryFile: '.accounts/accounts-issuu.json',       authCookies: ['connect.sid'] },
+  pdfhost:     { key: 'pdfhost',     label: 'PdfHost',     group: 'blog', loginUrl: 'https://pdfhost.io/login',         homeUrl: 'https://pdfhost.io/dashboard',        registryFile: '.accounts/accounts-pdfhost.json',     authCookies: ['pdfhost_session', 'laravel_session'] },
 
   // ── Engine (blog generation, not a posting target) ──
   // ChatGPT session used by generate_blog_chatgpt.ts to write the article HTML.

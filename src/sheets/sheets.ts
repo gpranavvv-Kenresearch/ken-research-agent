@@ -2475,32 +2475,20 @@ export async function saveUnifiedPearltreesResult(
 }
 
 // ──── PdfHost Posting ───────────────────────────────────────────────────────────
+// PdfHost now shares the Blog Platform 1/2 · Blog URL 1/2 slot system with
+// Medium/WordPress/etc. (paired with Google Sites as its own lead batch —
+// see nightly-blogpost-rotation.ts) instead of a standalone New Logic column,
+// so its post lands in the same tracked columns everyone else's blog posts do.
 
 export async function getRowsForContinuousPdfhostPosting(limit: number = 15): Promise<SheetRow[]> {
-  // New Logic (not Social Media) — needs row.blogContent for htmlToPdf().
-  return pickRowsByEmptyStatus(['PdfHost Status', 'pdfhost status', 'PdfHostStatus'], 'PdfHost', limit, 'newLogic');
+  return claimNextBlogSlots('PdfHost', limit);
 }
 
 export async function saveUnifiedPdfhostResult(
   row: SheetRow,
   result: { postUrl: string; status: string; error?: string; batch?: string }
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  const sheetConfig = getSheetConfig(row.sheetType ?? 'newLogic');
-  const colMap = await getColumnMap(sheets, sheetConfig.id, sheetConfig.name);
-  const today = new Date().toISOString().split('T')[0];
-  const newUrl = appendValue(row.pdfhostUrl, result.postUrl);
-  const newLastPosted = result.status?.toLowerCase() === 'posted'
-    ? appendValue(row.lastPostedPdfhost, today)
-    : (row.lastPostedPdfhost ?? '');
-  const data = buildUpdates(colMap, row.rowIndex, [
-    { names: ['PdfHost Post URL', 'pdfhost post url'], value: newUrl },
-    { names: ['PdfHost Status', 'pdfhost status'], value: result.status },
-    { names: ['PdfHost Error', 'pdfhost error'], value: result.error ?? '' },
-    { names: ['pdfhostBatch', 'pdfhost batch', 'PdfHost Batch'], value: result.batch ?? '' },
-    { names: ['Last Posted PdfHost', 'lastPostedPdfhost', 'lastpostedpdfhost'], value: newLastPosted },
-  ], sheetConfig.name);
-  await batchWrite(sheets, data, sheetConfig.id);
+  await saveBlogSlotResult(row, result);
 }
 
 // ──── FlipHTML5 Posting ─────────────────────────────────────────────────────────

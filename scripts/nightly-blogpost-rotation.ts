@@ -5,10 +5,13 @@
  * every blog account a member has gets the same daily quota:
  *
  *   2 posts per account per day on every blog platform,
- *   except Medium and LinkedIn Pulse: 1 post per account per day.
+ *   except Medium, LinkedIn Pulse and PdfHost: 1 post per account per day.
  *
- * Blog platforms: Medium, LinkedIn Pulse, Google Sites, Linkmate,
+ * Blog platforms: Medium, LinkedIn Pulse, PdfHost, Google Sites, Linkmate,
  * Calisthenics, Note, Notion, Dev.to, Coda, Velog, Blogger, HackMD, WordPress.
+ * PdfHost shares the same Blog Platform 1/2 · Blog URL 1/2 slot system as every
+ * other platform here (see sheets.ts claimNextBlogSlot) — it is a 3rd rotating
+ * lead alongside Medium/LinkedIn Pulse, always paired with Google Sites.
  *
  * How one day runs:
  *
@@ -17,21 +20,23 @@
  *                                    medium, googlepost, then the 5 rotated pairs
  *     batch 2 (LinkedIn Pulse lead): each agent posts 1 on
  *                                    lipulse, googlepost, then the 5 rotated pairs
+ *     batch 3 (PdfHost lead):        each agent posts 1 on
+ *                                    pdfhost, googlepost, then the 5 rotated pairs
  *   Account pass 2  — account #2, ONLY for agents who declared one on that
  *                     platform; anyone without an account #2 is skipped (no post)
- *     batches 1–2 exactly as above
+ *     batches 1–3 exactly as above
  *   Account pass 3, …  as far as the highest declared count goes
  *   → "Blog-platform day complete", then wait for tomorrow's BLOGPOST_START.
  *
- * Every platform except Medium/Pulse appears in both batches → 2/account/day;
- * Medium only leads batch 1 and Pulse only batch 2 → 1/account/day each. That
- * split is not just the quota — it is required by the 2-slot claim model (see
- * sheets.ts claimNextBlogSlot): whichever 2 blog platforms run back-to-back on
- * a cycle claim that row's 2 slots together, so PAIR order matters, and Medium
- * and Pulse must never sit in the same batch or they would pair with each
- * other instead of with Google Sites. Fixed pairs, as specified:
- * (Medium|LinkedIn Pulse) + Google Sites, Linkmate + Calisthenics,
- * Note + Notion, Dev.to + Coda, Velog + Blogger, HackMD + WordPress.
+ * Every platform except Medium/Pulse/PdfHost appears in all three batches →
+ * 3/account/day; each of those three only leads its own batch → 1/account/day
+ * each. That split is not just the quota — it is required by the 2-slot claim
+ * model (see sheets.ts claimNextBlogSlot): whichever 2 blog platforms run
+ * back-to-back on a cycle claim that row's 2 slots together, so PAIR order
+ * matters, and Medium/Pulse/PdfHost must never sit in the same batch or they
+ * would pair with each other instead of with Google Sites. Fixed pairs, as
+ * specified: (Medium|LinkedIn Pulse|PdfHost) + Google Sites, Linkmate +
+ * Calisthenics, Note + Notion, Dev.to + Coda, Velog + Blogger, HackMD + WordPress.
  *
  * A fixed run order starves every pair after the first when only 1-2 fresh
  * rows exist that day — the leading pair always wins both slots on the only
@@ -81,6 +86,7 @@ const DECL_KEY: Record<string, string> = {
   medium: 'medium', lipulse: 'li', googlepost: 'googlesite',
   linkmate: 'linkmate', calisthenics: 'calisthenics', note: 'note', notion: 'notion',
   devto: 'devto', coda: 'coda', velog: 'velog', blogger: 'blogger', hackmd: 'hackmd', wordpress: 'wordpress',
+  pdfhost: 'pdfhost',
 };
 
 const PAIR_GROUPS: [string, string][] = [
@@ -106,13 +112,17 @@ function rotatedPairs(advance: boolean): string[] {
   return [...PAIR_GROUPS.slice(pointer), ...PAIR_GROUPS.slice(0, pointer)].flat();
 }
 
-/** The two batches of one pass. Built once per day (pointer advances once per batch, as before). */
+/** The three batches of one pass. Built once per day (pointer advances once per batch, as before). */
 function blogBatches(advance: boolean): BatchSpec[] {
   const mk = (label: string, lead: string): BatchSpec => ({
     label,
     platforms: [lead, 'googlepost', ...rotatedPairs(advance)].map((key) => ({ key, declKey: DECL_KEY[key] })),
   });
-  return [mk('batch 1 (Medium lead)', 'medium'), mk('batch 2 (LinkedIn Pulse lead)', 'lipulse')];
+  return [
+    mk('batch 1 (Medium lead)', 'medium'),
+    mk('batch 2 (LinkedIn Pulse lead)', 'lipulse'),
+    mk('batch 3 (PdfHost lead)', 'pdfhost'),
+  ];
 }
 
 const PERSON_GAP_MS = Number(process.env.BLOGPOST_PERSON_GAP_MIN || 2) * 60 * 1000;
@@ -153,7 +163,7 @@ async function main() {
     console.log(formatDayPlan(cfg, buildDayPlan(cfg)));
     return;
   }
-  log(`Blog-platform post rotation starting. Order: ${AGENTS.join(' → ')} | daily at ${START_LABEL} | 2 batches/pass (Medium lead, then LinkedIn Pulse lead). Pair lead rotates each batch (see ${ROTATION_FILE}).`);
+  log(`Blog-platform post rotation starting. Order: ${AGENTS.join(' → ')} | daily at ${START_LABEL} | 3 batches/pass (Medium lead, LinkedIn Pulse lead, PdfHost lead). Pair lead rotates each batch (see ${ROTATION_FILE}).`);
   for (;;) {
     if (!SKIP_WAIT) {
       const waitMs = msUntilNextIst(START_H, START_M);
