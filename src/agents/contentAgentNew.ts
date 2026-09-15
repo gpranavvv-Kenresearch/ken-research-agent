@@ -46,11 +46,15 @@ function saveTweetToHistory(url: string, tweet: string): void {
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
-// Groq's flagship general-purpose free-tier model — fast + solid instruction
-// following, good fit for short-form social copy. Single model across every
-// Groq key (unlike OpenRouter's per-key rotation above, Groq's free tier
-// isn't a graveyard of half-working models the way OpenRouter's free router is).
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
+// Groq's current flagship free-tier model — 'llama-3.3-70b-versatile' (the
+// obvious first choice) is 404 on this account's catalog, confirmed live
+// 2026-09-15 via /v1/models. gpt-oss-120b IS a reasoning model: by default it
+// spends the max_tokens budget on an internal "reasoning" field before ever
+// writing to "content", so a caller-set max_tokens too small for that preamble
+// gets an EMPTY content back (confirmed live: max_tokens=20 → content: '').
+// reasoning_effort:'low' (sent only for Groq below) fixes this — reasoning
+// shrinks to ~1 sentence, content reliably populates even at max_tokens=80.
+const GROQ_MODEL = 'openai/gpt-oss-120b';
 // google/gemma-4-26b-a4b-it:free (the old single fixed model) is STILL in
 // OpenRouter's catalog — it wasn't removed, it's upstream rate-limited
 // (HTTP 429, confirmed live 2026-08-24), which is functionally the same
@@ -260,6 +264,9 @@ async function tryPool(pool: ApiKey[], prompt: string, maxTokens: number): Promi
           model,
           max_tokens: maxTokens,
           temperature: 0.7,
+          // gpt-oss models on Groq spend max_tokens on internal reasoning before
+          // writing to content unless told otherwise — see GROQ_MODEL comment.
+          ...(baseUrl === GROQ_BASE_URL ? { reasoning_effort: 'low' } : {}),
           messages: [{ role: 'user', content: prompt }],
         }),
       });
