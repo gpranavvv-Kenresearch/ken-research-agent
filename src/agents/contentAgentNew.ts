@@ -43,8 +43,14 @@ function saveTweetToHistory(url: string, tweet: string): void {
   } catch { /* non-critical */ }
 }
 
+const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
+// Groq's flagship general-purpose free-tier model — fast + solid instruction
+// following, good fit for short-form social copy. Single model across every
+// Groq key (unlike OpenRouter's per-key rotation above, Groq's free tier
+// isn't a graveyard of half-working models the way OpenRouter's free router is).
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
 // google/gemma-4-26b-a4b-it:free (the old single fixed model) is STILL in
 // OpenRouter's catalog — it wasn't removed, it's upstream rate-limited
 // (HTTP 429, confirmed live 2026-08-24), which is functionally the same
@@ -100,8 +106,23 @@ export interface ContentParams {
   row?: SheetRow;
 }
 
-// ── Unified API key pool ───────────────────────────────────────────────────────
-// OpenRouter keys (1-12) + NVIDIA keys — all in one flat pool, no fallback concept.
+// ── Groq pool (primary tier) ────────────────────────────────────────────────────
+// Tried first, in full, before ever touching OpenRouter/NVIDIA — see callLLM().
+
+function buildGroqPool(): ApiKey[] {
+  const pool: ApiKey[] = [];
+  for (let i = 1; i <= 10; i++) {
+    const envKey = i === 1 ? 'GROQ_API_KEY' : `GROQ_API_KEY_${i}`;
+    const k = process.env[envKey]?.trim();
+    if (k) pool.push({ key: k, baseUrl: GROQ_BASE_URL, model: GROQ_MODEL, label: `Groq-${i}` });
+  }
+  return pool;
+}
+
+// ── Unified fallback pool (secondary tier) ──────────────────────────────────────
+// OpenRouter keys (1-12) + NVIDIA keys — all in one flat pool, no fallback concept
+// *within* this tier; the tiering itself (Groq first, this pool second) happens
+// in callLLM().
 
 function buildKeyPool(): ApiKey[] {
   const pool: ApiKey[] = [];
@@ -224,10 +245,8 @@ async function callLLMWithRetry(prompt: string, maxTokens: number, retries = 3):
   return last;
 }
 
-async function callLLM(prompt: string, maxTokens = 512): Promise<string> {
-  const pool = buildKeyPool();
-  if (pool.length === 0) throw new Error('No API keys found. Set OPENROUTER_API_KEY_1…_18 or NVIDIA_API_KEY in .env');
-
+/** Tries every key in `pool` in order; returns the first usable completion, or '' if all failed. */
+async function tryPool(pool: ApiKey[], prompt: string, maxTokens: number): Promise<string> {
   for (let i = 0; i < pool.length; i++) {
     const { key, baseUrl, model, label } = pool[i];
     try {
@@ -265,8 +284,29 @@ async function callLLM(prompt: string, maxTokens = 512): Promise<string> {
       continue;
     }
   }
+  return '';
+}
 
-  throw new Error('All API keys exhausted (OpenRouter + NVIDIA). Add credits or new keys.');
+// Tiered: Groq (primary) tried in full first; only on total Groq exhaustion
+// does it fall through to the OpenRouter+NVIDIA pool (secondary). Within each
+// tier, keys still rotate flat as before — the tiering is only Groq-vs-rest.
+async function callLLM(prompt: string, maxTokens = 512): Promise<string> {
+  const groqPool = buildGroqPool();
+  const fallbackPool = buildKeyPool();
+  if (groqPool.length === 0 && fallbackPool.length === 0) {
+    throw new Error('No API keys found. Set GROQ_API_KEY_1…_10, OPENROUTER_API_KEY_1…_18, or NVIDIA_API_KEY in .env');
+  }
+
+  if (groqPool.length > 0) {
+    const result = await tryPool(groqPool, prompt, maxTokens);
+    if (result) return result;
+    console.log('   ⚠️  All Groq keys exhausted — falling back to OpenRouter/NVIDIA');
+  }
+
+  const result = await tryPool(fallbackPool, prompt, maxTokens);
+  if (result) return result;
+
+  throw new Error('All API keys exhausted (Groq + OpenRouter + NVIDIA). Add credits or new keys.');
 }
 
 // ── Market data fetcher ────────────────────────────────────────────────────────
