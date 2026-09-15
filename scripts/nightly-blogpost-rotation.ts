@@ -126,17 +126,27 @@ async function main() {
     console.log(formatDayPlan(cfg, buildDayPlan(cfg)));
     return;
   }
-  log(`Blog-platform post rotation starting. Order: ${AGENTS.join(' → ')} | daily at ${START_LABEL} | 2 runs/pass, all 14 platforms each run (fixed 7/7 slot split, no lead rotation).`);
+  log(`Blog-platform post rotation starting. Order: ${AGENTS.join(' → ')} | daily at ${START_LABEL} | 2 runs/pass, all 14 platforms each run (fixed 7/7 slot split, no lead rotation) | weekends off (Sat/Sun no posting).`);
   for (;;) {
     if (!SKIP_WAIT) {
       const waitMs = msUntilNextIst(START_H, START_M);
       log(`Waiting ${Math.round(waitMs / 60000)} min for next ${START_LABEL}...`);
       await sleep(waitMs);
     }
-    await runDay(configFor(blogBatches()));
+    if (isWeekendIst()) {
+      log('Today is a weekend (Sat/Sun) — blog-platform posting is off, skipping today.');
+    } else {
+      await runDay(configFor(blogBatches()));
+    }
     // --now is a one-shot manual run; don't loop forever waiting for a "tomorrow" that isn't real.
     if (SKIP_WAIT) break;
   }
+}
+
+/** IST calendar day is Saturday or Sunday — no blog-platform posting those days. */
+function isWeekendIst(): boolean {
+  const istDay = new Date(Date.now() + 5.5 * 60 * 60 * 1000).getUTCDay(); // 0=Sun … 6=Sat
+  return istDay === 0 || istDay === 6;
 }
 
 main().catch((e) => {

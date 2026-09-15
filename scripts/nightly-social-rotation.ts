@@ -131,17 +131,27 @@ async function main() {
     console.log(formatDayPlan(CONFIG, buildDayPlan(CONFIG)));
     return;
   }
-  log(`Social rotation starting. Order: ${AGENTS.join(' → ')} | daily at ${START_LABEL} | target/account ${JSON.stringify(DAILY_TARGET)} | ${SKIP_WAIT ? '[--now: run once now]' : '[daily]'}`);
+  log(`Social rotation starting. Order: ${AGENTS.join(' → ')} | daily at ${START_LABEL} | target/account ${JSON.stringify(DAILY_TARGET)} | weekends off (Sat/Sun no posting) | ${SKIP_WAIT ? '[--now: run once now]' : '[daily]'}`);
   for (;;) {
     if (!SKIP_WAIT) {
       const waitMs = msUntilNextIst(START_H, START_M);
       log(`Waiting ${Math.round(waitMs / 60000)} min for next ${START_LABEL}...`);
       await sleep(waitMs);
     }
-    await runDay(CONFIG);
+    if (isWeekendIst()) {
+      log('Today is a weekend (Sat/Sun) — social posting is off, skipping today.');
+    } else {
+      await runDay(CONFIG);
+    }
     // --now is a one-shot manual run; don't loop forever waiting for a "tomorrow" that isn't real.
     if (SKIP_WAIT) break;
   }
+}
+
+/** IST calendar day is Saturday or Sunday — no social posting those days. */
+function isWeekendIst(): boolean {
+  const istDay = new Date(Date.now() + 5.5 * 60 * 60 * 1000).getUTCDay(); // 0=Sun … 6=Sat
+  return istDay === 0 || istDay === 6;
 }
 
 main().catch((e) => {
