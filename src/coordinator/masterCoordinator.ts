@@ -2959,8 +2959,8 @@ async function postToRaindropAccount(accountName: string, title: string, targetU
   }
 }
 
-export async function runRaindropBatch(batchNum: number = 1): Promise<void> {
-  const rows = await getRowsForContinuousRaindropPosting(15);
+export async function runRaindropBatch(batchNum: number = 1, limit: number = 15): Promise<void> {
+  const rows = await getRowsForContinuousRaindropPosting(limit);
   if (rows.length === 0) { console.log('[RAINDROP BATCH] No rows available'); return; }
 
   const batchLabel = `Batch ${batchNum}`;
@@ -3021,8 +3021,8 @@ async function postToPearltreesAccount(accountName: string, title: string, targe
   }
 }
 
-export async function runPearltreesBatch(batchNum: number = 1): Promise<void> {
-  const rows = await getRowsForContinuousPearltreesPosting(15);
+export async function runPearltreesBatch(batchNum: number = 1, limit: number = 15): Promise<void> {
+  const rows = await getRowsForContinuousPearltreesPosting(limit);
   if (rows.length === 0) { console.log('[PEARLTREES BATCH] No rows available'); return; }
 
   const batchLabel = `Batch ${batchNum}`;
@@ -3055,8 +3055,8 @@ export async function runPearltreesBatch(batchNum: number = 1): Promise<void> {
 
 // ── PdfHost Batch ─────────────────────────────────────────────────────────────
 
-export async function runPdfhostBatch(batchNum: number = 1): Promise<void> {
-  const rows = await getRowsForContinuousPdfhostPosting(15);
+export async function runPdfhostBatch(batchNum: number = 1, limit: number = 15): Promise<void> {
+  const rows = await getRowsForContinuousPdfhostPosting(limit);
   if (rows.length === 0) { console.log('[PDFHOST BATCH] No rows available'); return; }
 
   const batchLabel = `Batch ${batchNum}`;
